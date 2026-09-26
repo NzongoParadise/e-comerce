@@ -1,0 +1,12 @@
+ALTER TABLE "Order" ADD COLUMN "idempotencyKey" TEXT;
+ALTER TABLE "Order" ADD COLUMN "country" "Market" NOT NULL DEFAULT 'AO';
+ALTER TABLE "Order" ADD COLUMN "currency" TEXT NOT NULL DEFAULT 'AOA';
+ALTER TABLE "Order" ADD COLUMN "billingName" TEXT;
+ALTER TABLE "Order" ADD COLUMN "billingEmail" TEXT;
+ALTER TABLE "Order" ADD COLUMN "billingTaxId" TEXT;
+ALTER TABLE "Order" ADD COLUMN "deliveryRecipient" TEXT;
+ALTER TABLE "Order" ADD COLUMN "deliveryCity" TEXT;
+ALTER TABLE "Order" ADD COLUMN "deliveryRegion" TEXT;
+ALTER TABLE "Order" ADD COLUMN "postalCode" TEXT;
+ALTER TABLE "Order" ADD COLUMN "deliveryNotes" TEXT;
+CREATE UNIQUE INDEX "Order_idempotencyKey_key" ON "Order"("idempotencyKey");

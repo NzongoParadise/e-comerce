@@ -1,36 +1,51 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# TechGlobal E-commerce
 
-## Getting Started
+Monorepo for the TechGlobal online store, with a Next.js frontend, Express API, PostgreSQL database, and Prisma migrations.
 
-First, run the development server:
+## Requirements
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- Docker Desktop with Docker Compose
+- Node.js 20 or newer for local development
+
+## Local setup with Docker
+
+1. Create local environment files:
+
+   ```powershell
+   Copy-Item .env.example .env
+   Copy-Item backend/.env.example backend/.env
+   ```
+
+2. Set a local `POSTGRES_PASSWORD` in `.env` and a strong `JWT_SECRET` in `backend/.env`. Keep both files private; they are ignored by Git.
+
+3. Start the application:
+
+   ```powershell
+   docker compose up --build
+   ```
+
+The storefront is available at <http://localhost:3000> and the API at <http://localhost:5000>. Docker Compose starts PostgreSQL, applies Prisma migrations, and then starts the API and frontend.
+
+## Useful checks
+
+```powershell
+npm --prefix backend test
+npm --prefix backend run build
+npm --prefix frontend run lint
+npm --prefix frontend run build
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Project layout
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- `frontend/` - Next.js storefront and account interface
+- `backend/` - Express API, Prisma schema, migrations, and seed scripts
+- `docker-compose.yml` - Local PostgreSQL, API, and frontend services
+- `Imagens/` - Source product and campaign artwork
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Environment files
 
-## Learn More
+- `.env.example` documents the root variables used by Docker Compose.
+- `backend/.env.example` documents API, authentication, and payment-provider variables.
+- Never commit `.env`, `backend/.env`, credentials, or production secrets.
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Payment providers and external authentication integrations require their corresponding environment variables before they can be used.

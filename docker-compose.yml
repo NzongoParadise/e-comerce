@@ -1,0 +1,62 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: techglobal-db
+    environment:
+      POSTGRES_USER: techglobal
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the root .env file}
+      POSTGRES_DB: techglobal_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U techglobal -d techglobal_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    container_name: techglobal-api
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: "postgresql://techglobal:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the root .env file}@postgres:5432/techglobal_db?schema=public"
+      PORT: 5000
+      ALLOW_INSECURE_AUTH: ${ALLOW_INSECURE_AUTH:-false}
+    ports:
+      - "5000:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - backend_uploads:/app/uploads
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:5000
+        NEXT_PUBLIC_GOOGLE_AUTH_URL: ${NEXT_PUBLIC_GOOGLE_AUTH_URL:-}
+        NEXT_PUBLIC_APPLE_AUTH_URL: ${NEXT_PUBLIC_APPLE_AUTH_URL:-}
+        NEXT_PUBLIC_REGISTER_URL: ${NEXT_PUBLIC_REGISTER_URL:-}
+    container_name: techglobal-web
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:5000
+      NEXT_PUBLIC_GOOGLE_AUTH_URL: ${NEXT_PUBLIC_GOOGLE_AUTH_URL:-}
+      NEXT_PUBLIC_APPLE_AUTH_URL: ${NEXT_PUBLIC_APPLE_AUTH_URL:-}
+      NEXT_PUBLIC_REGISTER_URL: ${NEXT_PUBLIC_REGISTER_URL:-}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  backend_uploads:

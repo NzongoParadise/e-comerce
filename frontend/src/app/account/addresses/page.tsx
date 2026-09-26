@@ -1,0 +1,29 @@
+"use client";
+
+import { FormEvent, useEffect, useState } from "react";
+import { Check, MapPin, Pencil, Plus, Trash2 } from "lucide-react";
+import { fetchWithAuth } from "@/lib/api";
+
+type Address = { id: number; label: string; recipient: string; phone: string; country: string; province: string; city: string; address: string; postalCode?: string; notes?: string; isDefault: boolean };
+const emptyAddress = { label: "Casa", recipient: "", phone: "", country: "Angola", province: "Luanda", city: "Luanda", address: "", postalCode: "", notes: "", isDefault: false };
+
+export default function AddressesPage() {
+  const [addresses, setAddresses] = useState<Address[]>([]);
+  const [form, setForm] = useState(emptyAddress);
+  const [editing, setEditing] = useState<number | null>(null);
+  const [open, setOpen] = useState(false);
+  const [message, setMessage] = useState("");
+
+  function load() { fetchWithAuth("/api/account/addresses").then((response) => setAddresses(response.data)).catch(() => setMessage("Não foi possível carregar os endereços.")); }
+  useEffect(load, []);
+  function update(key: keyof typeof emptyAddress, value: string | boolean) { setForm((current) => ({ ...current, [key]: value })); }
+  async function submit(event: FormEvent) { event.preventDefault(); setMessage(""); try { await fetchWithAuth(editing ? `/api/account/addresses/${editing}` : "/api/account/addresses", { method: editing ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) }); setOpen(false); setEditing(null); setForm(emptyAddress); load(); } catch { setMessage("Não foi possível guardar o endereço."); } }
+  async function remove(id: number) { if (!window.confirm("Remover este endereço?")) return; try { await fetchWithAuth(`/api/account/addresses/${id}`, { method: "DELETE" }); load(); } catch { setMessage("Não foi possível remover o endereço."); } }
+  async function makeDefault(id: number) { try { await fetchWithAuth(`/api/account/addresses/${id}/default`, { method: "POST" }); load(); } catch { setMessage("Não foi possível definir o endereço principal."); } }
+  function edit(address: Address) { setEditing(address.id); setForm({ ...emptyAddress, ...address }); setOpen(true); }
+
+  return <div className="space-y-6"><header className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end"><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-[#1d6ac4]">Conta</p><h1 className="mt-2 text-2xl font-bold text-gray-900">Os meus endereços</h1><p className="mt-1 text-sm text-gray-500">Guarde os locais onde costuma receber as suas encomendas.</p></div><button onClick={() => { setEditing(null); setForm(emptyAddress); setOpen(true); }} className="btn-primary"><Plus size={16} /> Novo endereço</button></header>
+    {message && <p role="status" className="rounded-lg bg-blue-50 px-4 py-3 text-sm text-blue-800">{message}</p>}
+    {open && <form onSubmit={submit} className="card grid gap-4 p-5 sm:grid-cols-2"><h2 className="sm:col-span-2 text-lg font-bold text-gray-900">{editing ? "Editar endereço" : "Novo endereço"}</h2>{([ ["label", "Etiqueta", "Casa"], ["recipient", "Destinatário", "Nome completo"], ["phone", "Telefone", "+244 900 000 000"], ["province", "Província", "Luanda"], ["city", "Cidade", "Luanda"], ["address", "Morada", "Rua, avenida e número"], ["postalCode", "Código postal", "Opcional"] ] as const).map(([key, label, placeholder]) => <label key={key} className={key === "address" ? "sm:col-span-2" : ""}><span className="mb-1 block text-xs font-bold text-gray-700">{label}</span><input required={!['postalCode'].includes(key)} value={String(form[key])} onChange={(event) => update(key, event.target.value)} placeholder={placeholder} className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-[#1d6ac4]" /></label>)}<label className="flex items-center gap-2 text-sm font-semibold text-gray-700"><input type="checkbox" checked={form.isDefault} onChange={(event) => update("isDefault", event.target.checked)} /> Definir como principal</label><div className="flex justify-end gap-2 sm:col-span-2"><button type="button" onClick={() => setOpen(false)} className="btn-secondary">Cancelar</button><button className="btn-primary" type="submit"><Check size={16} /> Guardar</button></div></form>}
+    <div className="grid gap-4 md:grid-cols-2">{addresses.map((address) => <article key={address.id} className="card p-5"><div className="flex items-start justify-between gap-3"><div className="flex items-start gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-[#1d6ac4]"><MapPin size={18} /></span><div><h2 className="font-bold text-gray-900">{address.label} {address.isDefault && <span className="ml-1 rounded-full bg-emerald-50 px-2 py-1 text-[10px] text-emerald-700">Principal</span>}</h2><p className="mt-2 text-sm leading-6 text-gray-600">{address.recipient}<br />{address.address}, {address.city}<br />{address.province}, {address.country}<br />{address.phone}</p></div></div><div className="flex gap-2"><button aria-label="Editar endereço" title="Editar endereço" onClick={() => edit(address)} className="text-gray-500 hover:text-[#1d6ac4]"><Pencil size={15} /></button><button aria-label="Remover endereço" title="Remover endereço" onClick={() => remove(address.id)} className="text-gray-500 hover:text-red-600"><Trash2 size={15} /></button></div></div>{!address.isDefault && <button onClick={() => makeDefault(address.id)} className="mt-4 text-xs font-bold text-[#1d6ac4]">Usar como principal</button>}</article>)}</div>{!addresses.length && !open && <div className="card p-10 text-center text-sm text-gray-500">Ainda não tem endereços guardados.</div>}</div>;
+}

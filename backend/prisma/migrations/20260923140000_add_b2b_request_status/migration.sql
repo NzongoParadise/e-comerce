@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "User" ADD COLUMN "b2bRequestStatus" TEXT NOT NULL DEFAULT 'NONE';

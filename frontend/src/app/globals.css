@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #1d6ac4;
+  --color-primary-dark: #155099;
+  --color-primary-light: #e8f0fc;
+  --color-accent: #e63946;
+  --color-success: #16a34a;
+  --color-warning: #f59e0b;
+  --color-text: #111827;
+  --color-text-muted: #6b7280;
+  --color-border: #e5e7eb;
+  --color-bg: #f5f6fa;
+  --color-surface: #ffffff;
+  --font-sans: var(--font-inter);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: #f5f6fa;
+  color: #111827;
+  font-family: var(--font-inter), 'Segoe UI', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* TechGlobal brand blue */
+.bg-brand { background-color: #1d6ac4; }
+.text-brand { color: #1d6ac4; }
+.border-brand { border-color: #1d6ac4; }
+
+/* Shared components */
+.btn-primary {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg bg-[#1d6ac4] px-5 py-2.5 text-sm font-semibold text-white transition-all hover:bg-[#155099] active:scale-95 cursor-pointer;
+}
+
+.btn-secondary {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg border border-[#1d6ac4] px-5 py-2.5 text-sm font-semibold text-[#1d6ac4] transition-all hover:bg-[#e8f0fc] active:scale-95 cursor-pointer;
+}
+
+.btn-danger {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg bg-[#e63946] px-5 py-2.5 text-sm font-semibold text-white transition-all hover:bg-[#c1121f] active:scale-95 cursor-pointer;
+}
+
+.card {
+  @apply rounded-xl border border-gray-200 bg-white shadow-sm;
+}
+
+.card-hover {
+  @apply transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md;
+}
+
+.settings-input {
+  @apply w-full rounded-lg border border-gray-300 px-3 py-3 text-sm outline-none transition focus:border-[#1d6ac4] focus:ring-2 focus:ring-[#1d6ac4]/15;
+}
+
+/* Star rating */
+.star { color: #f59e0b; }
+
+/* Badge */
+.badge-new { @apply bg-[#1d6ac4] text-white text-[10px] font-bold uppercase px-2 py-0.5 rounded; }
+.badge-sale { @apply bg-[#e63946] text-white text-[10px] font-bold uppercase px-2 py-0.5 rounded; }
+.badge-stock-ok { @apply text-[#16a34a] text-xs font-semibold; }
+.badge-stock-low { @apply text-[#f59e0b] text-xs font-semibold; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #f1f5f9; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* Animate */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in-up { animation: fadeInUp 0.4s ease both; }

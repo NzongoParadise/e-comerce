@@ -1,0 +1,349 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// -------------------------------------------------------------
+// Catálogo de Produtos
+// -------------------------------------------------------------
+
+enum Market {
+  PT
+  AO
+}
+
+model Category {
+  id        Int       @id @default(autoincrement())
+  name      String    @unique
+  slug      String    @unique
+  products  Product[]
+}
+
+model Brand {
+  id        Int       @id @default(autoincrement())
+  name      String    @unique
+  slug      String    @unique
+  products  Product[]
+}
+
+model Product {
+  id          Int        @id @default(autoincrement())
+  name        String
+  slug        String     @unique
+  description String?
+  basePrice   Decimal    @db.Decimal(10,2)
+  imageUrl    String?
+  stock       Int        @default(0)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  categoryId  Int
+  category    Category   @relation(fields: [categoryId], references: [id])
+  brandId     Int
+  brand       Brand      @relation(fields: [brandId], references: [id])
+  prices      Price[]
+  quoteItems  QuoteItem[]
+  attributes  ProductAttribute[]
+}
+
+model ProductAttribute {
+  id        Int      @id @default(autoincrement())
+  productId Int
+  name      String
+  value     String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  @@index([name, value])
+  @@unique([productId, name, value])
+}
+
+model Price {
+  id        Int      @id @default(autoincrement())
+  productId Int
+  product   Product  @relation(fields: [productId], references: [id])
+  market    Market
+  currency  String
+  amount    Decimal  @db.Decimal(10,2)
+  createdAt DateTime @default(now())
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  externalId   String   @unique
+  email        String?  @unique
+  name         String?
+  provider     String?
+  accountName  String   @default("Conta Retalhista")
+  accountType  String   @default("B2C")
+  accessRole   String   @default("CUSTOMER")
+  status       String   @default("ACTIVE")
+  b2bRequestStatus String @default("NONE")
+  companyDocumentPath String?
+  personalDocumentPath String?
+  passwordHash String?
+  lastLoginAt  DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  orders       Order[]
+  quotes       Quote[]
+  returnRequests ReturnRequest[]
+  payments     Payment[]
+  passwordResetTokens PasswordResetToken[]
+  addresses       Address[]
+  savedPaymentMethods SavedPaymentMethod[]
+  coupons         UserCoupon[]
+}
+
+model Address {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  label      String
+  recipient  String
+  phone      String
+  country    String   @default("Angola")
+  province   String
+  city       String
+  address    String
+  postalCode String?
+  notes      String?
+  isDefault  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, isDefault])
+}
+
+model SavedPaymentMethod {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  type        String
+  label       String
+  lastFour    String?
+  phoneNumber String?
+  providerToken String?
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, isDefault])
+}
+
+model Coupon {
+  id             Int         @id @default(autoincrement())
+  code           String      @unique
+  description    String
+  discountType   String
+  discountValue  Decimal     @db.Decimal(10,2)
+  minimumOrderKZ Decimal?    @db.Decimal(12,2)
+  expiresAt      DateTime?
+  active         Boolean     @default(true)
+  createdAt      DateTime    @default(now())
+  users          UserCoupon[]
+}
+
+model UserCoupon {
+  userId   Int
+  couponId Int
+  claimedAt DateTime @default(now())
+  usedAt   DateTime?
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  coupon   Coupon    @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  @@id([userId, couponId])
+  @@index([couponId])
+}
+
+model NewsletterSubscriber {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Testimonial {
+  id           Int      @id @default(autoincrement())
+  name         String
+  location     String
+  text         String
+  stars        Int      @default(5)
+  published    Boolean  @default(true)
+  displayOrder Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model PasswordResetToken {
+  id        Int      @id @default(autoincrement())
+  tokenHash String   @unique
+  userId    Int
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, expiresAt])
+}
+
+model Order {
+  id             Int         @id @default(autoincrement())
+  orderNumber    String      @unique
+  idempotencyKey String?     @unique
+  status         String      @default("PROCESSING")
+  userId         Int
+  user           User        @relation(fields: [userId], references: [id])
+  deliveryMode   String
+  shippingMethod String
+  paymentMethod  String
+  country        Market
+  currency       String
+  billingName    String?
+  billingEmail   String?
+  billingTaxId   String?
+  deliveryRecipient String?
+  deliveryCity   String?
+  deliveryRegion String?
+  postalCode     String?
+  deliveryNotes  String?
+  address        String?
+  phone          String?
+  carrier        String?
+  trackingNumber String?
+  totalEUR       Decimal     @db.Decimal(10,2)
+  totalKZ        Decimal     @db.Decimal(12,2)
+  createdAt      DateTime    @default(now())
+  items          OrderItem[]
+  payment        Payment?
+  trackingEvents TrackingEvent[]
+  returnRequests ReturnRequest[]
+}
+
+model OrderItem {
+  id        Int      @id @default(autoincrement())
+  orderId   Int
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId Int
+  name      String
+  slug      String
+  imageUrl  String?
+  unitPrice Decimal  @db.Decimal(10,2)
+  quantity  Int
+  subtotal  Decimal  @db.Decimal(12,2)
+}
+
+model Payment {
+  id        Int      @id @default(autoincrement())
+  orderId   Int      @unique
+  userId    Int
+  provider  String
+  method    String
+  status    String   @default("PENDING")
+  providerPaymentId String? @unique
+  reference String?
+  entity    String?
+  referenceNumber String?
+  expiresAt DateTime?
+  phoneNumber String?
+  currency  String   @default("AOA")
+  amountEUR Decimal  @db.Decimal(10,2)
+  amountKZ  Decimal  @db.Decimal(12,2)
+  paidAt    DateTime?
+  failedAt  DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id])
+  attempts  PaymentAttempt[]
+  events    PaymentEvent[]
+}
+
+model PaymentAttempt {
+  id                Int      @id @default(autoincrement())
+  paymentId         Int
+  idempotencyKey    String   @unique
+  providerPaymentId String?
+  status            String   @default("CREATED")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  payment           Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  @@index([paymentId])
+}
+
+model PaymentEvent {
+  id              Int      @id @default(autoincrement())
+  paymentId       Int?
+  providerEventId String   @unique
+  eventType       String
+  status          String
+  amountKZ        Decimal? @db.Decimal(12,2)
+  currency        String?
+  payload         Json
+  processedAt     DateTime?
+  createdAt       DateTime @default(now())
+  payment         Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  @@index([paymentId])
+}
+
+model TrackingEvent {
+  id          Int      @id @default(autoincrement())
+  orderId     Int
+  status      String
+  location    String?
+  description String?
+  occurredAt  DateTime @default(now())
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+model Quote {
+  id          Int      @id @default(autoincrement())
+  quoteNumber String   @unique
+  userId      Int
+  status      String   @default("SUBMITTED")
+  companyName String
+  companyNif  String
+  address     String?
+  sector      String?
+  phone       String
+  email       String
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id])
+  items       QuoteItem[]
+}
+
+model QuoteItem {
+  id        Int      @id @default(autoincrement())
+  quoteId   Int
+  productId Int
+  name      String
+  unitPrice Decimal  @db.Decimal(10,2)
+  quantity  Int
+  subtotal  Decimal  @db.Decimal(12,2)
+  quote     Quote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id])
+}
+
+model ReturnRequest {
+  id            Int      @id @default(autoincrement())
+  requestNumber String   @unique
+  orderId       Int
+  userId        Int
+  type          String
+  status        String   @default("RECEIVED")
+  reason        String
+  description   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  order         Order    @relation(fields: [orderId], references: [id])
+  user          User     @relation(fields: [userId], references: [id])
+}
+
+// -------------------------------------------------------------
+// Fim do Catálogo
+// -------------------------------------------------------------
