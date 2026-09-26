@@ -17,6 +17,7 @@ import locationRouter from './routes/location';
 import testimonialRouter from './routes/testimonials';
 import recommendationsRouter from './routes/recommendations';
 import accountCommerceRouter from './routes/accountCommerce';
+import { prisma } from './prisma';
 
 dotenv.config();
 
@@ -48,6 +49,16 @@ app.use('/api/recommendations', recommendationsRouter);
 
 app.get('/health', (req: Request, res: Response) => {
   res.status(200).json({ status: 'ok', message: 'TechGlobal API is running' });
+});
+
+app.get('/health/db', async (req: Request, res: Response) => {
+  try {
+    const totalProducts = await prisma.product.count();
+    res.status(200).json({ status: 'ok', database: 'connected', products: totalProducts });
+  } catch (error) {
+    console.error('Database health check failed:', error);
+    res.status(500).json({ status: 'error', database: 'unavailable' });
+  }
 });
 
 // Vercel uses the exported Express app as a serverless function.
