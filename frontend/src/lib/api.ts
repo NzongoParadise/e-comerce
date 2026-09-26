@@ -11,7 +11,7 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}) {
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+  const apiUrl = (process.env.NEXT_PUBLIC_API_URL || 'https://e-comerce-sepia.vercel.app').replace(/\/$/, '');
   const response = await fetch(`${apiUrl}${url}`, {
     ...options,
     headers,
