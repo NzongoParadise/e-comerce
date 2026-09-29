@@ -11,8 +11,7 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}) {
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-  const response = await fetch(`${apiUrl}${url}`, {
+  const response = await fetch(url, {
     ...options,
     headers,
   });

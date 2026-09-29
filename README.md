@@ -1,6 +1,6 @@
 # TechGlobal E-commerce
 
-Monorepo for the TechGlobal online store, with a Next.js frontend, Express API, PostgreSQL database, and Prisma migrations.
+TechGlobal online store with a Next.js storefront and API, PostgreSQL, and Prisma migrations. The storefront and API run as one Next.js web service.
 
 ## Requirements
 
@@ -13,10 +13,10 @@ Monorepo for the TechGlobal online store, with a Next.js frontend, Express API, 
 
    ```powershell
    Copy-Item .env.example .env
-   Copy-Item backend/.env.example backend/.env
+   Copy-Item frontend/.env.example frontend/.env.local
    ```
 
-2. Set a local `POSTGRES_PASSWORD` in `.env` and a strong `JWT_SECRET` in `backend/.env`. Keep both files private; they are ignored by Git.
+2. Set a local `POSTGRES_PASSWORD` in `.env` and the app secrets in `frontend/.env.local`. Keep both files private; they are ignored by Git.
 
 3. Start the application:
 
@@ -24,40 +24,37 @@ Monorepo for the TechGlobal online store, with a Next.js frontend, Express API, 
    docker compose up --build
    ```
 
-The storefront is available at <http://localhost:3000> and the API at <http://localhost:5000>. Docker Compose starts PostgreSQL, applies Prisma migrations, and then starts the API and frontend.
+The storefront and API are available at <http://localhost:3000>. Docker Compose starts PostgreSQL, applies Prisma migrations, and then starts the Next.js application.
 
 ## Useful checks
 
 ```powershell
-npm --prefix backend test
-npm --prefix backend run build
-npm --prefix frontend run lint
-npm --prefix frontend run build
+npm test
+npm run build
+npm run lint --workspace frontend
 ```
 
 ## Project layout
 
-- `frontend/` - Next.js storefront and account interface
-- `backend/` - Express API, Prisma schema, migrations, and seed scripts
-- `docker-compose.yml` - Local PostgreSQL, API, and frontend services
+- `frontend/` - Next.js storefront, native API handlers, Prisma schema/migrations, payment provider, and local app env template
+- `docker-compose.yml` - Local PostgreSQL and unified Next.js service
 - `Imagens/` - Source product and campaign artwork
 
 ## Environment files
 
 - `.env.example` documents the root variables used by Docker Compose.
-- `backend/.env.example` documents API, authentication, and payment-provider variables.
-- Never commit `.env`, `backend/.env`, credentials, or production secrets.
+- `frontend/.env.example` documents API, authentication, and payment-provider variables.
+- Never commit `.env`, `frontend/.env.local`, credentials, or production secrets.
 
-Payment providers and external authentication integrations require their corresponding environment variables before they can be used.
+Payment providers and external authentication integrations require their corresponding environment variables before they can be used. External identity providers need `JWKS_URI` and, when required by the provider, `AUTH_ISSUER` and `AUTH_AUDIENCE`. Password reset returns a development-only token until an email delivery provider is configured.
 
 ## Online demo deployment
 
-The repository includes `render.yaml` for the Express API. The Next.js frontend is deployed separately on Vercel, and PostgreSQL is hosted on Neon.
+Deploy the `frontend/` directory as a Next.js project on Vercel. All runtime source, Prisma schema, and migrations are inside that directory, so the deployment does not need access outside its Root Directory. PostgreSQL remains hosted on Neon.
 
 1. Create a Neon Free project in a European region and copy its PostgreSQL connection string. Keep the connection string private.
-2. In Render, create a Blueprint from this GitHub repository and select `render.yaml`. Provide the Neon connection string as `DATABASE_URL`; Render generates `JWT_SECRET`.
-3. After the Render API is healthy at `/health`, create a Vercel project from the same repository and set its Root Directory to `frontend`.
-4. Add `NEXT_PUBLIC_API_URL` to the Vercel project using the public Render API URL, without a trailing slash, then deploy the frontend.
-5. Set `FRONTEND_URL` on Render to the Vercel production URL and redeploy the API for payment-provider return links.
+2. Import the repository into Vercel and set **Root Directory** to `frontend` with the Next.js framework preset.
+3. Add `DATABASE_URL` and `JWT_SECRET` to Vercel Environment Variables. Also set `FRONTEND_URL` to the production URL and configure external authentication/payment variables if those providers are enabled.
+4. Deploy. Prisma Client is generated during the build. The current Neon database already has all migrations; for future schema changes, run `npm run db:migrate` before promoting the deployment.
 
-This is a demonstration setup, not production hosting. Neon Free suspends idle compute and has a 0.5 GB storage limit. Render Free can sleep after inactivity and has an ephemeral filesystem, so uploaded B2B documents are not persistent. Upgrade to persistent production plans and configure backups before storing real customer data or accepting payments.
+Neon Free suspends idle compute and has a 0.5 GB storage limit. Vercel Functions limit request bodies to 4.5 MB, so the current B2B document upload flow (up to 5 MB per file) needs direct-to-object-storage uploads or a lower size limit before relying on it in production. Password-reset email delivery and durable document storage also need providers before production use.

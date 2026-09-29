@@ -19,12 +19,11 @@ export default function LoginPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setLoading(true); setMessage("");
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-      const response = await fetch(`${apiUrl}/api/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) });
+      const response = await fetch("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Não foi possível iniciar sessão.");
       localStorage.setItem("jwt_token", data.token);
-      const profileResponse = await fetch(`${apiUrl}/api/auth/me`, { headers: { Authorization: `Bearer ${data.token}` } });
+      const profileResponse = await fetch("/api/auth/me", { headers: { Authorization: `Bearer ${data.token}` } });
       if (!profileResponse.ok) { localStorage.removeItem("jwt_token"); throw new Error("Não foi possível carregar o perfil. Tente novamente."); }
       const profile = await profileResponse.json();
       const isAdmin = Array.isArray(profile.data?.roles) && profile.data.roles.some((role: string) => role.toLowerCase() === "admin");

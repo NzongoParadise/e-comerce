@@ -4,8 +4,6 @@ import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { ArrowLeft, CheckCircle2, Eye, EyeOff, LockKeyhole, Monitor } from "lucide-react";
 
-const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-
 export default function ResetPasswordPage() {
   const token = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("token") || "" : "";
   const [password, setPassword] = useState("");
@@ -21,7 +19,7 @@ export default function ResetPasswordPage() {
     setLoading(true);
     setMessage("");
     try {
-      const response = await fetch(`${apiUrl}/api/auth/reset-password`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, password }) });
+      const response = await fetch("/api/auth/reset-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, password }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Não foi possível redefinir a palavra-passe.");
       setSuccess(true);

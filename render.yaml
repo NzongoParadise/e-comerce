@@ -4,9 +4,8 @@ services:
     runtime: node
     plan: free
     region: frankfurt
-    rootDir: backend
-    buildCommand: npm ci && npx prisma generate && npm run build
-    startCommand: npx prisma migrate deploy && npm start
+    buildCommand: npm ci && npm run build
+    startCommand: npm run db:migrate && npm run start
     healthCheckPath: /health
     envVars:
       - key: NODE_VERSION
@@ -17,5 +16,17 @@ services:
         generateValue: true
       - key: ALLOW_INSECURE_AUTH
         value: "false"
+      - key: JWKS_URI
+        sync: false
+      - key: AUTH_ISSUER
+        sync: false
+      - key: AUTH_AUDIENCE
+        sync: false
       - key: FRONTEND_URL
+        sync: false
+      - key: NEXT_PUBLIC_GOOGLE_AUTH_URL
+        sync: false
+      - key: NEXT_PUBLIC_APPLE_AUTH_URL
+        sync: false
+      - key: NEXT_PUBLIC_REGISTER_URL
         sync: false

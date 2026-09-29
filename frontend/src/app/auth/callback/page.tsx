@@ -24,7 +24,7 @@ export default function AuthCallbackPage() {
 
     localStorage.setItem("jwt_token", token);
     async function redirectByProfile() {
-      const profileResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/auth/me`, {
+      const profileResponse = await fetch("/api/auth/me", {
         headers: { Authorization: `Bearer ${token}` },
       });
       const profile = await profileResponse.json();
