@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: techglobal-api
+    runtime: node
+    plan: free
+    region: frankfurt
+    rootDir: backend
+    buildCommand: npm ci && npx prisma generate && npm run build
+    startCommand: npx prisma migrate deploy && npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 20.19.0
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ALLOW_INSECURE_AUTH
+        value: "false"
+      - key: FRONTEND_URL
+        sync: false

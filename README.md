@@ -49,3 +49,15 @@ npm --prefix frontend run build
 - Never commit `.env`, `backend/.env`, credentials, or production secrets.
 
 Payment providers and external authentication integrations require their corresponding environment variables before they can be used.
+
+## Online demo deployment
+
+The repository includes `render.yaml` for the Express API. The Next.js frontend is deployed separately on Vercel, and PostgreSQL is hosted on Neon.
+
+1. Create a Neon Free project in a European region and copy its PostgreSQL connection string. Keep the connection string private.
+2. In Render, create a Blueprint from this GitHub repository and select `render.yaml`. Provide the Neon connection string as `DATABASE_URL`; Render generates `JWT_SECRET`.
+3. After the Render API is healthy at `/health`, create a Vercel project from the same repository and set its Root Directory to `frontend`.
+4. Add `NEXT_PUBLIC_API_URL` to the Vercel project using the public Render API URL, without a trailing slash, then deploy the frontend.
+5. Set `FRONTEND_URL` on Render to the Vercel production URL and redeploy the API for payment-provider return links.
+
+This is a demonstration setup, not production hosting. Neon Free suspends idle compute and has a 0.5 GB storage limit. Render Free can sleep after inactivity and has an ephemeral filesystem, so uploaded B2B documents are not persistent. Upgrade to persistent production plans and configure backups before storing real customer data or accepting payments.
