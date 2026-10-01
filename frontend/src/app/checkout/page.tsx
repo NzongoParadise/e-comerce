@@ -84,7 +84,9 @@ export default function CheckoutPage() {
   const billingName = accountProfile.name || selectedAddress?.recipient || "";
   const activeDeliveryMode = country === "PT" && deliveryMode === "pickup" ? "address" : deliveryMode;
   const activeShippingMethod = country === "PT" && deliveryMode === "pickup" ? "standard" : shippingMethod;
-  const activePaymentMethod = country === "PT" && paymentMethod.startsWith("multicaixa")
+  const activePaymentMethod = country === "AO" && paymentMethod === "card"
+    ? "multicaixa_reference"
+    : country === "PT" && paymentMethod.startsWith("multicaixa")
     ? "transfer"
     : paymentMethod === "multicaixa_express" && !phone ? "multicaixa_reference" : paymentMethod;
 
@@ -159,6 +161,9 @@ export default function CheckoutPage() {
       clearCart();
       router.push(`/confirmation/${response.data.id}`);
     } catch (error) {
+      if (activePaymentMethod === "card" && error instanceof Error && ["API error: 409", "API error: 502"].includes(error.message)) {
+        setIdempotencyKey("");
+      }
       setMessage(error instanceof Error ? error.message : "Não foi possível criar a encomenda.");
     } finally {
       setSubmitting(false);
@@ -306,7 +311,7 @@ export default function CheckoutPage() {
                 ["transfer", "Transferência bancária", "Confirmação em até 24h", Building2],
                 ["card", "Cartão de crédito / débito", "Visa e Mastercard", CreditCard],
                 ["cash", "Pagamento na entrega", "Disponível em Luanda", Banknote],
-              ].filter(([value]) => (country === "AO" || !["multicaixa_reference", "multicaixa_express", "cash"].includes(value as string)) && !(value === "multicaixa_express" && !phone)).map(([value, title, description, Icon]) => {
+              ].filter(([value]) => (country === "AO" || !["multicaixa_reference", "multicaixa_express", "cash"].includes(value as string)) && !(country === "AO" && value === "card") && !(value === "multicaixa_express" && !phone)).map(([value, title, description, Icon]) => {
                 const PaymentIcon = Icon as typeof CreditCard;
                 return (
                   <button type="button" key={value as string} aria-pressed={activePaymentMethod === value} onClick={() => setPaymentMethod(value as string)} className={`flex items-center gap-3 rounded-lg border p-4 text-left transition ${activePaymentMethod === value ? "border-primary bg-blue-50" : "border-gray-200 hover:border-gray-300"}`}>

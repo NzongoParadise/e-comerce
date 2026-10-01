@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { CheckCircle2, LoaderCircle, Monitor } from "lucide-react";
+import { getDashboardDestination } from "@/lib/auth";
 
 export default function AuthCallbackPage() {
   const [message, setMessage] = useState("A validar a sua sessão...");
@@ -28,9 +29,12 @@ export default function AuthCallbackPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
       const profile = await profileResponse.json();
-      const isAdmin = profileResponse.ok && Array.isArray(profile.data?.roles)
-        && profile.data.roles.some((role: string) => role.toLowerCase() === "admin");
-      const destination = isAdmin ? "/admin" : "/account";
+      const destination = getDashboardDestination(profileResponse.ok ? {
+        roles: profile.data?.roles,
+        accessRole: profile.data?.accessRole,
+        email: profile.data?.email,
+        isAdmin: profile.data?.isAdmin,
+      } : null);
       window.history.replaceState({}, document.title, "/auth/callback");
       setMessage("Sessão iniciada. A abrir a sua conta...");
       window.setTimeout(() => window.location.replace(destination), 250);

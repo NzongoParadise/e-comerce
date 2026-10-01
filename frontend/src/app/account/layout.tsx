@@ -32,7 +32,7 @@ const navItems: NavItem[] = [
 
 export default function AccountLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const [profile, setProfile] = useState<{ name?: string; email?: string; accountName?: string; accountType?: string } | null>(null);
+  const [profile, setProfile] = useState<{ name?: string; email?: string; accountName?: string; accountType?: string; isAdmin?: boolean } | null>(null);
 
   useEffect(() => {
     fetchWithAuth("/api/auth/me").then((response) => {
@@ -46,6 +46,11 @@ export default function AccountLayout({ children }: { children: React.ReactNode 
     .slice(0, 2)
     .map((part) => part[0].toUpperCase())
     .join("");
+  const visibleNavItems = navItems.filter(({ href }) => {
+    if (href === "/account/quotes") return profile?.accountType === "B2B";
+    if (href === "/account/users" || href === "/admin/stock") return profile?.isAdmin === true;
+    return true;
+  });
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -76,7 +81,7 @@ export default function AccountLayout({ children }: { children: React.ReactNode 
 
           <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
             <nav className="flex flex-col py-2">
-              {navItems.map(({ name, href, Icon }) => {
+              {visibleNavItems.map(({ name, href, Icon }) => {
                 const isActive = pathname === href;
                 return (
                   <Link

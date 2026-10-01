@@ -23,5 +23,6 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}) {
     throw new Error(`API error: ${response.status}`);
   }
 
+  if (response.status === 204) return null;
   return response.json();
 }

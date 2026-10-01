@@ -3,13 +3,46 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ArrowLeftRight, ChevronDown, Heart, LogOut, MapPin, Menu, Monitor, Search, ShoppingCart, UserRound, X } from "lucide-react";
+import { ArrowLeftRight, Boxes, ChevronDown, FileText, Headphones, Heart, LayoutDashboard, LogOut, MapPin, Menu, Monitor, Package, Search, Settings, ShoppingBag, ShoppingCart, UserRound, Users, X } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { useMarket } from "@/context/MarketContext";
 import { fetchWithAuth } from "@/lib/api";
 
 type Category = { id: number; name: string; slug: string };
-type AccountProfile = { name?: string; email?: string };
+type AccountProfile = { name?: string; email?: string; accessRole?: string; accountType?: string; isAdmin?: boolean };
+
+const adminMenuItems = [
+  { label: "Painel administrativo", href: "/admin", Icon: LayoutDashboard },
+  { label: "Produtos", href: "/admin/products", Icon: Package },
+  { label: "Gestão de stock", href: "/admin/stock", Icon: Boxes },
+  { label: "Encomendas", href: "/admin/orders", Icon: ShoppingBag },
+  { label: "Clientes", href: "/admin/clients", Icon: Users },
+  { label: "Utilizadores e permissões", href: "/admin/users", Icon: Users },
+];
+const retailMenuItems = [
+  { label: "A minha conta", href: "/account", Icon: UserRound },
+  { label: "As minhas encomendas", href: "/account/orders", Icon: ShoppingBag },
+  { label: "Os meus endereços", href: "/account/addresses", Icon: MapPin },
+];
+const wholesaleMenuItems = [
+  { label: "Painel empresarial", href: "/account", Icon: LayoutDashboard },
+  { label: "Encomendas", href: "/account/orders", Icon: ShoppingBag },
+  { label: "Cotações", href: "/account/quotes", Icon: FileText },
+  { label: "Dados da empresa", href: "/account/profile", Icon: UserRound },
+];
+const internalMenuItems = [
+  { label: "O meu perfil", href: "/account/profile", Icon: UserRound },
+  { label: "Definições", href: "/account/settings", Icon: Settings },
+  { label: "Ajuda e suporte", href: "/account/support", Icon: Headphones },
+];
+const roleLabels: Record<string, string> = {
+  ADMIN: "Administrador",
+  CUSTOMER: "Cliente",
+  SALES: "Vendas",
+  SUPPORT: "Suporte",
+  MARKETING: "Marketing",
+  HR: "Recursos humanos",
+};
 
 export default function Header() {
   const router = useRouter();
@@ -24,6 +57,27 @@ export default function Header() {
   const [locationLoading, setLocationLoading] = useState(false);
   const [profile, setProfile] = useState<AccountProfile | null>(null);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const accessRole = profile?.accessRole?.toUpperCase() || "CUSTOMER";
+  const isWholesale = accessRole === "CUSTOMER" && profile?.accountType?.toUpperCase() === "B2B";
+  const profileMenuItems = profile?.isAdmin
+    ? adminMenuItems
+    : accessRole !== "CUSTOMER"
+      ? internalMenuItems
+      : isWholesale
+        ? wholesaleMenuItems
+        : retailMenuItems;
+  const profileLabel = profile?.isAdmin
+    ? "Administrador"
+    : accessRole === "CUSTOMER"
+      ? isWholesale ? "Cliente grossista" : "Cliente retalhista"
+      : roleLabels[accessRole] || "Acesso interno";
+  const profileMenuTitle = profile?.isAdmin
+    ? "Painel administrativo"
+    : isWholesale
+      ? "Área empresarial"
+      : accessRole === "CUSTOMER"
+        ? "Conta e listas"
+        : "Acesso interno";
 
   useEffect(() => {
     fetchWithAuth("/api/categories").then((response) => setCategories(response.data)).catch(() => setCategories([]));
@@ -80,7 +134,7 @@ export default function Header() {
                 <UserRound size={20} />
                 <span className="hidden text-[10px] font-semibold leading-tight sm:block">
                   <span className="block text-gray-300">Olá, {profile.name?.trim().split(/\s+/)[0] || "cliente"}</span>
-                  <strong className="whitespace-nowrap text-white">Conta e listas</strong>
+                  <strong className="whitespace-nowrap text-white">{profileMenuTitle}</strong>
                 </span>
                 <ChevronDown size={13} className="hidden sm:block" />
               </button>
@@ -88,10 +142,13 @@ export default function Header() {
                 <div className="border-b border-gray-100 px-4 pb-3">
                   <p className="text-sm font-bold">Olá, {profile.name || "cliente"}</p>
                   {profile.email && <p className="mt-0.5 truncate text-xs text-gray-500">{profile.email}</p>}
+                  <p className="mt-2 text-[10px] font-bold uppercase text-blue-700">{profileLabel}</p>
                 </div>
-                <Link href="/account" onClick={() => setAccountMenuOpen(false)} className="block px-4 py-2.5 text-sm hover:bg-gray-50">A minha conta</Link>
-                <Link href="/account/orders" onClick={() => setAccountMenuOpen(false)} className="block px-4 py-2.5 text-sm hover:bg-gray-50">As minhas encomendas</Link>
-                <Link href="/account/addresses" onClick={() => setAccountMenuOpen(false)} className="block px-4 py-2.5 text-sm hover:bg-gray-50">Os meus endereços</Link>
+                {profileMenuItems.map(({ label, href, Icon }) => (
+                  <Link key={href} href={href} onClick={() => setAccountMenuOpen(false)} className="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-gray-50">
+                    <Icon size={15} className="text-gray-500" />{label}
+                  </Link>
+                ))}
                 <button type="button" onClick={logout} className="flex w-full items-center gap-2 border-t border-gray-100 px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50"><LogOut size={15} />Terminar sessão</button>
               </div>}
             </>

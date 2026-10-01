@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/server/prisma';
+import { isActiveWholesaleCustomer } from '@/lib/auth';
 import { authenticate, errorResponse, readJson, userSubject } from '@/lib/server/api';
 import { z } from 'zod';
 
@@ -28,6 +29,7 @@ export async function POST(request: Request) {
   try {
     const user = await prisma.user.findUnique({ where: { externalId: subject } });
     if (!user) return errorResponse('User profile not found', 401);
+    if (!isActiveWholesaleCustomer(user)) return errorResponse('As cotações estão disponíveis apenas para contas grossistas ativas.', 403);
     const productIds = parsed.data.items.map((item) => item.productId);
     const products = await prisma.product.findMany({ where: { id: { in: productIds } }, include: { prices: true } });
     if (products.length !== new Set(productIds).size) return errorResponse('Um ou mais produtos não existem', 400);
@@ -65,6 +67,12 @@ export async function POST(request: Request) {
 export async function GET(request: Request) {
   const subject = userSubject(await authenticate(request));
   if (!subject) return errorResponse('Authentication required', 401);
+  const user = await prisma.user.findUnique({
+    where: { externalId: subject },
+    select: { accessRole: true, accountType: true, status: true },
+  });
+  if (!user) return errorResponse('User profile not found', 401);
+  if (!isActiveWholesaleCustomer(user)) return errorResponse('As cotações estão disponíveis apenas para contas grossistas ativas.', 403);
   const id = quoteId(request);
   if (id !== null) {
     const quote = await prisma.quote.findFirst({ where: { id, user: { externalId: subject } }, include: { items: true } });

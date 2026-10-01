@@ -27,7 +27,7 @@ export default function RegisterPage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Não foi possível criar a conta.");
       localStorage.setItem("jwt_token", data.token);
-      router.push("/account");
+      router.push(accountType === "B2B" ? "/account/profile" : "/account");
     } catch (error) {
       setMessage(error instanceof TypeError ? "Não foi possível contactar o servidor. Confirme que o backend está a correr." : error instanceof Error ? error.message : "Não foi possível criar a conta.");
     } finally { setLoading(false); }

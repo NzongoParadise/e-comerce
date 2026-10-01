@@ -18,7 +18,6 @@ type Profile = {
 export default function ProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [name, setName] = useState("");
-  const [accountType, setAccountType] = useState<"B2C" | "B2B">("B2C");
   const [companyDocument, setCompanyDocument] = useState<File | null>(null);
   const [personalDocument, setPersonalDocument] = useState<File | null>(null);
   const [requestingB2B, setRequestingB2B] = useState(false);
@@ -30,7 +29,6 @@ export default function ProfilePage() {
       .then((response) => {
         setProfile(response.data);
         setName(response.data.name || "");
-        setAccountType(response.data.accountType === "B2B" ? "B2B" : "B2C");
       })
       .catch(() => setMessage("Não foi possível carregar o perfil."));
   }, []);
@@ -42,7 +40,6 @@ export default function ProfilePage() {
     try {
       const body = new FormData();
       body.append("name", name);
-      body.append("accountType", accountType);
       if (companyDocument) body.append("companyDocument", companyDocument);
       if (personalDocument) body.append("personalDocument", personalDocument);
       const response = await fetchWithAuth("/api/auth/profile", {
@@ -57,6 +54,8 @@ export default function ProfilePage() {
       setSaving(false);
     }
   }
+
+  const accountType = profile?.accountType === "B2B" ? "B2B" : "B2C";
 
   async function handleB2BRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

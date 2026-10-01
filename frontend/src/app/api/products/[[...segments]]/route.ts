@@ -20,13 +20,21 @@ const productSchema = z.object({
   categoryId: z.coerce.number().int().positive(),
   brandId: z.coerce.number().int().positive(),
   prices: z.array(priceSchema).max(10).optional(),
-  attributes: z.array(z.object({ name: z.string().trim().min(1).max(80), value: z.string().trim().min(1).max(160) })).max(40).optional(),
+  attributes: z.array(z.object({ name: z.string().trim().min(1).max(80), value: z.string().trim().min(1).max(160) })).max(40).superRefine((attributes, context) => {
+    const uniqueAttributes = new Set<string>();
+    attributes.forEach((attribute, index) => {
+      const key = `${attribute.name.toLocaleLowerCase()}\u0000${attribute.value.toLocaleLowerCase()}`;
+      if (uniqueAttributes.has(key)) context.addIssue({ code: 'custom', path: [index], message: 'Atributos duplicados não são permitidos' });
+      uniqueAttributes.add(key);
+    });
+  }).optional(),
 });
 
 const querySchema = z.object({
   category: z.string().optional(),
   brand: z.string().optional(),
   market: z.enum(['PT', 'AO']).optional(),
+  stockStatus: z.enum(['IN_STOCK', 'LOW_STOCK', 'OUT_OF_STOCK']).optional(),
   search: z.string().optional(),
   page: z.coerce.number().min(1).default(1),
   pageSize: z.coerce.number().min(1).max(100).default(10),
@@ -64,28 +72,39 @@ export async function GET(request: Request) {
     const params = Object.fromEntries(new URL(request.url).searchParams);
     const parsed = querySchema.safeParse(params);
     if (!parsed.success) return errorResponse('Invalid query parameters', 400, parsed.error.issues);
-    const { category, brand, market, search, page, pageSize } = parsed.data;
+    const { category, brand, market, stockStatus, search, page, pageSize } = parsed.data;
     const where: Record<string, unknown> = {};
     if (category) where.category = { slug: category };
     if (brand) where.brand = { slug: brand };
+    const lowStockThreshold = Number.isInteger(Number(process.env.LOW_STOCK_THRESHOLD)) && Number(process.env.LOW_STOCK_THRESHOLD) > 0
+      ? Number(process.env.LOW_STOCK_THRESHOLD)
+      : 5;
+    if (stockStatus === 'OUT_OF_STOCK') where.stock = 0;
+    if (stockStatus === 'LOW_STOCK') where.stock = { gt: 0, lte: lowStockThreshold };
+    if (stockStatus === 'IN_STOCK') where.stock = { gt: lowStockThreshold };
     if (search) where.OR = [
       { name: { contains: search, mode: 'insensitive' } },
       { description: { contains: search, mode: 'insensitive' } },
     ];
 
-    const total = await prisma.product.count({ where });
-    const products = await prisma.product.findMany({
-      where,
-      include: {
-        category: true,
-        brand: true,
-        prices: market ? { where: { market } } : true,
-        attributes: true,
-      },
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-      orderBy: { name: 'asc' },
-    });
+    const [total, inStock, lowStock, outOfStock, products] = await prisma.$transaction([
+      prisma.product.count({ where }),
+      prisma.product.count({ where: { stock: { gt: lowStockThreshold } } }),
+      prisma.product.count({ where: { stock: { gt: 0, lte: lowStockThreshold } } }),
+      prisma.product.count({ where: { stock: 0 } }),
+      prisma.product.findMany({
+        where,
+        include: {
+          category: true,
+          brand: true,
+          prices: market ? { where: { market } } : true,
+          attributes: true,
+        },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        orderBy: { name: 'asc' },
+      }),
+    ]);
     const data = products.map((product) => ({
       id: product.id,
       name: product.name,
@@ -99,7 +118,7 @@ export async function GET(request: Request) {
       prices: product.prices.map((price) => ({ market: price.market, currency: price.currency, amount: price.amount })),
       attributes: product.attributes,
     }));
-    return Response.json({ data, meta: { total, page, pageSize } });
+    return Response.json({ data, meta: { total, page, pageSize, pageCount: Math.ceil(total / pageSize), lowStockThreshold }, stats: { total: await prisma.product.count(), inStock, lowStock, outOfStock } });
   } catch (error) {
     console.error('Error fetching products:', error);
     return errorResponse('Internal server error', 500);

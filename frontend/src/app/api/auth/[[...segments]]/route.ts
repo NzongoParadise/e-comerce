@@ -4,8 +4,9 @@ import { mkdir, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { canRequestB2BAccount, getUserRoles } from '@/lib/auth';
 import { prisma } from '@/lib/server/prisma';
-import { authenticate, errorResponse, prismaErrorCode, readJson, userSubject } from '@/lib/server/api';
+import { authenticate, errorResponse, isAdmin, prismaErrorCode, readJson, userSubject } from '@/lib/server/api';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -20,7 +21,6 @@ const registerSchema = credentialsSchema.extend({
 });
 const profileSchema = z.object({
   name: z.string().trim().min(2).max(120),
-  accountType: z.enum(['B2C', 'B2B']).optional(),
 });
 const passwordSchema = z.object({
   currentPassword: z.string().min(1).max(128),
@@ -38,8 +38,10 @@ function routeName(request: Request) {
 function issueLocalToken(user: { externalId: string; email: string | null; name: string | null; accessRole?: string }) {
   const secret = process.env.JWT_SECRET;
   if (!secret) throw new Error('JWT_SECRET is not configured');
+  const accessRole = (user.accessRole || 'CUSTOMER').toUpperCase();
+  const roles = accessRole === 'ADMIN' ? ['admin'] : ['customer'];
   return jwt.sign(
-    { sub: user.externalId, email: user.email, name: user.name, provider: 'local', roles: [user.accessRole === 'ADMIN' ? 'admin' : 'customer'] },
+    { sub: user.externalId, email: user.email, name: user.name, provider: 'local', accessRole, roles },
     secret,
     { algorithm: 'HS256', expiresIn: '7d' },
   );
@@ -119,8 +121,8 @@ export async function POST(request: Request) {
           name: parsed.data.name,
           provider: 'local',
           passwordHash,
-          accountType: parsed.data.accountType,
-          accountName: parsed.data.accountType === 'B2B' ? 'Conta Grossista' : 'Conta Retalhista',
+          accountType: 'B2C',
+          accountName: 'Conta Retalhista',
         },
       });
       return Response.json({ token: issueLocalToken(user) }, { status: 201 });
@@ -173,6 +175,11 @@ export async function GET(request: Request) {
       create: { externalId: subject, email: user.email, name: user.name, provider },
       update: { provider, lastLoginAt: new Date() },
     });
+    const roles = getUserRoles({
+      roles: user.roles || user.app_metadata?.roles || [],
+      accessRole: profile.accessRole,
+      email: user.email,
+    });
     return Response.json({
       data: {
         id: profile.id,
@@ -180,12 +187,14 @@ export async function GET(request: Request) {
         email: profile.email,
         name: profile.name,
         provider: profile.provider,
+        accessRole: profile.accessRole,
+        isAdmin: isAdmin({ ...user, accessRole: profile.accessRole, email: profile.email }),
         accountName: profile.accountName,
         accountType: profile.accountType,
         b2bRequestStatus: profile.b2bRequestStatus,
         companyDocumentPath: profile.companyDocumentPath,
         personalDocumentPath: profile.personalDocumentPath,
-        roles: user.roles || user.app_metadata?.roles || [],
+        roles,
       },
     });
   } catch (error) {
@@ -213,8 +222,14 @@ async function updatePassword(request: Request) {
 }
 
 async function submitB2BRequest(request: Request) {
-  const subject = userSubject(await authenticate(request));
+  const user = await authenticate(request);
+  const subject = userSubject(user);
   if (!subject) return errorResponse('Authentication required', 401);
+  const profile = await prisma.user.findUnique({
+    where: { externalId: subject },
+    select: { accessRole: true, accountType: true, status: true, b2bRequestStatus: true },
+  });
+  if (!canRequestB2BAccount(profile)) return errorResponse('Apenas contas retalhistas ativas sem pedido pendente podem solicitar acesso grossista.', 403);
   const body = await readProfileBody(request);
   if (!body) return errorResponse('Formato de documento não permitido', 400);
   const companyDocument = body.files.find(({ field }) => field === 'companyDocument')?.file;
@@ -244,12 +259,13 @@ async function submitB2BRequest(request: Request) {
 }
 
 async function updateProfile(request: Request) {
-  const subject = userSubject(await authenticate(request));
+  const user = await authenticate(request);
+  const subject = userSubject(user);
   if (!subject) return errorResponse('Authentication required', 401);
   const body = await readProfileBody(request);
   if (!body) return errorResponse('Formato de documento não permitido', 400);
   const fields = body.fields || {};
-  const parsed = profileSchema.safeParse({ ...fields, accountType: fields.accountType || undefined });
+  const parsed = profileSchema.safeParse(fields);
   if (!parsed.success) return errorResponse('Invalid profile data', 400);
 
   const filesByField = new Map(body.files.map(({ field, file }) => [field, file]));
@@ -260,13 +276,14 @@ async function updateProfile(request: Request) {
 
   try {
     const existing = await prisma.user.findUnique({ where: { externalId: subject } });
-    if (parsed.data.accountType === 'B2B' && existing?.accountType === 'B2C') {
-      return errorResponse('Use o pedido de conversão B2B para alterar este tipo de conta', 400);
+    if (!existing) return errorResponse('User profile not found', 404);
+    if (body.files.length > 0 && (existing.accessRole !== 'CUSTOMER' || existing.accountType !== 'B2B')) {
+      return errorResponse('Apenas contas grossistas aprovadas podem atualizar documentos nesta área.', 403);
     }
-    if (parsed.data.accountType === 'B2B'
-      && (!filesByField.has('companyDocument') || !filesByField.has('personalDocument'))
-      && (!existing?.companyDocumentPath || !existing.personalDocumentPath)) {
-      return errorResponse('Grossistas devem enviar os dois documentos', 400);
+    const hasCompanyDocument = filesByField.has('companyDocument') || Boolean(existing.companyDocumentPath);
+    const hasPersonalDocument = filesByField.has('personalDocument') || Boolean(existing.personalDocumentPath);
+    if (existing.accessRole === 'CUSTOMER' && existing.accountType === 'B2B' && (!hasCompanyDocument || !hasPersonalDocument)) {
+      return errorResponse('Grossistas devem manter os dois documentos válidos', 400);
     }
 
     const saved = await storeDocuments(body.files);
@@ -275,7 +292,6 @@ async function updateProfile(request: Request) {
         where: { externalId: subject },
         data: {
           name: parsed.data.name,
-          ...(parsed.data.accountType ? { accountType: parsed.data.accountType, accountName: parsed.data.accountType === 'B2B' ? 'Conta Grossista' : 'Conta Retalhista' } : {}),
           ...(saved.find(({ field }) => field === 'companyDocument') ? { companyDocumentPath: saved.find(({ field }) => field === 'companyDocument')?.path } : {}),
           ...(saved.find(({ field }) => field === 'personalDocument') ? { personalDocumentPath: saved.find(({ field }) => field === 'personalDocument')?.path } : {}),
         },

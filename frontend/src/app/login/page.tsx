@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { ArrowRight, Eye, EyeOff, Globe2, LockKeyhole, Mail, Monitor, ShieldCheck, Truck } from "lucide-react";
+import { getDashboardDestination } from "@/lib/auth";
 
 const providerUrls = { google: process.env.NEXT_PUBLIC_GOOGLE_AUTH_URL, apple: process.env.NEXT_PUBLIC_APPLE_AUTH_URL };
 
@@ -26,8 +27,13 @@ export default function LoginPage() {
       const profileResponse = await fetch("/api/auth/me", { headers: { Authorization: `Bearer ${data.token}` } });
       if (!profileResponse.ok) { localStorage.removeItem("jwt_token"); throw new Error("Não foi possível carregar o perfil. Tente novamente."); }
       const profile = await profileResponse.json();
-      const isAdmin = Array.isArray(profile.data?.roles) && profile.data.roles.some((role: string) => role.toLowerCase() === "admin");
-      router.push(isAdmin ? "/admin" : "/account");
+      const destination = getDashboardDestination({
+        roles: profile.data?.roles,
+        accessRole: profile.data?.accessRole,
+        email: profile.data?.email,
+        isAdmin: profile.data?.isAdmin,
+      });
+      router.push(destination);
     } catch (error) { setMessage(error instanceof TypeError ? "Não foi possível contactar o servidor. Verifique se o backend está ativo." : error instanceof Error ? error.message : "Não foi possível iniciar sessão."); }
     finally { setLoading(false); }
   }

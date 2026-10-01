@@ -1,0 +1,14 @@
+.env
+.env.*
+**/.env
+**/.env.*
+backend/
+Imagens/
+node_modules/
+**/node_modules/
+**/.next/
+**/dist/
+**/uploads/
+frontend/.vercel/
+docker-compose.yml
+render.yaml

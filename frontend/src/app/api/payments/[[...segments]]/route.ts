@@ -1,6 +1,8 @@
 import crypto from 'node:crypto';
 import { prisma } from '@/lib/server/prisma';
+import { cancelAwaitingPaymentAndReleaseStock } from '@/lib/server/orders/inventory';
 import { multicaixaProvider } from '@/lib/server/payments/multicaixaProvider';
+import { isStripeCurrencySupported, matchesStripePayment } from '@/lib/server/payments/stripeAmounts';
 import { authenticate, errorResponse, readJson, userSubject } from '@/lib/server/api';
 import { z } from 'zod';
 
@@ -155,30 +157,103 @@ async function handleStripeWebhook(request: Request) {
   if (!secret || !signature) return errorResponse('Invalid Stripe webhook configuration', 400);
   const timestamp = signature.match(/(?:^|,)t=(\d+)/)?.[1];
   const received = signature.match(/(?:^|,)v1=([^,]+)/)?.[1];
-  if (!timestamp || !received) return errorResponse('Invalid Stripe signature', 400);
+  if (!timestamp || !received || Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) return errorResponse('Invalid Stripe signature', 400);
   const signedPayload = `${timestamp}.${rawBody.toString('utf8')}`;
   const expected = crypto.createHmac('sha256', secret).update(signedPayload).digest('hex');
   if (expected.length !== received.length || !crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(received))) return errorResponse('Invalid Stripe signature', 401);
-  const event = JSON.parse(rawBody.toString('utf8')) as { id?: string; type?: string; data?: { object?: { metadata?: { orderId?: string }; currency?: string } } };
-  if (event.type !== 'checkout.session.completed') return Response.json({ received: true });
-  const orderId = Number(event.data?.object?.metadata?.orderId);
-  const payment = await prisma.payment.findFirst({ where: { orderId, provider: 'stripe' } });
+  let event: {
+    id?: unknown;
+    type?: unknown;
+    data?: { object?: { id?: unknown; metadata?: { orderId?: unknown }; currency?: unknown; amount_total?: unknown; payment_status?: unknown; status?: unknown } };
+  };
+  try {
+    event = JSON.parse(rawBody.toString('utf8'));
+  } catch {
+    return errorResponse('Invalid Stripe webhook payload', 400);
+  }
+  const eventType = String(event.type);
+  const successEvent = ['checkout.session.completed', 'checkout.session.async_payment_succeeded'].includes(eventType);
+  const failedEvent = ['checkout.session.expired', 'checkout.session.async_payment_failed'].includes(eventType);
+  if (!successEvent && !failedEvent) return Response.json({ received: true });
+  const session = event.data?.object;
+  const orderId = Number(session?.metadata?.orderId);
+  if (!Number.isSafeInteger(orderId) || typeof session?.id !== 'string' || typeof event.id !== 'string') return errorResponse('Invalid Stripe checkout session', 400);
+  const sessionId = session.id;
+  const payment = await prisma.payment.findFirst({
+    where: { orderId, provider: 'stripe' },
+    include: { order: { select: { items: { select: { productId: true, quantity: true } } } } },
+  });
   if (!payment) return errorResponse('Payment not found', 404);
-  if (event.data?.object?.currency && event.data.object.currency !== 'eur') return errorResponse('Currency mismatch', 422);
+  if (!isStripeCurrencySupported(payment.currency)) return errorResponse('Stripe payment currency is not supported', 422);
+  const expectedAmount = Number(payment.amountEUR);
+  if (payment.reference && payment.reference !== sessionId) return errorResponse('Checkout session mismatch', 422);
+  if (!matchesStripePayment(session.amount_total, session.currency, expectedAmount, payment.currency)) return errorResponse('Payment amount or currency mismatch', 422);
+  if (failedEvent) {
+    if (eventType === 'checkout.session.expired' && session.status !== 'expired') return errorResponse('Invalid expired checkout session', 422);
+    try {
+      await prisma.$transaction(async (transaction) => {
+        await transaction.paymentEvent.create({ data: {
+          paymentId: payment.id,
+          providerEventId: event.id as string,
+          eventType,
+          status: eventType === 'checkout.session.expired' ? 'EXPIRED' : 'FAILED',
+          amountKZ: payment.amountKZ,
+          currency: payment.currency,
+          payload: event as never,
+          processedAt: new Date(),
+        } });
+        await cancelAwaitingPaymentAndReleaseStock(
+          transaction,
+          payment.orderId,
+          payment.order.items,
+          eventType === 'checkout.session.expired' ? 'EXPIRED' : 'FAILED',
+          eventType === 'checkout.session.expired'
+            ? 'Encomenda cancelada após expiração da sessão de pagamento Stripe.'
+            : 'Encomenda cancelada após falha do pagamento Stripe.',
+        );
+        await transaction.payment.updateMany({
+          where: { id: payment.id, status: { not: 'PAID' } },
+          data: { reference: sessionId },
+        });
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('Unique constraint')) return Response.json({ received: true, duplicate: true });
+      throw error;
+    }
+    return Response.json({ received: true });
+  }
+  if (session.payment_status !== 'paid') return Response.json({ received: true, pending: true });
   try {
     await prisma.$transaction(async (transaction) => {
       await transaction.paymentEvent.create({ data: {
         paymentId: payment.id,
-        providerEventId: String(event.id),
-        eventType: String(event.type),
+        providerEventId: event.id as string,
+        eventType: event.type as string,
         status: 'PAID',
         amountKZ: payment.amountKZ,
         currency: payment.currency,
         payload: event as never,
         processedAt: new Date(),
       } });
-      await transaction.payment.update({ where: { id: payment.id }, data: statusUpdates('PAID') });
-      await transaction.order.update({ where: { id: orderId }, data: { status: 'PAYMENT_CONFIRMED' } });
+      const awaitingOrder = await transaction.order.updateMany({
+        where: { id: orderId, status: 'AWAITING_PAYMENT' },
+        data: { status: 'PAYMENT_CONFIRMED' },
+      });
+      if (!awaitingOrder.count) {
+        const cancelledOrder = await transaction.order.updateMany({
+          where: { id: orderId, status: 'CANCELLED' },
+          data: { status: 'PAYMENT_REVIEW_REQUIRED' },
+        });
+        if (cancelledOrder.count) {
+          await transaction.trackingEvent.create({ data: {
+            orderId,
+            status: 'PAYMENT_REVIEW_REQUIRED',
+            location: 'Online',
+            description: 'Pagamento Stripe confirmado após cancelamento e libertação do stock. Revisão manual necessária antes do processamento.',
+          } });
+        }
+      }
+      await transaction.payment.update({ where: { id: payment.id }, data: { ...statusUpdates('PAID'), reference: sessionId } });
     });
   } catch (error) {
     if (error instanceof Error && error.message.includes('Unique constraint')) return Response.json({ received: true, duplicate: true });

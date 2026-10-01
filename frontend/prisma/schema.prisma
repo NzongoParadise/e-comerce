@@ -6,6 +6,7 @@
 
 generator client {
   provider = "prisma-client-js"
+  engineType = "binary"
 }
 
 datasource db {
@@ -34,6 +35,27 @@ model Brand {
   name      String    @unique
   slug      String    @unique
   products  Product[]
+}
+
+model Supplier {
+  id          Int      @id @default(autoincrement())
+  name        String
+  contactName String?
+  email       String?
+  phone       String?
+  taxId       String?
+  country     String   @default("Angola")
+  province    String?
+  city        String?
+  address     String?
+  notes       String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([country, taxId])
+  @@index([name])
+  @@index([active])
 }
 
 model Product {
@@ -342,6 +364,39 @@ model ReturnRequest {
   updatedAt     DateTime @updatedAt
   order         Order    @relation(fields: [orderId], references: [id])
   user          User     @relation(fields: [userId], references: [id])
+}
+
+model FinanceEntry {
+  id              Int                 @id @default(autoincrement())
+  type            String
+  description     String
+  category        String
+  amount          Decimal             @db.Decimal(12,2)
+  currency        String              @default("AOA")
+  status          String              @default("CONFIRMED")
+  transactionDate DateTime            @default(now())
+  reference       String?
+  notes           String?
+  createdBy       String?
+  updatedBy       String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  events          FinanceEntryEvent[]
+
+  @@index([type, status, transactionDate])
+  @@index([category])
+}
+
+model FinanceEntryEvent {
+  id               Int         @id @default(autoincrement())
+  entryId          Int
+  actorExternalId  String?
+  eventType        String
+  payload          Json
+  createdAt        DateTime    @default(now())
+  entry            FinanceEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  @@index([entryId, createdAt])
 }
 
 // -------------------------------------------------------------
