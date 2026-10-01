@@ -92,7 +92,7 @@ export default function StockPage() {
         <div className="flex h-16 items-center gap-4 px-4 lg:px-6">
           <div className="flex items-center gap-2 lg:w-60">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#1555d8] text-white"><Box size={19} /></div>
-            <div className="hidden leading-none sm:block"><strong className="text-base font-black">TechGlobal</strong><span className="mt-1 block text-[8px] font-bold uppercase tracking-widest text-[#1555d8]">Painel Administrativo</span></div>
+            <div className="hidden leading-none sm:block"><strong className="text-base font-black">RUBRICA DILIGENTE (SU), LDA</strong><span className="mt-1 block text-[8px] font-bold uppercase tracking-widest text-[#1555d8]">Painel Administrativo</span></div>
           </div>
           <button className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 lg:hidden" aria-label="Abrir menu"><SlidersHorizontal size={18} /></button>
           <div className="relative hidden max-w-xl flex-1 md:block"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={15} /><input placeholder="Pesquisar produtos, categorias, referências..." className="w-full rounded-lg border border-gray-200 bg-gray-50 py-2.5 pl-9 pr-3 text-xs outline-none transition focus:border-blue-500 focus:bg-white" /></div>
@@ -102,11 +102,11 @@ export default function StockPage() {
 
       <div className="flex">
         <aside className="hidden min-h-[calc(100vh-64px)] w-60 shrink-0 border-r border-gray-200 bg-[#10233e] text-white lg:block">
-          <div className="border-b border-white/10 px-5 py-5"><div className="flex items-center gap-2"><div className="flex h-8 w-8 items-center justify-center rounded-md bg-blue-600"><Box size={16} /></div><div><strong className="text-sm">TechGlobal</strong><span className="block text-[9px] text-blue-200">Painel Administrativo</span></div></div></div>
+          <div className="border-b border-white/10 px-5 py-5"><div className="flex items-center gap-2"><div className="flex h-8 w-8 items-center justify-center rounded-md bg-blue-600"><Box size={16} /></div><div><strong className="text-sm">RUBRICA DILIGENTE (SU), LDA</strong><span className="block text-[9px] text-blue-200">Painel Administrativo</span></div></div></div>
           <nav className="space-y-1 p-3 text-xs font-medium">
             {[[BarChart3, "Visão geral"], [ShoppingCart, "Vendas"], [PackageCheck, "Produtos"], [Box, "Gestão de stock"], [ArrowDownToLine, "Entradas de stock"], [ArrowUpToLine, "Saídas de stock"], [Truck, "Transferências"], [SlidersHorizontal, "Ajustes de stock"], [Layers3, "Inventário"], [Layers3, "Categorias"], [Users, "Fornecedores"], [Users, "Clientes"], [BarChart3, "Financeiro"], [BarChart3, "Marketing"], [BarChart3, "Relatórios"], [Users, "Utilizadores"], [Settings, "Configurações"]].map(([Icon, label], index) => { const MenuIcon = Icon as typeof Box; return <button key={label as string} className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition ${index === 3 ? "bg-blue-600 text-white shadow-lg shadow-blue-900/30" : "text-blue-50/80 hover:bg-white/10 hover:text-white"}`}><MenuIcon size={15} />{label as string}{index > 3 && index % 3 === 0 && <ChevronDown className="ml-auto" size={13} />}</button>; })}
           </nav>
-          <div className="mx-4 mt-5 rounded-xl bg-blue-900/70 p-3 text-[10px]"><strong className="block text-sm text-white">TechGlobal Pro</strong><span className="mt-1 block text-blue-100">Mais ferramentas para o seu negócio.</span><button className="mt-3 w-full rounded-md bg-blue-600 py-2 font-bold text-white">Saber mais</button></div>
+          <div className="mx-4 mt-5 rounded-xl bg-blue-900/70 p-3 text-[10px]"><strong className="block text-sm text-white">RUBRICA DILIGENTE (SU), LDA Pro</strong><span className="mt-1 block text-blue-100">Mais ferramentas para o seu negócio.</span><button className="mt-3 w-full rounded-md bg-blue-600 py-2 font-bold text-white">Saber mais</button></div>
         </aside>
 
         <main className="min-w-0 flex-1 px-4 py-5 sm:px-6 lg:px-8">

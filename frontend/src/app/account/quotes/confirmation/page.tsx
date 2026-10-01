@@ -16,7 +16,7 @@ const fallbackItems: QuoteProduct[] = [
 
 export default function QuoteConfirmationPage() {
   const [items, setItems] = useState<QuoteProduct[]>(fallbackItems);
-  const [company, setCompany] = useState<Company>({ name: "TechGlobal Lda", nif: "5417283901", address: "Talatona, Luanda", sector: "Tecnologia e Serviços", phone: "+244 923 000 000", email: "empresa@techglobal.ao" });
+  const [company, setCompany] = useState<Company>({ name: "RUBRICA DILIGENTE (SU), LDA", nif: "", address: "BLOCO 4 1 TRASEIRO, RUA FRANCISCO ARAUJO DANTAS N 109, 4425-440 Mala, Portugal", sector: "Tecnologia e Serviços", phone: "+33 7 58 92 00 80", email: "" });
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {

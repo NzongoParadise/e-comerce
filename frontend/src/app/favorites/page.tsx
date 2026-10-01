@@ -27,7 +27,7 @@ export default function FavoritesPage() {
   }, [favorites, category, sort]);
 
   function shareFavorites() {
-    const shareData = { title: "Os meus favoritos TechGlobal", text: "Veja os produtos que guardei na TechGlobal.", url: window.location.href };
+    const shareData = { title: "Os meus favoritos RUBRICA DILIGENTE (SU), LDA", text: "Veja os produtos que guardei na RUBRICA DILIGENTE (SU), LDA.", url: window.location.href };
     if (navigator.share) {
       navigator.share(shareData).catch(() => undefined);
       return;

@@ -8,20 +8,7 @@ import { ShieldCheck, Truck, Zap, Store, CreditCard, Building2, Banknote, LockKe
 import { fetchWithAuth } from "@/lib/api";
 import { useMarket } from "@/context/MarketContext";
 import { calculatePortugalShipping, estimateCartWeightKg } from "@/lib/shipping";
-
-type SavedAddress = {
-  id: number;
-  label: string;
-  recipient: string;
-  phone: string;
-  country: string;
-  province: string;
-  city: string;
-  address: string;
-  postalCode?: string;
-  notes?: string;
-  isDefault: boolean;
-};
+import { AddressSelector, type SavedAddress } from "@/components/features/checkout/AddressSelector";
 
 export default function CheckoutPage() {
   const { items, isLoaded, cartTotalEUR, cartTotalKZ, clearCart } = useCart();
@@ -32,6 +19,7 @@ export default function CheckoutPage() {
   const [deliveryMode, setDeliveryMode] = useState<"address" | "pickup" | "business">("address");
   const [paymentMethod, setPaymentMethod] = useState("multicaixa_reference");
   const [accountProfile, setAccountProfile] = useState<{ name?: string; email?: string }>({});
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<number | null>(null);
   const [loadingAddresses, setLoadingAddresses] = useState(true);
@@ -42,13 +30,29 @@ export default function CheckoutPage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
+    const token = localStorage.getItem("jwt_token");
+    if (!token) {
+      window.setTimeout(() => {
+        setIsAuthenticated(false);
+        setLoadingAddresses(false);
+      }, 0);
+      return;
+    }
     fetchWithAuth("/api/auth/me")
-      .then((response) => setAccountProfile({ name: response.data.name || "", email: response.data.email || "" }))
-      .catch(() => setAccountProfile({}));
+      .then((response) => {
+        setIsAuthenticated(true);
+        setAccountProfile({ name: response.data.name || "", email: response.data.email || "" });
+      })
+      .catch(() => {
+        setIsAuthenticated(false);
+        setAccountProfile({});
+        setLoadingAddresses(false);
+      });
   }, []);
 
   useEffect(() => {
     let active = true;
+    if (!localStorage.getItem("jwt_token")) return () => { active = false; };
     fetchWithAuth("/api/account/addresses")
       .then((response) => {
         if (!active) return;
@@ -109,6 +113,10 @@ export default function CheckoutPage() {
   const shippingCost = country === "PT" ? shippingCostEUR : shippingCostKZ;
   const finalTotal = country === "PT" ? finalTotalEUR : finalTotalKZ;
   const handleCompleteOrder = async () => {
+    if (isAuthenticated !== true) {
+      setMessage("Para escolher um endereço e finalizar a compra, entre na sua conta ou crie uma conta nova.");
+      return;
+    }
     if (activeDeliveryMode !== "pickup" && !selectedAddress) {
       setMessage("Selecione um endereço guardado na sua conta para continuar.");
       return;
@@ -171,9 +179,9 @@ export default function CheckoutPage() {
   };
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto animate-fade-in-up px-4 py-8">
       {/* Breadcrumb / Stepper */}
-      <nav className="text-xs text-gray-400 mb-6 flex items-center gap-1">
+      <nav className="mb-6 flex items-center gap-1 text-xs text-gray-400">
         <Link href="/" className="hover:text-primary">Início</Link>
         <span>›</span>
         <span className="text-gray-700 font-medium">Checkout</span>
@@ -215,21 +223,21 @@ export default function CheckoutPage() {
         <div className="lg:col-span-8 space-y-6">
           
           {/* Step 1: Delivery Data */}
-          <div className="card p-6">
-            <div className="flex items-center gap-3 mb-6">
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-white font-bold">1</span>
+          <div className="card animate-fade-in-up p-6 shadow-[0_20px_50px_rgba(15,23,42,0.06)]">
+            <div className="mb-6 flex items-center gap-3">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary font-bold text-white">1</span>
               <h2 className="text-lg font-bold text-gray-900">Dados de entrega</h2>
             </div>
             
             <div className="grid grid-cols-1 gap-3 mb-6 sm:grid-cols-3">
-              <button type="button" aria-pressed={activeDeliveryMode === "address"} onClick={() => { setDeliveryMode("address"); if (activeShippingMethod === "pickup") setShippingMethod("standard"); }} className={`${activeDeliveryMode === "address" ? "border-2 border-primary bg-blue-50 text-primary" : "border border-gray-200 text-gray-600"} rounded-lg py-3 flex flex-col items-center justify-center gap-2 text-sm font-semibold transition-colors`}>
+              <button type="button" aria-pressed={activeDeliveryMode === "address"} onClick={() => { setDeliveryMode("address"); if (activeShippingMethod === "pickup") setShippingMethod("standard"); }} className={`${activeDeliveryMode === "address" ? "border-2 border-primary bg-blue-50 text-primary" : "border border-gray-200 text-gray-600"} flex transform-gpu flex-col items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:border-[#1d6ac4]`}>
                 <Truck size={20} aria-hidden="true" /> Entrega em morada
               </button>
-              <button type="button" disabled={country === "PT"} aria-pressed={activeDeliveryMode === "pickup"} onClick={() => { setDeliveryMode("pickup"); setShippingMethod("pickup"); }} className={`${activeDeliveryMode === "pickup" ? "border-2 border-primary bg-blue-50 text-primary" : "border border-gray-200 text-gray-600"} rounded-lg py-3 flex flex-col items-center justify-center gap-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45`}>
+              <button type="button" disabled={country === "PT"} aria-pressed={activeDeliveryMode === "pickup"} onClick={() => { setDeliveryMode("pickup"); setShippingMethod("pickup"); }} className={`${activeDeliveryMode === "pickup" ? "border-2 border-primary bg-blue-50 text-primary" : "border border-gray-200 text-gray-600"} flex transform-gpu flex-col items-center justify-center gap-2 rounded-xl py-3 text-sm font-medium transition-all duration-200 hover:-translate-y-0.5 hover:border-[#1d6ac4] disabled:cursor-not-allowed disabled:opacity-45`}>
                 <Store size={20} aria-hidden="true" /> Levantar na loja
                 {country === "PT" && <span className="text-xs font-normal">Apenas em Angola</span>}
               </button>
-              <button type="button" aria-pressed={activeDeliveryMode === "business"} onClick={() => { setDeliveryMode("business"); if (activeShippingMethod === "pickup") setShippingMethod("standard"); }} className={`${activeDeliveryMode === "business" ? "border-2 border-primary bg-blue-50 text-primary" : "border border-gray-200 text-gray-600"} rounded-lg py-3 flex flex-col items-center justify-center gap-2 text-sm font-medium transition-colors`}>
+              <button type="button" aria-pressed={activeDeliveryMode === "business"} onClick={() => { setDeliveryMode("business"); if (activeShippingMethod === "pickup") setShippingMethod("standard"); }} className={`${activeDeliveryMode === "business" ? "border-2 border-primary bg-blue-50 text-primary" : "border border-gray-200 text-gray-600"} flex transform-gpu flex-col items-center justify-center gap-2 rounded-xl py-3 text-sm font-medium transition-all duration-200 hover:-translate-y-0.5 hover:border-[#1d6ac4]`}>
                 <Building2 size={20} aria-hidden="true" /> Entrega empresarial
               </button>
             </div>
@@ -240,21 +248,14 @@ export default function CheckoutPage() {
                 <p className="mt-1 text-sm text-emerald-900">{pickupStoreAddress || "Morada de levantamento por configurar."}</p>
               </div>
             ) : (
-              <fieldset className="mb-5">
-                <legend className="mb-2 text-xs font-bold text-gray-700">Escolha um endereço guardado</legend>
-                {loadingAddresses && <p role="status" className="rounded-lg bg-gray-50 px-4 py-3 text-sm text-gray-500">A carregar os endereços da conta...</p>}
-                {!loadingAddresses && addressLoadError && <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><p>Não foi possível carregar os endereços da conta.</p><Link href="/account/addresses" className="mt-2 inline-block font-bold text-primary hover:underline">Gerir endereços da conta</Link></div>}
-                {!loadingAddresses && !addressLoadError && savedAddresses.length === 0 && <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-600"><p>Ainda não tem endereços guardados na sua conta.</p><Link href="/account/addresses" className="mt-3 inline-flex btn-secondary">Adicionar endereço na conta</Link></div>}
-                {!loadingAddresses && savedAddresses.length > 0 && <div className="grid gap-3 sm:grid-cols-2">
-                  {savedAddresses.map((savedAddress) => <label key={savedAddress.id} className={`flex cursor-pointer gap-3 rounded-lg border p-4 transition-colors ${selectedAddressId === savedAddress.id ? "border-primary bg-blue-50/60 ring-1 ring-primary" : "border-gray-200 hover:border-gray-300"}`}>
-                    <input type="radio" name="savedAddress" value={savedAddress.id} checked={selectedAddressId === savedAddress.id} onChange={() => setSelectedAddressId(savedAddress.id)} className="mt-1 h-4 w-4 accent-primary" />
-                    <span className="min-w-0">
-                      <span className="flex flex-wrap items-center gap-2 text-sm font-bold text-gray-900">{savedAddress.label}{savedAddress.isDefault && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-700">Principal</span>}</span>
-                      <span className="mt-1 block text-xs leading-5 text-gray-600">{savedAddress.recipient}<br />{savedAddress.address}<br />{savedAddress.city}, {savedAddress.province}{savedAddress.postalCode ? ` · ${savedAddress.postalCode}` : ""}<br />{savedAddress.phone}</span>
-                    </span>
-                  </label>)}
-                </div>}
-              </fieldset>
+              <AddressSelector
+                loadingAddresses={loadingAddresses}
+                isAuthenticated={isAuthenticated}
+                addressLoadError={addressLoadError}
+                savedAddresses={savedAddresses}
+                selectedAddressId={selectedAddressId}
+                onSelectAddress={setSelectedAddressId}
+              />
             )}
             
           </div>

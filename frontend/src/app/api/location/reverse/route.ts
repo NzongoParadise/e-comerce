@@ -20,7 +20,7 @@ export async function GET(request: Request) {
       addressdetails: '1',
     });
     const response = await fetch(`https://nominatim.openstreetmap.org/reverse?${query}`, {
-      headers: { 'User-Agent': 'TechGlobal/1.0 contact@techglobal.ao' },
+      headers: { 'User-Agent': 'RUBRICA DILIGENTE (SU), LDA/1.0 contact@techglobal.ao' },
     });
     if (!response.ok) return errorResponse('Geocoding service unavailable', 502);
     const result = await response.json() as { display_name?: string; address?: Record<string, string> };

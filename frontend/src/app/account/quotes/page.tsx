@@ -19,7 +19,7 @@ export default function QuotesPage() {
   const [items, setItems] = useState<QuoteProduct[]>(catalog);
   const [query, setQuery] = useState("");
   const [message, setMessage] = useState("");
-  const [company, setCompany] = useState({ name: "TechGlobal Lda", nif: "5417283901", address: "Talatona, Luanda", sector: "Tecnologia e Serviços", phone: "+244 923 000 000", email: "empresa@techglobal.ao" });
+  const [company, setCompany] = useState({ name: "RUBRICA DILIGENTE (SU), LDA", nif: "", address: "BLOCO 4 1 TRASEIRO, RUA FRANCISCO ARAUJO DANTAS N 109, 4425-440 Mala, Portugal", sector: "Tecnologia e Serviços", phone: "+33 7 58 92 00 80", email: "" });
   const total = useMemo(() => items.reduce((sum, item) => sum + item.price * item.quantity, 0), [items]);
   const quantity = useMemo(() => items.reduce((sum, item) => sum + item.quantity, 0), [items]);
   const formatPrice = (value: number) => `${value.toLocaleString("pt-PT")},00`;

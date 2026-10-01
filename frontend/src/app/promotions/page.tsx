@@ -1,61 +1,110 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { Bell, Clock3, Headphones, Heart, Package, ShieldCheck, ShoppingCart, Truck, Zap } from "lucide-react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { Bell, Headphones, Heart, LoaderCircle, Package, RefreshCw, Search, ShieldCheck, ShoppingCart, SlidersHorizontal, Truck, Zap } from "lucide-react";
 import { useCart } from "@/context/CartContext";
+import { useFavorites } from "@/context/FavoritesContext";
 import { useMarket } from "@/context/MarketContext";
+import { fetchWithAuth } from "@/lib/api";
 
-const promotionProducts = [
-  { id: 1, name: "MacBook Air M3 13\"", category: "Computadores", specs: "8GB | 256GB | Space Gray", priceEUR: 1120, oldPriceEUR: 1400, image: "/Apple.jpg", rating: 4.8, reviews: 32 },
-  { id: 2, name: "iPhone 15 128GB", category: "Smartphones", specs: "128GB | Titânio", priceEUR: 1020, oldPriceEUR: 1200, image: "/iPhone.jpg", rating: 4.7, reviews: 18 },
-  { id: 3, name: "Dell Monitor 27\"", category: "Computadores", specs: "QHD | 75Hz", priceEUR: 280, oldPriceEUR: 400, image: "/Dell.jpg", rating: 4.6, reviews: 27 },
-  { id: 4, name: "Sony WH-1000XM5", category: "Acessórios", specs: "Noise Cancelling", priceEUR: 360, oldPriceEUR: 480, image: "/Sony.jpg", rating: 4.8, reviews: 20 },
-  { id: 5, name: "HP LaserJet Pro 4003dw", category: "Impressão", specs: "Impressora Wi-Fi | Duplex", priceEUR: 210, oldPriceEUR: 235, image: "/HP.jpg", rating: 4.5, reviews: 9 },
-  { id: 6, name: "SSD Samsung 1TB", category: "Componentes", specs: "NVMe | 7.000 MB/s", priceEUR: 220, oldPriceEUR: 340, image: "/Samsung.jpg", rating: 4.7, reviews: 16 },
-  { id: 7, name: "Teclado Mecânico RGB", category: "Acessórios", specs: "Switch Blue | USB", priceEUR: 85, oldPriceEUR: 110, image: "/ASUS.jpg", rating: 4.6, reviews: 14 },
-  { id: 8, name: "Cadeira Gaming Pro", category: "Gaming", specs: "Ergonómica | Ajustável", priceEUR: 320, oldPriceEUR: 390, image: "/Dell.jpg", rating: 4.5, reviews: 11 },
-];
+type Product = {
+  id: number;
+  name: string;
+  slug: string;
+  imageUrl?: string | null;
+  stock: number;
+  basePrice: string | number;
+  category: { name: string; slug: string };
+  prices: { market: "AO" | "PT"; amount: string | number }[];
+};
 
-const filters = ["Todas as promoções", "Computadores", "Smartphones", "Acessórios", "Componentes", "Outros"];
+type Category = { name: string; slug: string };
+type Sort = "relevance" | "price-low" | "price-high" | "name";
+
+function priceFor(product: Product, market: "AO" | "PT") {
+  return Number(product.prices.find((price) => price.market === market)?.amount ?? product.basePrice);
+}
 
 export default function PromotionsPage() {
   const { addToCart } = useCart();
-  const { formatPrice, eurToKz } = useMarket();
-  const [filter, setFilter] = useState("Todas as promoções");
-  const [favorites, setFavorites] = useState<number[]>([]);
+  const { market, formatPrice, eurToKz } = useMarket();
+  const { isFavorite, toggleFavorite } = useFavorites();
+  const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [filter, setFilter] = useState("ALL");
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<Sort>("relevance");
+  const [stockOnly, setStockOnly] = useState(false);
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [newsletterLoading, setNewsletterLoading] = useState(false);
 
-  const products = useMemo(() => filter === "Todas as promoções" || filter === "Outros"
-    ? promotionProducts
-    : promotionProducts.filter((product) => product.category === filter), [filter]);
+  async function refreshCatalog(initial = false) {
+    if (initial) setLoading(true); else setRefreshing(true);
+    try {
+      const [productResponse, categoryResponse] = await Promise.all([
+        fetchWithAuth("/api/products?page=1&pageSize=100"),
+        fetchWithAuth("/api/categories"),
+      ]);
+      setProducts(productResponse.data as Product[]);
+      setCategories(categoryResponse.data as Category[]);
+      setLastUpdated(new Date());
+      setMessage("");
+    } catch { setMessage("Não foi possível sincronizar o catálogo. Tente novamente."); }
+    finally { setLoading(false); setRefreshing(false); }
+  }
 
-  function addProduct(product: typeof promotionProducts[number]) {
-    addToCart({ id: `promotion-${product.id}`, productId: product.id, name: product.name, slug: product.name.toLowerCase().replaceAll(" ", "-"), priceEUR: product.priceEUR, priceKZ: eurToKz(product.priceEUR), quantity: 1, imageUrl: product.image });
+  useEffect(() => {
+    const initialLoad = window.setTimeout(() => { void refreshCatalog(true); }, 0);
+    const interval = window.setInterval(() => { void refreshCatalog(); }, 60_000);
+    return () => { window.clearTimeout(initialLoad); window.clearInterval(interval); };
+  }, []);
+
+  const visibleProducts = useMemo(() => products.filter((product) => {
+    const matchesCategory = filter === "ALL" || product.category.slug === filter;
+    const matchesSearch = `${product.name} ${product.category.name}`.toLowerCase().includes(search.toLowerCase());
+    return matchesCategory && matchesSearch && (!stockOnly || product.stock > 0);
+  }).sort((left, right) => {
+    if (sort === "name") return left.name.localeCompare(right.name, "pt");
+    if (sort === "price-low") return priceFor(left, market) - priceFor(right, market);
+    if (sort === "price-high") return priceFor(right, market) - priceFor(left, market);
+    return 0;
+  }), [filter, market, products, search, sort, stockOnly]);
+  const filters = [{ name: "Todas as promoções", slug: "ALL" }, ...categories];
+
+  function addProduct(product: Product) {
+    const priceEUR = priceFor(product, "PT");
+    const priceKZ = priceFor(product, "AO") || eurToKz(priceEUR);
+    addToCart({ id: `promotion-${product.id}`, productId: product.id, name: product.name, slug: product.slug, priceEUR, priceKZ, quantity: 1, imageUrl: product.imageUrl || undefined });
     setMessage(`${product.name} foi adicionado ao carrinho.`);
   }
 
-  function subscribe(event: React.FormEvent<HTMLFormElement>) {
+  async function subscribe(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setMessage(email ? "Subscrição realizada com sucesso." : "Introduza o seu email.");
-    if (email) setEmail("");
+    setNewsletterLoading(true);
+    setMessage("");
+    try {
+      await fetchWithAuth("/api/newsletter", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) });
+      setEmail("");
+      setMessage("Subscrição realizada com sucesso.");
+    } catch { setMessage("Não foi possível concluir a subscrição. Tente novamente."); }
+    finally { setNewsletterLoading(false); }
   }
 
-  return (
-    <div className="container mx-auto px-4 py-8">
-      <nav className="mb-6 flex items-center gap-1 text-xs text-gray-400"><Link href="/" className="hover:text-[#1d6ac4]">Início</Link><span>›</span><span className="font-medium text-gray-700">Promoções</span></nav>
-      <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-end"><div><h1 className="text-2xl font-black text-gray-900"><span className="text-[#e63946]">%</span> Ofertas e Promoções</h1><p className="mt-1 text-sm text-gray-500">Grandes oportunidades, a tecnologia que você quer, com os melhores preços.</p></div><div className="flex items-center gap-3 rounded-lg bg-red-50 px-4 py-3 text-xs font-bold text-red-700"><Clock3 size={18} /><span>Esta campanha termina em:<strong className="ml-2">02 dias 04h 36m</strong></span></div></div>
-      <section className="relative mb-5 overflow-hidden rounded-xl bg-[#07111f] p-6 text-white sm:p-8"><img src="/banner_principal2.png" alt="Grandes descontos em tecnologia" className="absolute inset-0 h-full w-full object-cover opacity-70" /><div className="relative max-w-md"><p className="text-2xl font-black leading-none sm:text-3xl">GRANDES DESCONTOS</p><p className="mt-1 text-xl font-black text-[#facc15]">EM TECNOLOGIA</p><p className="mt-2 text-xs text-gray-200">Mais desempenho. Mais possibilidades. Mais por si.</p><Link href="#offers" className="mt-5 inline-flex rounded-lg bg-[#e63946] px-4 py-2 text-xs font-bold text-white hover:bg-[#c1121f]">Ver todas as ofertas</Link></div><div className="absolute right-8 top-1/2 hidden -translate-y-1/2 rounded-full bg-yellow-400 px-5 py-4 text-center font-black text-gray-900 sm:block"><span className="block text-3xl">40%</span><span className="text-[10px]">DESCONTO</span></div></section>
-
-      {message && <div role="status" className="mb-4 rounded-lg bg-blue-50 px-4 py-3 text-sm text-blue-800">{message}</div>}
-      <div className="grid gap-8 lg:grid-cols-[1fr_230px]">
-        <main id="offers"><div className="mb-5 flex gap-2 overflow-x-auto border-b border-gray-200 pb-2">{filters.map((item) => <button type="button" key={item} onClick={() => setFilter(item)} className={`whitespace-nowrap rounded-full px-3 py-2 text-xs font-bold ${filter === item ? "bg-[#1d6ac4] text-white" : "text-gray-600 hover:bg-gray-100"}`}>{item}</button>)}</div><div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">{products.map((product) => { const discount = Math.round((1 - product.priceEUR / product.oldPriceEUR) * 100); return <article key={product.id} className="card card-hover relative flex flex-col p-3"><span className="absolute left-3 top-3 z-10 rounded bg-[#e63946] px-2 py-1 text-[10px] font-black text-white">-{discount}%</span><button type="button" onClick={() => setFavorites((current) => current.includes(product.id) ? current.filter((id) => id !== product.id) : [...current, product.id])} className={`absolute right-3 top-3 z-10 ${favorites.includes(product.id) ? "text-red-500" : "text-gray-400 hover:text-red-500"}`} aria-label={`Favoritar ${product.name}`}><Heart size={16} fill={favorites.includes(product.id) ? "currentColor" : "none"} /></button><Link href={`/products/${product.id}`} className="flex h-32 items-center justify-center rounded-lg bg-gray-50"><img src={product.image} alt={product.name} className="h-full w-full object-contain" /></Link><h2 className="mt-3 line-clamp-2 text-xs font-bold text-gray-900">{product.name}</h2><p className="mt-1 line-clamp-1 text-[10px] text-gray-500">{product.specs}</p><p className="mt-2 text-xs text-amber-500">★★★★★ <span className="text-gray-400">({product.reviews})</span></p><div className="mt-auto pt-2"><span className="text-[10px] text-gray-400 line-through">{formatPrice(product.oldPriceEUR)}</span><p className="text-base font-black text-gray-900">{formatPrice(product.priceEUR)}</p><p className="mb-2 text-[10px] font-semibold text-green-600">● Em stock</p><button type="button" onClick={() => addProduct(product)} className="inline-flex w-full items-center justify-center gap-1 rounded-lg border border-[#1d6ac4] px-2 py-2 text-[10px] font-bold text-[#1d6ac4] hover:bg-blue-50"><ShoppingCart size={13} /> Adicionar ao carrinho</button></div></article>; })}</div></main>
-        <aside className="space-y-4"><div className="card space-y-4 p-5"><Benefit icon={Truck} title="Entrega rápida" text="Em Luanda e nas principais províncias." /><Benefit icon={ShieldCheck} title="Pagamentos seguros" text="Multicaixa, MB WAY, cartão e transferência." /><Benefit icon={Package} title="Produtos originais" text="Garantia oficial das melhores marcas." /><Benefit icon={Headphones} title="Apoio especializado" text="Estamos aqui para o ajudar." /></div><div className="rounded-xl bg-indigo-600 p-5 text-white"><Zap size={22} /><h2 className="mt-2 font-bold">Ofertas da Semana</h2><p className="mt-1 text-xs text-indigo-100">Novas promoções seleccionadas todas as semanas.</p><Link href="#offers" className="mt-4 block rounded-lg bg-white px-3 py-2 text-center text-xs font-bold text-indigo-600">Ver promoções</Link></div><form onSubmit={subscribe} className="card p-5"><Bell size={20} className="text-[#1d6ac4]" /><h2 className="mt-2 font-bold text-gray-900">Receba ofertas exclusivas</h2><p className="mt-1 text-xs text-gray-500">Seja o primeiro a conhecer as nossas promoções.</p><input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="O seu email" className="settings-input mt-4" /><button type="submit" className="btn-primary mt-3 w-full">Subscrever</button></form></aside>
-      </div>
+  return <div className="container mx-auto px-4 py-8">
+    <nav className="mb-6 flex items-center gap-1 text-xs text-gray-400"><Link href="/" className="hover:text-[#1d6ac4]">Início</Link><span>›</span><span className="font-medium text-gray-700">Catálogo em destaque</span></nav>
+    <div className="mb-6 grid gap-5 border-b border-gray-200 pb-6 md:grid-cols-[minmax(0,1fr)_auto] md:items-end"><div><div className="mb-3 flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center bg-[#1d6ac4] text-sm font-black text-white">•</span><p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#1d6ac4]">Seleção RUBRICA DILIGENTE (SU), LDA</p></div><h1 className="max-w-xl text-3xl font-black leading-[1.05] tracking-tight text-gray-950 sm:text-5xl">Catálogo em<br className="hidden sm:block" /> destaque.</h1><p className="mt-3 max-w-xl text-sm leading-6 text-gray-500">Explore produtos disponíveis, preços atuais e stock real do catálogo.</p></div><div className="flex items-center justify-between gap-3 border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-800 md:min-w-64"><div className="flex items-center gap-2"><span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" /><span><strong className="block font-black">Catálogo sincronizado</strong><small className="text-[10px] text-emerald-700">{lastUpdated ? `Atualizado às ${lastUpdated.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })}` : "A sincronizar..."}</small></span></div><button type="button" onClick={() => void refreshCatalog()} disabled={refreshing} aria-label="Atualizar catálogo" title="Atualizar catálogo" className="flex h-8 w-8 items-center justify-center border border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"><RefreshCw size={14} className={refreshing ? "animate-spin" : ""} /></button></div></div>
+    <section className="relative mb-5 overflow-hidden rounded-xl bg-[#07111f] p-6 text-white sm:p-8"><Image src="/banner_principal2.png" alt="Seleção de tecnologia" fill sizes="(max-width: 768px) 100vw, 70vw" className="object-cover opacity-60" /><div className="relative max-w-md"><p className="text-2xl font-black leading-none sm:text-3xl">SELEÇÃO RUBRICA</p><p className="mt-1 text-xl font-black text-[#facc15]">PREÇOS ATUAIS</p><p className="mt-2 text-xs text-gray-200">Produtos originais, stock real e compra segura em Angola e Portugal.</p><Link href="#offers" className="mt-5 inline-flex rounded-lg bg-[#1d6ac4] px-4 py-2 text-xs font-bold text-white hover:bg-[#1555d8]">Explorar catálogo</Link></div><div className="absolute right-8 top-1/2 hidden -translate-y-1/2 rounded-full bg-cyan-300 px-5 py-4 text-center font-black text-[#07111f] sm:block"><span className="block text-3xl">AO</span><span className="text-[10px]">E PT</span></div></section>
+    {message && <div role="status" className="mb-4 rounded-lg bg-blue-50 px-4 py-3 text-sm text-blue-800">{message}</div>}
+    <div className="grid gap-8 lg:grid-cols-[1fr_230px]"><main id="offers"><div className="mb-4 grid gap-2 sm:grid-cols-[minmax(0,1fr)_150px_auto]"><label className="relative block"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} aria-label="Pesquisar produtos" placeholder="Pesquisar produtos..." className="w-full border border-gray-200 bg-white py-2.5 pl-9 pr-3 text-xs outline-none focus:border-[#1d6ac4]" /></label><select value={sort} onChange={(event) => setSort(event.target.value as Sort)} aria-label="Ordenar produtos" className="border border-gray-200 bg-white px-3 py-2.5 text-xs"><option value="relevance">Relevância</option><option value="price-low">Menor preço</option><option value="price-high">Maior preço</option><option value="name">Nome A-Z</option></select><label className="flex items-center justify-center gap-2 border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-600"><input type="checkbox" checked={stockOnly} onChange={(event) => setStockOnly(event.target.checked)} />Disponíveis</label></div><div className="mb-5 flex items-center gap-2 overflow-x-auto border-b border-gray-200 pb-2"><SlidersHorizontal size={15} className="shrink-0 text-gray-400" />{filters.map((category) => <button type="button" key={category.slug} onClick={() => setFilter(category.slug)} className={`whitespace-nowrap rounded-full px-3 py-2 text-xs font-bold ${filter === category.slug ? "bg-[#1d6ac4] text-white" : "text-gray-600 hover:bg-gray-100"}`}>{category.name}</button>)}</div>{loading ? <div className="flex min-h-64 items-center justify-center gap-2 text-sm text-gray-500"><LoaderCircle size={18} className="animate-spin" />A carregar catálogo...</div> : visibleProducts.length === 0 ? <div className="rounded-lg border border-dashed border-gray-300 p-10 text-center text-sm text-gray-500"><p className="font-semibold text-gray-700">Nenhum produto encontrado</p><button type="button" onClick={() => { setSearch(""); setFilter("ALL"); setStockOnly(false); }} className="mt-3 text-xs font-bold text-[#1d6ac4]">Limpar filtros</button></div> : <><p className="mb-3 text-xs text-gray-500">{visibleProducts.length} produto(s) no catálogo</p><div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">{visibleProducts.map((product) => { const priceEUR = priceFor(product, "PT"); const priceKZ = priceFor(product, "AO"); const favorite = isFavorite(product.id); return <article key={product.id} className="card card-hover relative flex flex-col p-3"><span className="absolute left-3 top-3 z-10 bg-[#1d6ac4] px-2 py-1 text-[10px] font-black text-white">CATÁLOGO</span><button type="button" onClick={() => toggleFavorite({ id: product.id, name: product.name, slug: product.slug, category: product.category.name, specs: product.category.name, priceEUR, imageUrl: product.imageUrl || undefined })} className={`absolute right-3 top-3 z-10 ${favorite ? "text-red-500" : "text-gray-400 hover:text-red-500"}`} aria-label={`${favorite ? "Remover" : "Adicionar"} ${product.name} dos favoritos`}><Heart size={16} fill={favorite ? "currentColor" : "none"} /></button><Link href={`/products/${product.slug}`} className="flex h-32 items-center justify-center bg-gray-50"><Image src={product.imageUrl || "/file.svg"} alt={product.name} width={180} height={140} className="h-full w-full object-contain" /></Link><h2 className="mt-3 line-clamp-2 text-xs font-bold text-gray-900">{product.name}</h2><p className="mt-1 line-clamp-1 text-[10px] text-gray-500">{product.category.name}</p><div className="mt-auto pt-3"><p className="text-base font-black text-gray-900">{formatPrice(market === "AO" ? priceKZ : priceEUR)}</p><p className={`mb-2 text-[10px] font-semibold ${product.stock > 0 ? "text-green-600" : "text-red-600"}`}>{product.stock > 0 ? `● ${product.stock} em stock` : "● Indisponível"}</p><button type="button" disabled={product.stock === 0} onClick={() => addProduct(product)} className="flex w-full items-center justify-center gap-2 bg-[#1d6ac4] px-3 py-2 text-[10px] font-bold text-white hover:bg-[#1555d8] disabled:cursor-not-allowed disabled:bg-gray-300"><ShoppingCart size={14} />Adicionar</button></div></article>; })}</div></>}</main>
+      <aside className="space-y-4"><div className="card space-y-4 p-5"><Benefit icon={Truck} title="Entrega rápida" text="Em Luanda e nas principais províncias." /><Benefit icon={ShieldCheck} title="Pagamentos seguros" text="Multicaixa, MB WAY, cartão e transferência." /><Benefit icon={Package} title="Produtos originais" text="Garantia oficial das melhores marcas." /><Benefit icon={Headphones} title="Apoio especializado" text="Estamos aqui para o ajudar." /></div><section className="relative isolate overflow-hidden rounded-2xl bg-[#172554] p-5 text-white shadow-sm"><div className="absolute -right-8 -top-8 h-28 w-28 rounded-full border-[18px] border-cyan-300/20" /><div className="relative"><div className="flex items-center justify-between"><span className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.18em] text-cyan-200"><Zap size={13} fill="currentColor" />Seleção em destaque</span><span className="rounded-full border border-cyan-200/30 px-2 py-1 text-[9px] font-bold text-cyan-100">AO · PT</span></div><h2 className="mt-6 max-w-[12rem] text-2xl font-black leading-[1.05]">Tecnologia para o seu próximo passo.</h2><p className="mt-3 max-w-[15rem] text-xs leading-5 text-blue-100">Produtos atuais, stock confirmado e preços sincronizados com o catálogo.</p><Link href="#offers" className="mt-5 inline-flex items-center gap-2 bg-white px-4 py-2.5 text-xs font-black text-[#172554] transition hover:bg-cyan-100">Explorar seleção <span aria-hidden="true">→</span></Link><div className="mt-5 flex items-center gap-2 border-t border-white/15 pt-3 text-[10px] text-blue-100"><span className="h-2 w-2 animate-pulse rounded-full bg-emerald-300" />Catálogo atualizado em tempo real</div></div></section><form onSubmit={subscribe} className="card p-5"><Bell size={20} className="text-[#1d6ac4]" /><h2 className="mt-2 font-bold text-gray-900">Receba novidades</h2><p className="mt-1 text-xs text-gray-500">Seja o primeiro a conhecer novos produtos e campanhas.</p><input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="O seu email" className="settings-input mt-4" /><button type="submit" disabled={newsletterLoading} className="btn-primary mt-3 flex w-full items-center justify-center gap-2 disabled:opacity-50">{newsletterLoading && <LoaderCircle size={14} className="animate-spin" />}Subscrever</button></form></aside>
     </div>
-  );
+  </div>;
 }
 
 function Benefit({ icon: Icon, title, text }: { icon: typeof Truck; title: string; text: string }) { return <div className="flex gap-3"><Icon className="shrink-0 text-[#1d6ac4]" size={22} /><div><p className="text-xs font-bold text-gray-900">{title}</p><p className="text-[10px] leading-4 text-gray-500">{text}</p></div></div>; }
-

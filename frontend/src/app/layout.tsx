@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import Header from "@/components/Header";
-import Footer from "@/components/Footer";
+import Header from "@/components/layout/Header";
+import Footer from "@/components/layout/Footer";
 
 import { CartProvider } from "@/context/CartContext";
 import { MarketProvider } from "@/context/MarketContext";
@@ -11,7 +11,7 @@ import { FavoritesProvider } from "@/context/FavoritesContext";
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
-  title: "TechGlobal – Tecnologia Sem Fronteiras",
+  title: "RUBRICA DILIGENTE (SU), LDA – Tecnologia Sem Fronteiras",
   description: "Computadores, iPhones e soluções tecnológicas para Angola e Portugal. Compre online com entrega rápida e segura.",
 };
 

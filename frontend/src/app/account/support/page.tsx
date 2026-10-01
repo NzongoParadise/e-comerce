@@ -1,5 +1,8 @@
 "use client";
 
+import Link from "next/link";
+import { useEffect, useState } from "react";
+
 const helpTopics = [
   { icon: "📅", title: "Encomendas", desc: "Acompanhar, alterar ou cancelar" },
   { icon: "💳", title: "Pagamentos", desc: "Formas de pagamento, facturação" },
@@ -12,6 +15,15 @@ const helpTopics = [
 ];
 
 export default function SupportPage() {
+  const [guest, setGuest] = useState(false);
+
+  useEffect(() => {
+    const token = localStorage.getItem("jwt_token");
+    window.setTimeout(() => setGuest(!token), 0);
+  }, []);
+
+  if (guest) return <main className="min-h-[calc(100vh-170px)] bg-[#f7f9fc] px-4 py-12"><section className="mx-auto max-w-xl border border-blue-100 bg-white p-8 text-center shadow-sm"><div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-2xl">🎧</div><p className="mt-5 text-[10px] font-black uppercase tracking-[0.18em] text-[#1d6ac4]">RUBRICA DILIGENTE (SU), LDA</p><h1 className="mt-2 text-2xl font-black text-gray-900">Como podemos ajudar?</h1><p className="mx-auto mt-3 max-w-md text-sm leading-6 text-gray-600">Para consultar encomendas, abrir pedidos ou gerir assuntos da sua conta, entre ou crie uma conta. Também pode falar diretamente connosco.</p><div className="mt-6 flex flex-wrap justify-center gap-2"><Link href="/login" className="btn-primary">Entrar na conta</Link><Link href="/register" className="btn-secondary">Criar conta</Link></div><div className="mt-7 border-t border-gray-100 pt-5 text-sm text-gray-700"><a href="tel:+33758920080" className="font-bold text-[#1d6ac4]">+33 7 58 92 00 80</a><p className="mt-2 text-xs leading-5 text-gray-500">BLOCO 4 1 TRASEIRO<br />RUA FRANCISCO ARAUJO DANTAS N 109<br />4425-440 Mala, Portugal</p><a href="mailto:suporte@techglobal.co.ao" className="mt-2 inline-block font-bold text-[#1d6ac4]">suporte@techglobal.co.ao</a></div></section></main>;
+
   return (
     <div>
       {/* Hero Banner */}
@@ -133,7 +145,7 @@ export default function SupportPage() {
               <div className="h-10 w-10 rounded-full bg-blue-50 text-[#1d6ac4] flex items-center justify-center text-xl flex-shrink-0">📞</div>
               <div>
                 <h3 className="font-bold text-gray-900 text-sm">Ligar agora</h3>
-                <div className="text-sm font-bold text-gray-700 my-1">+244 923 000 000</div>
+                <div className="text-sm font-bold text-gray-700 my-1">+33 7 58 92 00 80</div>
               </div>
             </div>
           </div>
@@ -153,7 +165,7 @@ export default function SupportPage() {
               <div className="h-10 w-10 rounded-full bg-green-50 text-green-600 flex items-center justify-center text-xl flex-shrink-0">📱</div>
               <div>
                 <h3 className="font-bold text-gray-900 text-sm">WhatsApp</h3>
-                <div className="text-sm font-bold text-gray-700 my-1">+244 923 000 000</div>
+                <div className="text-sm font-bold text-gray-700 my-1">+33 7 58 92 00 80</div>
               </div>
             </div>
           </div>

@@ -65,7 +65,7 @@ export default function CartPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto animate-fade-in-up px-4 py-8">
       <div className="mb-6 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Carrinho de compras</h1>
@@ -119,7 +119,7 @@ export default function CartPage() {
 
             <div className="divide-y divide-gray-100">
               {items.map((item) => (
-                <div key={item.id} className="grid grid-cols-12 items-center gap-4 p-4">
+                <div key={item.id} className="grid grid-cols-12 items-center gap-4 p-4 transition-all duration-200 hover:bg-slate-50/80">
                   <div className="col-span-12 flex items-center gap-3 sm:col-span-6">
                     <input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => toggleSelected(item.id)} className="accent-primary" aria-label={`Selecionar ${item.name}`} />
                     <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg border border-gray-100 bg-gray-50">
@@ -186,7 +186,7 @@ export default function CartPage() {
 
         {/* Right: Summary */}
         <div className="lg:col-span-4">
-          <div className="card p-6 bg-white sticky top-32">
+          <div className="card sticky top-32 bg-white p-6 shadow-[0_22px_50px_rgba(15,23,42,0.08)] transition-all duration-300 hover:-translate-y-0.5">
             <h2 className="text-lg font-bold text-gray-900 mb-6">Resumo da encomenda</h2>
             
             <div className="space-y-3 text-sm mb-6 border-b border-gray-100 pb-6">

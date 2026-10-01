@@ -20,13 +20,53 @@ html {
 }
 
 body {
-  background-color: #f5f6fa;
+  background:
+    radial-gradient(circle at top, rgba(29, 106, 196, 0.08), transparent 16%),
+    linear-gradient(180deg, #f6f8fb 0%, #eef3f9 100%);
   color: #111827;
   font-family: var(--font-inter), 'Segoe UI', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-/* TechGlobal brand blue */
+::selection {
+  background: rgba(29, 106, 196, 0.18);
+}
+
+a, button, input, textarea {
+  transition: all 180ms ease;
+}
+
+.container-shell {
+  @apply mx-auto w-full max-w-[1280px] px-4;
+}
+
+.soft-card {
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.06);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.hero-glow {
+  box-shadow: 0 30px 80px rgba(15, 23, 42, 0.18);
+}
+
+.section-label {
+  @apply text-[10px] font-black uppercase tracking-[0.18em] text-[#1d6ac4];
+}
+
+.section-kicker {
+  @apply text-[10px] font-black uppercase tracking-[0.16em] text-[#1d6ac4];
+}
+
+.surface-panel {
+  @apply rounded-xl border border-gray-200 bg-white shadow-sm;
+}
+
+.pill {
+  @apply inline-flex items-center rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[10px] font-semibold text-gray-700;
+}
+
+/* RUBRICA DILIGENTE (SU), LDA brand blue */
 .bg-brand { background-color: #1d6ac4; }
 .text-brand { color: #1d6ac4; }
 .border-brand { border-color: #1d6ac4; }
@@ -76,4 +116,25 @@ body {
   from { opacity: 0; transform: translateY(16px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+@keyframes floatIn {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 .animate-fade-in-up { animation: fadeInUp 0.4s ease both; }
+.account-shell > * { animation: floatIn 0.6s ease both; }
+.account-shell > *:nth-child(2) { animation-delay: 90ms; }
+.account-shell > *:nth-child(3) { animation-delay: 150ms; }
+.account-shell > *:nth-child(4) { animation-delay: 210ms; }
+.account-shell > *:nth-child(5) { animation-delay: 270ms; }
+.account-shell > *:nth-child(6) { animation-delay: 330ms; }
+.account-shell .card, .account-shell .rounded-\[28px\], .account-shell section {
+  animation: floatIn 0.6s ease both;
+} 

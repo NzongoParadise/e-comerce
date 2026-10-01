@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { fetchWithAuth } from "@/lib/api";
 import type { LucideIcon } from "lucide-react";
@@ -32,13 +32,24 @@ const navItems: NavItem[] = [
 
 export default function AccountLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [profile, setProfile] = useState<{ name?: string; email?: string; accountName?: string; accountType?: string; isAdmin?: boolean } | null>(null);
+  const [profileResolved, setProfileResolved] = useState(false);
 
   useEffect(() => {
     fetchWithAuth("/api/auth/me").then((response) => {
       setProfile(response.data);
-    }).catch(() => setProfile(null));
+    }).catch(() => setProfile(null)).finally(() => setProfileResolved(true));
   }, []);
+
+  useEffect(() => {
+    if (profileResolved && !profile && pathname !== "/account/support") router.replace("/login");
+  }, [pathname, profile, profileResolved, router]);
+
+  if (pathname === "/account/support" && profileResolved && !profile) return <>{children}</>;
+  if (profileResolved && !profile) {
+    return <main className="flex min-h-[50vh] items-center justify-center text-sm text-gray-500">A redirecionar para o login...</main>;
+  }
 
   const initials = (profile?.name || profile?.email || "TG")
     .split(/\s+/)

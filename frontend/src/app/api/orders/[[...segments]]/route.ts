@@ -327,7 +327,7 @@ export async function POST(request: Request) {
             currency,
             expiresAt: stripeExpiresAt,
           } },
-          trackingEvents: { create: { status: 'PROCESSING', location: parsed.data.address || 'Armazém TechGlobal', description: 'Encomenda recebida e em processamento.' } },
+          trackingEvents: { create: { status: 'PROCESSING', location: parsed.data.address || 'Armazém RUBRICA DILIGENTE (SU), LDA', description: 'Encomenda recebida e em processamento.' } },
         },
       });
     });

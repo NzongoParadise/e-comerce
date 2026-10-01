@@ -100,7 +100,7 @@ export default function ProductDetailsPage() {
   };
 
   return (
-    <div className="container mx-auto px-4 py-5 md:py-7">
+    <div className="container mx-auto animate-fade-in-up px-4 py-5 md:py-7">
       {/* Breadcrumb */}
       <nav aria-label="Breadcrumb" className="mb-5 flex items-center gap-1.5 overflow-hidden text-xs text-gray-400">
         <Link href="/" className="hover:text-[#1d6ac4]">Início</Link>
@@ -119,16 +119,16 @@ export default function ProductDetailsPage() {
         {/* Left: Gallery */}
         <div className="order-2 flex flex-row gap-2 overflow-x-auto md:order-1 md:col-span-1 md:flex-col">
            {[1,2,3,4].map((i) => (
-             <button type="button" key={i} aria-label={`Selecionar vista ${i} de ${product.name}`} className={`h-16 w-16 shrink-0 overflow-hidden rounded-lg border bg-white p-1.5 transition-colors ${i===1 ? 'border-[#1d6ac4] ring-2 ring-[#1d6ac4]/10' : 'border-gray-200 hover:border-[#1d6ac4]'}`}>
+             <button type="button" key={i} aria-label={`Selecionar vista ${i} de ${product.name}`} className={`h-16 w-16 shrink-0 overflow-hidden rounded-xl border bg-white p-1.5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm ${i===1 ? 'border-[#1d6ac4] ring-2 ring-[#1d6ac4]/10' : 'border-gray-200 hover:border-[#1d6ac4]'}`}>
                {product.imageUrl ? <img src={product.imageUrl} alt={`${product.name} vista ${i}`} className="h-full w-full object-contain" /> : <Package size={24} className="text-gray-300" />}
              </button>
            ))}
         </div>
 
         {/* Center: Main Image */}
-          <div className="relative order-1 flex min-h-[380px] items-center justify-center overflow-hidden rounded-xl border border-gray-200 bg-white p-8 md:order-2 md:col-span-5">
+          <div className="relative order-1 flex min-h-[380px] items-center justify-center overflow-hidden rounded-[28px] border border-gray-200 bg-[radial-gradient(circle_at_top,_rgba(29,106,196,0.08),_rgba(255,255,255,0.9)_45%)] p-8 shadow-[0_20px_50px_rgba(15,23,42,0.06)] transition-transform duration-300 hover:-translate-y-0.5 md:order-2 md:col-span-5">
             <span className="absolute left-5 top-5 rounded-md bg-[#1d6ac4] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white">Novo</span>
-           {product.imageUrl ? <img src={product.imageUrl} alt={product.name} className="max-h-[330px] w-full object-contain" /> : <Package size={160} className="text-gray-200" />}
+           {product.imageUrl ? <img src={product.imageUrl} alt={product.name} className="max-h-[330px] w-full object-contain transition-transform duration-500 hover:scale-[1.02]" /> : <Package size={160} className="text-gray-200" />}
             <button type="button" className="absolute bottom-4 right-4 rounded-lg border border-gray-200 bg-white p-2 text-gray-500 shadow-sm transition hover:border-[#1d6ac4] hover:text-[#1d6ac4]" aria-label="Ver imagem em ecrã inteiro"><Maximize2 size={16} /></button>
         </div>
 
@@ -191,10 +191,10 @@ export default function ProductDetailsPage() {
 
           {/* Buy Panel */}
           <div>
-            <div className="card sticky top-28 border-gray-200 p-5 shadow-md sm:p-6">
-              <div className="mb-5 flex rounded-lg border border-gray-200 bg-gray-50 p-1">
-                 <button type="button" onClick={() => setPurchaseMode("retail")} className={`flex-1 rounded-md py-2 text-xs font-bold ${purchaseMode === "retail" ? "bg-white text-[#1d6ac4] shadow-sm" : "text-gray-500"}`}>Compra a retalho</button>
-                 <button type="button" onClick={() => setPurchaseMode("wholesale")} className={`flex-1 rounded-md py-2 text-xs font-bold ${purchaseMode === "wholesale" ? "bg-white text-[#1d6ac4] shadow-sm" : "text-gray-500"}`}>Compra grossista</button>
+            <div className="card sticky top-28 border-gray-200 p-5 shadow-[0_24px_60px_rgba(15,23,42,0.08)] transition-all duration-300 hover:-translate-y-0.5 sm:p-6">
+              <div className="mb-5 flex rounded-xl border border-gray-200 bg-gray-50 p-1">
+                 <button type="button" onClick={() => setPurchaseMode("retail")} className={`flex-1 rounded-lg py-2 text-xs font-bold transition ${purchaseMode === "retail" ? "bg-white text-[#1d6ac4] shadow-sm" : "text-gray-500"}`}>Compra a retalho</button>
+                 <button type="button" onClick={() => setPurchaseMode("wholesale")} className={`flex-1 rounded-lg py-2 text-xs font-bold transition ${purchaseMode === "wholesale" ? "bg-white text-[#1d6ac4] shadow-sm" : "text-gray-500"}`}>Compra grossista</button>
                </div>
 
                <div className="mb-1 text-3xl font-black tracking-tight text-gray-900">
@@ -247,7 +247,7 @@ export default function ProductDetailsPage() {
 
       <section aria-label="Vantagens da compra" className="mb-8 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-gray-200 bg-gray-200 sm:grid-cols-4">
         {[
-          [ShieldCheck, "Produtos originais", "Com garantia TechGlobal"],
+          [ShieldCheck, "Produtos originais", "Com garantia RUBRICA DILIGENTE (SU), LDA"],
           [CreditCard, "Pagamentos seguros", "Multicaixa, MB Way, Visa"],
           [Truck, "Entrega em Angola e Portugal", "Rápida e segura"],
           [ShieldCheck, "Suporte especializado", "Antes e depois da compra"],

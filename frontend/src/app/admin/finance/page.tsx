@@ -285,7 +285,7 @@ export default function FinancePage() {
       const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" }));
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = "movimentos-financeiros-techglobal.csv";
+      anchor.download = "movimentos-financeiros-rubrica-diligente.csv";
       anchor.click();
       URL.revokeObjectURL(url);
     } catch (exportError) {
