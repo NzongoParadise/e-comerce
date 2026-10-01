@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { FileDown, Gift, LoaderCircle, Plus, Search, X } from "lucide-react";
+import { FileDown, LoaderCircle, Plus, Search, X } from "lucide-react";
 import { fetchWithAuth } from "@/lib/api";
 
 type Coupon = {

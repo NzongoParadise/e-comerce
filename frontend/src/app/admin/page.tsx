@@ -1,37 +1,158 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
-  BarChart3, Bell, Box, Building2, ChevronDown, CircleHelp, FileText,
-  LayoutDashboard, Package, Settings, ShoppingBag, Truck, UserRound,
-  Users, Wallet, ArrowUpRight, Search,
+  AlertTriangle,
+  ArrowDownRight,
+  ArrowUpRight,
+  BarChart3,
+  Bell,
+  Box,
+  Building2,
+  ChevronDown,
+  LayoutDashboard,
+  LoaderCircle,
+  Package,
+  Search,
+  ShoppingBag,
+  Truck,
+  UserRound,
+  Users,
+  Wallet,
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { fetchWithAuth } from "@/lib/api";
 
-const sales = [38, 45, 41, 57, 53, 61, 58, 72, 67, 75, 82, 79, 88, 94, 91, 104, 98, 112, 108, 124];
-const bestSellers = [
-  ["iPhone 15 Pro", "124 unidades", "285.000.000 Kz", "/Iphone_15.png"],
-  ["Dell Latitude 5440", "98 unidades", "171.500.000 Kz", "/pc_01.png"],
-  ["HP ProBook 450 G10", "76 unidades", "127.680.000 Kz", "/HP.jpg"],
-  ["MacBook Air M2", "54 unidades", "99.900.000 Kz", "/conjunto de Apple.png"],
-  ["Lenovo ThinkPad E14", "48 unidades", "87.360.000 Kz", "/Lenovo.jpg"],
+type Period = "7D" | "MONTH" | "LAST_MONTH";
+type Currency = "AOA" | "EUR";
+type DashboardOrder = {
+  id: number;
+  orderNumber: string;
+  status: string;
+  currency: string;
+  totalEUR: string | number;
+  totalKZ: string | number;
+  createdAt: string;
+  user: { name?: string | null; accountName: string };
+  payment?: { status: string } | null;
+};
+type DashboardData = {
+  period: string;
+  metrics: {
+    revenueAOA: number;
+    revenueEUR: number;
+    revenueChangeAOA: number | null;
+    revenueChangeEUR: number | null;
+    orders: number;
+    ordersChange: number | null;
+    newCustomers: number;
+    customersChange: number | null;
+    totalCustomers: number;
+    activeCustomers: number;
+    products: number;
+    lowStock: number;
+    outOfStock: number;
+    stockUnits: number;
+    expensesAOA: number;
+    expensesEUR: number;
+    otherIncomeAOA: number;
+    otherIncomeEUR: number;
+    balanceAOA: number;
+    balanceEUR: number;
+    pendingPayments: number;
+    paymentReview: number;
+  };
+  recentOrders: DashboardOrder[];
+  bestSellers: { productId: number; name: string; imageUrl?: string | null; units: number }[];
+  trend: { month: string; label: string; revenueAOA: number; revenueEUR: number; orders: number }[];
+};
+
+type MenuItem = { label: string; href: string; Icon: typeof Box };
+const menuItems: MenuItem[] = [
+  { label: "Visão geral", href: "/admin", Icon: LayoutDashboard },
+  { label: "Vendas", href: "/admin/orders", Icon: ShoppingBag },
+  { label: "Produtos", href: "/admin/products", Icon: Package },
+  { label: "Gestão de stock", href: "/admin/stock", Icon: Box },
+  { label: "Clientes", href: "/admin/clients", Icon: Users },
+  { label: "Fornecedores", href: "/admin/suppliers", Icon: Truck },
+  { label: "Financeiro", href: "/admin/finance", Icon: Wallet },
+  { label: "Marketing", href: "/admin/marketing", Icon: BarChart3 },
+  { label: "Utilizadores", href: "/admin/users", Icon: Users },
 ];
-const recentOrders = [["#TG-20260920-001", "Empresa Kizomba, Lda", "Pendente", "1.250.000 Kz"], ["#TG-20260920-002", "Ana Pereira", "Em processamento", "2.480.000 Kz"], ["#TG-20260920-003", "Global Serviços, Lda", "Enviada", "980.000 Kz"], ["#TG-20260919-015", "Carlos Mendes", "Entregue", "1.750.000 Kz"], ["#TG-20260919-014", "Loja Digital, Lda", "Cancelada", "640.000 Kz"]];
-const statusClass: Record<string, string> = { Pendente: "bg-amber-50 text-amber-700", "Em processamento": "bg-blue-50 text-blue-700", Enviada: "bg-violet-50 text-violet-700", Entregue: "bg-emerald-50 text-emerald-700", Cancelada: "bg-red-50 text-red-700" };
+const statusLabels: Record<string, string> = {
+  AWAITING_PAYMENT: "Aguardando pagamento",
+  PROCESSING: "Em processamento",
+  PAYMENT_CONFIRMED: "Paga",
+  SHIPPED: "Enviada",
+  DELIVERED: "Entregue",
+  CANCELLED: "Cancelada",
+  PAYMENT_REVIEW_REQUIRED: "Revisão de pagamento",
+  PAYMENT_REVIEW_IN_PROGRESS: "Revisão em curso",
+};
+const statusStyles: Record<string, string> = {
+  AWAITING_PAYMENT: "bg-amber-50 text-amber-800",
+  PROCESSING: "bg-blue-50 text-blue-800",
+  PAYMENT_CONFIRMED: "bg-emerald-50 text-emerald-800",
+  SHIPPED: "bg-violet-50 text-violet-800",
+  DELIVERED: "bg-green-50 text-green-800",
+  CANCELLED: "bg-red-50 text-red-700",
+  PAYMENT_REVIEW_REQUIRED: "bg-orange-50 text-orange-800",
+  PAYMENT_REVIEW_IN_PROGRESS: "bg-orange-50 text-orange-800",
+};
 
-function Metric({ title, value, detail, icon: Icon, tone }: { title: string; value: string; detail: string; icon: typeof Box; tone: string }) {
-  return <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm"><div className="flex items-start justify-between"><div><p className="text-[11px] font-semibold text-gray-500">{title}</p><p className="mt-1 text-xl font-black tracking-tight text-gray-950 sm:text-2xl">{value}</p></div><span className={`flex h-9 w-9 items-center justify-center rounded-lg ${tone}`}><Icon size={18} /></span></div><p className="mt-2 text-[10px] font-semibold text-emerald-600">↑ {detail}</p><p className="text-[9px] text-gray-400">vs. mês anterior</p></div>;
+function formatMoney(value: number | string, currency: Currency) {
+  const amount = Number(value || 0);
+  return currency === "EUR"
+    ? `€ ${amount.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}`
+    : `Kz ${amount.toLocaleString("pt-AO", { minimumFractionDigits: 2 })}`;
+}
+
+function Change({ value }: { value: number | null }) {
+  if (value === null) return <span className="text-[9px] text-gray-400">Sem comparação</span>;
+  const positive = value >= 0;
+  const Icon = positive ? ArrowUpRight : ArrowDownRight;
+  return <span className={`inline-flex items-center gap-0.5 text-[10px] font-bold ${positive ? "text-emerald-700" : "text-red-700"}`}><Icon size={12} />{Math.abs(value).toFixed(1)}% vs. período anterior</span>;
+}
+
+function Metric({ label, value, icon: Icon, tone, change }: { label: string; value: string; icon: typeof Box; tone: string; change?: number | null }) {
+  return <article className="border border-gray-200 bg-white p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="text-[10px] font-bold uppercase text-gray-500">{label}</p><p className="mt-2 truncate text-xl font-black text-gray-950">{value}</p></div><span className={`flex h-9 w-9 shrink-0 items-center justify-center ${tone}`}><Icon size={18} /></span></div><div className="mt-2">{change === undefined ? <span className="text-[9px] text-gray-500">Dados atuais da loja</span> : <Change value={change} />}</div></article>;
 }
 
 function AdminShell({ children }: { children: React.ReactNode }) {
-  const items: Array<[LucideIcon, string, string]> = [[LayoutDashboard, "Visão geral", "/admin"], [ShoppingBag, "Vendas", "/admin/orders"], [Package, "Encomendas", "/admin/orders"], [Box, "Produtos", "/admin/products"], [Box, "Gestão de stock", "/admin/stock"], [Users, "Clientes", "/admin/clients"], [Truck, "Fornecedores", "/admin/suppliers"], [Wallet, "Financeiro", "/admin/finance"], [BarChart3, "Marketing", "/admin/marketing"], [BarChart3, "Relatórios", "#"], [Users, "Utilizadores", "/admin/users"], [Settings, "Configurações", "#"]];
-  return <div className="min-h-screen bg-[#f7f9fc] text-gray-900"><header className="border-b border-gray-200 bg-white"><div className="flex h-16 items-center gap-4 px-4 lg:px-6"><Link href="/admin" className="flex items-center gap-2 lg:w-60"><span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#1555d8] text-white"><Box size={18} /></span><span className="hidden leading-none sm:block"><strong className="text-base font-black">TechGlobal</strong><small className="mt-1 block text-[8px] font-bold uppercase tracking-widest text-[#1555d8]">Painel Administrativo</small></span></Link><div className="relative hidden max-w-xl flex-1 md:block"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={15} /><input placeholder="Pesquisar produtos, clientes, encomendas..." className="w-full rounded-lg border border-gray-200 bg-gray-50 py-2.5 pl-9 pr-3 text-xs outline-none focus:border-blue-500 focus:bg-white" /></div><div className="ml-auto flex items-center gap-2"><button className="relative rounded-lg p-2 text-gray-500 hover:bg-gray-100" aria-label="Notificações"><Bell size={18} /><span className="absolute right-1 top-1 h-3 w-3 rounded-full bg-red-500 text-[8px] text-white">6</span></button><button className="rounded-lg p-2 text-gray-500 hover:bg-gray-100" aria-label="Ajuda"><CircleHelp size={18} /></button><span className="hidden h-8 w-8 items-center justify-center rounded-full bg-gray-900 text-xs font-bold text-white sm:flex">JS</span><span className="hidden text-[10px] leading-tight sm:block"><strong className="block">João da Silva</strong><small className="text-gray-500">Administrador</small></span><ChevronDown size={14} className="text-gray-500" /></div></div></header><div className="flex"><aside className="hidden min-h-[calc(100vh-64px)] w-60 shrink-0 border-r border-gray-200 bg-[#10233e] text-white lg:block"><div className="border-b border-white/10 px-5 py-5"><div className="flex items-center gap-2"><span className="flex h-8 w-8 items-center justify-center rounded-md bg-blue-600"><Box size={16} /></span><span><strong className="text-sm">TechGlobal</strong><small className="block text-[9px] text-blue-200">Painel Administrativo</small></span></div></div><nav className="space-y-1 p-3 text-xs font-medium">{items.map(([Icon, label, href]) => <Link key={label} href={href} className={`flex items-center gap-3 rounded-lg px-3 py-2.5 transition ${label === "Visão geral" ? "bg-blue-600 text-white shadow-lg shadow-blue-900/30" : "text-blue-50/80 hover:bg-white/10 hover:text-white"}`}><Icon size={15} />{label}{["Fornecedores", "Financeiro", "Configurações"].includes(label) && <ChevronDown className="ml-auto" size={13} />}</Link>)}</nav><div className="mx-4 mt-5 rounded-xl bg-blue-900/70 p-3 text-[10px]"><strong className="block text-sm">TechGlobal Pro</strong><span className="mt-1 block text-blue-100">Mais ferramentas para o seu negócio.</span><button className="mt-3 w-full rounded-md bg-blue-600 py-2 font-bold">Saber mais</button></div></aside><main className="min-w-0 flex-1 px-4 py-5 sm:px-6 lg:px-8">{children}</main></div></div>;
+  return <div className="min-h-screen bg-[#f7f9fc] text-gray-900"><header className="border-b border-gray-200 bg-white"><div className="flex h-16 items-center gap-4 px-4 lg:px-6"><Link href="/admin" className="flex items-center gap-2 lg:w-60"><span className="flex h-9 w-9 items-center justify-center bg-[#1555d8] text-white"><Box size={18} /></span><span className="hidden leading-none sm:block"><strong className="text-base font-black">TechGlobal</strong><small className="mt-1 block text-[8px] font-bold uppercase tracking-widest text-[#1555d8]">Painel Administrativo</small></span></Link><div className="relative hidden max-w-xl flex-1 md:block"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={15} /><input placeholder="Pesquisar produtos, clientes ou encomendas" className="w-full border border-gray-200 bg-gray-50 py-2.5 pl-9 pr-3 text-xs outline-none focus:border-blue-500 focus:bg-white" /></div><div className="ml-auto flex items-center gap-2"><Link href="/admin/orders/payment-review" aria-label="Revisão de pagamentos" title="Revisão de pagamentos" className="relative border border-amber-200 p-2 text-amber-800 hover:bg-amber-50"><Bell size={17} /></Link><Link href="/admin/users" aria-label="Utilizadores" className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-900 text-xs font-bold text-white">TG</Link><span className="hidden text-[10px] leading-tight sm:block"><strong className="block">Administração</strong><small className="text-gray-500">Resumo da loja</small></span><ChevronDown size={14} className="text-gray-500" /></div></div></header><div className="flex"><aside className="hidden min-h-[calc(100vh-64px)] w-60 shrink-0 border-r border-gray-200 bg-[#10233e] text-white lg:block"><div className="border-b border-white/10 px-5 py-5"><div className="flex items-center gap-2"><span className="flex h-8 w-8 items-center justify-center bg-blue-600"><Building2 size={16} /></span><div><strong className="text-sm">TechGlobal</strong><span className="block text-[9px] text-blue-200">Painel Administrativo</span></div></div></div><nav aria-label="Navegação administrativa" className="space-y-1 p-3 text-xs font-medium">{menuItems.map(({ label, href, Icon }) => <Link key={href} href={href} aria-current={href === "/admin" ? "page" : undefined} className={`flex items-center gap-3 px-3 py-2.5 ${href === "/admin" ? "bg-blue-600 text-white" : "text-blue-100 hover:bg-white/10"}`}><Icon size={15} />{label}</Link>)}</nav><div className="mx-4 mt-4 border border-white/10 p-3 text-[10px]"><strong className="block text-xs">Operação</strong><Link href="/admin/orders/payment-review" className="mt-2 flex items-center justify-between text-blue-100 hover:text-white">Pagamentos em revisão <ArrowUpRight size={12} /></Link></div></aside><main className="min-w-0 flex-1 px-4 py-5 sm:px-6 lg:px-8">{children}</main></div></div>;
 }
 
 export default function AdminDashboard() {
-  const [range, setRange] = useState("01 Set 2026 – 20 Set 2026");
-  // The dashboard action grid is kept compact to preserve the visual density of the reference layout.
-  // @ts-expect-error The inline tuple is narrowed by JSX at runtime.
-  return <AdminShell><div className="mx-auto max-w-[1440px]"><div className="mb-5 flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><h1 className="text-2xl font-black tracking-tight text-gray-950">Bem-vindo, João da Silva! <span className="text-xl">👋</span></h1><p className="mt-1 text-xs text-gray-500">Aqui está o resumo da sua loja hoje, 20 de Setembro de 2026.</p></div><label className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-[10px] font-bold text-gray-700"><FileText size={14} className="text-gray-500" /><select value={range} onChange={(event) => setRange(event.target.value)} className="bg-transparent outline-none"><option>01 Set 2026 – 20 Set 2026</option><option>01 Ago 2026 – 31 Ago 2026</option><option>Últimos 7 dias</option></select></label></div><div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"><Metric title="Vendas totais" value="320.580.000 Kz" detail="12%" icon={ShoppingBag} tone="bg-blue-50 text-blue-600" /><Metric title="Encomendas" value="248" detail="18%" icon={Package} tone="bg-emerald-50 text-emerald-600" /><Metric title="Clientes novos" value="56" detail="27%" icon={Users} tone="bg-violet-50 text-violet-600" /><Metric title="Lucro estimado" value="86.450.000 Kz" detail="15%" icon={Wallet} tone="bg-amber-50 text-amber-600" /></div><div className="grid gap-5 xl:grid-cols-[minmax(0,1.8fr)_minmax(260px,1fr)]"><section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm"><div className="mb-4 flex items-center justify-between"><h2 className="text-sm font-black">Vendas e encomendas</h2><div className="flex gap-3 text-[10px] font-semibold"><span className="flex items-center gap-1"><i className="h-2 w-2 rounded-sm bg-blue-600" />Vendas (Kz)</span><span className="flex items-center gap-1"><i className="h-2 w-2 rounded-sm bg-blue-200" />Encomendas</span></div></div><div className="relative flex h-48 items-end gap-1 border-b border-l border-gray-200 px-2 pb-5 pt-5">{sales.map((value, index) => <div key={index} className="group relative flex h-full flex-1 items-end"><div className="w-full rounded-t-sm bg-blue-500 transition hover:bg-blue-700" style={{ height: `${value / 1.3}%` }} /><span className="pointer-events-none absolute -top-5 left-1/2 hidden -translate-x-1/2 rounded bg-gray-900 px-1.5 py-1 text-[9px] text-white group-hover:block">{value}M</span></div>)}<div className="absolute inset-x-2 top-1/2 border-t border-dashed border-gray-200" /><span className="absolute -left-1 bottom-0 translate-y-full text-[9px] text-gray-400">1 Set</span><span className="absolute left-1/3 bottom-0 translate-y-full text-[9px] text-gray-400">5 Set</span><span className="absolute left-2/3 bottom-0 translate-y-full text-[9px] text-gray-400">10 Set</span><span className="absolute right-0 bottom-0 translate-y-full text-[9px] text-gray-400">20 Set</span></div></section><section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm"><h2 className="text-sm font-black">Encomendas por estado</h2><div className="flex items-center gap-4 py-5"><div className="relative flex h-32 w-32 shrink-0 items-center justify-center rounded-full" style={{ background: "conic-gradient(#168f7a 0 48%, #f59e0b 48% 75%, #1677ed 75% 88%, #ef4444 88% 100%)" }}><div className="flex h-20 w-20 flex-col items-center justify-center rounded-full bg-white"><strong className="text-xl">248</strong><span className="text-[9px] text-gray-500">Total</span></div></div><div className="space-y-2 text-[10px] font-semibold"><p><i className="mr-2 inline-block h-2 w-2 rounded-full bg-blue-600" />Pendentes <b className="ml-3">42</b></p><p><i className="mr-2 inline-block h-2 w-2 rounded-full bg-emerald-600" />Em processamento <b className="ml-3">68</b></p><p><i className="mr-2 inline-block h-2 w-2 rounded-full bg-amber-500" />Enviadas <b className="ml-3">92</b></p><p><i className="mr-2 inline-block h-2 w-2 rounded-full bg-red-500" />Canceladas <b className="ml-3">8</b></p></div></div></section></div><div className="mt-5 grid gap-5 lg:grid-cols-3"><section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm"><div className="mb-3 flex justify-between"><h2 className="text-sm font-black">Produtos mais vendidos</h2><Link href="/products" className="text-[10px] font-bold text-blue-600">Ver todos</Link></div><div className="space-y-2">{bestSellers.map(([name, units, total, image], index) => <div key={name} className="flex items-center gap-2"><span className="w-4 text-center text-[10px] font-bold text-gray-500">{index + 1}</span><img src={image} alt="" className="h-8 w-8 rounded bg-gray-50 object-contain p-1" /><div className="min-w-0 flex-1"><p className="truncate text-[10px] font-bold">{name}</p><p className="text-[9px] text-gray-400">{units}</p></div><strong className="text-[10px]">{total}</strong></div>)}</div></section><section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm"><div className="mb-3 flex justify-between"><h2 className="text-sm font-black">Últimas encomendas</h2><Link href="/admin/orders" className="text-[10px] font-bold text-blue-600">Ver todas</Link></div><div className="space-y-3">{recentOrders.map(([number, client, status, total]) => <Link href="/admin/orders" key={number} className="flex items-center gap-2"><div className="min-w-0 flex-1"><p className="truncate text-[10px] font-bold">{number}</p><p className="truncate text-[9px] text-gray-400">Hoje, 14:32 · {client}</p></div><span className={`rounded-full px-2 py-1 text-[8px] font-bold ${statusClass[status]}`}>{status}</span><strong className="text-[9px]">{total}</strong></Link>)}</div></section><section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm"><div className="mb-3 flex justify-between"><h2 className="text-sm font-black">Clientes recentes</h2><Link href="/admin/clients" className="text-[10px] font-bold text-blue-600">Ver todos</Link></div>{["Empresa Kizomba, Lda", "Ana Pereira", "Global Serviços, Lda", "Carlos Mendes", "Intsoluto XYZ"].map((client, index) => <div key={client} className="flex items-center gap-2 border-b border-gray-50 py-2 last:border-0"><span className="flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-[10px] font-bold text-gray-600">{index % 2 ? <UserRound size={14} /> : <Building2 size={14} />}</span><span className="min-w-0 flex-1 truncate text-[10px] font-bold">{client}<small className="block font-normal text-gray-400">Hoje, {14 - index}:32</small></span><span className="rounded-full bg-blue-50 px-2 py-1 text-[8px] font-bold text-blue-600">{index % 2 ? "Retalho" : "B2B"}</span></div>)}</section></div><div className="mt-5 grid gap-5 lg:grid-cols-3"><section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm"><div className="mb-3 flex justify-between"><h2 className="text-sm font-black">Stock em alerta</h2><Link href="/account/stock" className="text-[10px] font-bold text-blue-600">Ver todos</Link></div>{[["HP LaserJet Pro M428fdw", "Apenas 3 unidades", "/Epson.jpg"], ["Logitech MX Master 3S", "Apenas 5 unidades", "/Acessorio.png"], ["Samsung SSD 1TB T7", "Apenas 4 unidades", "/Componentes.png"], ["iPhone 14 128GB", "Apenas 2 unidades", "/Iphone_15.png"]].map(([name, stock, image]) => <Link href="/account/stock" key={name} className="flex items-center gap-2 py-2"><img src={image} alt="" className="h-8 w-8 rounded bg-gray-50 object-contain p-1" /><span className="min-w-0 flex-1 truncate text-[10px] font-bold">{name}<small className="block text-[9px] font-semibold text-red-500">{stock}</small></span><ArrowUpRight size={14} className="text-gray-400" /></Link>)}</section><section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm"><h2 className="mb-4 text-sm font-black">Distribuição de vendas por categoria</h2>{[["Smartphones", "35%", "bg-blue-600"], ["Computadores", "28%", "bg-emerald-500"], ["Acessórios", "15%", "bg-violet-500"], ["Componentes", "10%", "bg-orange-500"], ["Impressão", "7%", "bg-amber-400"], ["Outros", "5%", "bg-slate-400"]].map(([label, value, color]) => <div key={label} className="mb-3 flex items-center gap-2 text-[10px]"><span className="w-20 shrink-0">{label}</span><span className="h-2 flex-1 overflow-hidden rounded-full bg-blue-50"><i className={`block h-full rounded-full ${color}`} style={{ width: value }} /></span><b className="w-7 text-right">{value}</b></div>)}</section><section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm"><h2 className="mb-4 text-sm font-black">Ações rápidas</h2><div className="grid grid-cols-3 gap-2">{[[Package, "Novo produto", "/products"], [ShoppingBag, "Nova encomenda", "/admin/orders"], [Users, "Novo cliente", "/admin/clients"], [FileText, "Emitir factura", "#"], [Settings, "Ajustar stock", "/account/stock"], [BarChart3, "Ver relatórios", "#"]].map(([Icon, label, href]) => { const ActionIcon = Icon as typeof Box; return <Link href={href} key={label as string} className="flex flex-col items-center gap-2 rounded-lg p-2 text-center text-[9px] font-bold text-gray-600 hover:bg-blue-50 hover:text-blue-600"><span className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600"><ActionIcon size={17} /></span>{label}</Link>; })}</div></section></div></div></AdminShell>;
+  const [period, setPeriod] = useState<Period>("MONTH");
+  const [currency, setCurrency] = useState<Currency>("AOA");
+  const [dashboard, setDashboard] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    fetchWithAuth(`/api/admin/dashboard?period=${period}`)
+      .then((response) => { if (active) setDashboard(response.data); })
+      .catch((loadError) => { if (active) setError(loadError instanceof Error ? loadError.message : "Não foi possível carregar o resumo da loja."); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [period]);
+
+  const chart = dashboard?.trend || [];
+  const maxRevenue = Math.max(1, ...chart.map((month) => currency === "AOA" ? month.revenueAOA : month.revenueEUR));
+  const metrics = dashboard?.metrics;
+
+  return <AdminShell><div className="mx-auto max-w-[1440px]">
+    <div className="mb-5 flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-blue-700">Visão geral da operação</p><h1 className="mt-1 text-2xl font-black tracking-tight text-gray-950">Resumo da loja</h1><p className="mt-1 text-xs text-gray-500">Indicadores reais de vendas liquidadas, encomendas, clientes e stock · {dashboard?.period || "a carregar período"}</p></div><select value={period} onChange={(event) => { setLoading(true); setError(""); setPeriod(event.target.value as Period); }} aria-label="Período do resumo" className="border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-700"><option value="7D">Últimos 7 dias</option><option value="MONTH">Este mês</option><option value="LAST_MONTH">Mês passado</option></select></div>
+    {error && <div role="alert" className="mb-5 border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</div>}
+    {loading && !dashboard ? <div className="flex min-h-64 items-center justify-center gap-2 text-sm text-gray-500"><LoaderCircle size={18} className="animate-spin" />A carregar indicadores...</div> : metrics && <>
+      <div className="mb-5 flex flex-wrap items-center gap-2"><span className="text-[10px] font-bold uppercase text-gray-500">Moeda das vendas:</span>{(["AOA", "EUR"] as const).map((market) => <button key={market} type="button" onClick={() => setCurrency(market)} aria-pressed={currency === market} className={`border px-3 py-1.5 text-[10px] font-bold ${currency === market ? "border-blue-700 bg-blue-700 text-white" : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"}`}>{market === "AOA" ? "Angola · AOA" : "Portugal · EUR"}</button>)}</div>
+      <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Metric label={`Vendas pagas · ${currency}`} value={formatMoney(currency === "AOA" ? metrics.revenueAOA : metrics.revenueEUR, currency)} icon={ShoppingBag} tone="bg-blue-50 text-blue-700" change={currency === "AOA" ? metrics.revenueChangeAOA : metrics.revenueChangeEUR} /><Metric label="Encomendas no período" value={metrics.orders.toLocaleString("pt-PT")} icon={Package} tone="bg-emerald-50 text-emerald-700" change={metrics.ordersChange} /><Metric label="Novos clientes" value={metrics.newCustomers.toLocaleString("pt-PT")} icon={Users} tone="bg-violet-50 text-violet-700" change={metrics.customersChange} /><Metric label={`Saldo operacional · ${currency}`} value={formatMoney(currency === "AOA" ? metrics.balanceAOA : metrics.balanceEUR, currency)} icon={Wallet} tone="bg-amber-50 text-amber-700" /> </div>
+      <div className="mb-5 grid gap-3 sm:grid-cols-3"><Metric label="Clientes ativos" value={`${metrics.activeCustomers.toLocaleString("pt-PT")} / ${metrics.totalCustomers.toLocaleString("pt-PT")}`} icon={UserRound} tone="bg-cyan-50 text-cyan-700" /><Metric label="Stock baixo" value={metrics.lowStock.toLocaleString("pt-PT")} icon={AlertTriangle} tone="bg-amber-50 text-amber-700" /><Metric label="Sem stock" value={metrics.outOfStock.toLocaleString("pt-PT")} icon={Box} tone="bg-red-50 text-red-700" /></div>
+      {(metrics.pendingPayments > 0 || metrics.paymentReview > 0 || metrics.lowStock > 0 || metrics.outOfStock > 0) && <section className="mb-5 border border-amber-200 bg-amber-50/70 p-4"><div className="mb-3 flex items-center gap-2"><AlertTriangle size={16} className="text-amber-800" /><h2 className="text-xs font-black text-amber-950">Ações que precisam de atenção</h2></div><div className="flex flex-wrap gap-2">{metrics.pendingPayments > 0 && <Link href="/admin/finance/payments" className="border border-amber-200 bg-white px-3 py-2 text-[10px] font-bold text-amber-900">{metrics.pendingPayments} pagamento(s) pendente(s)</Link>}{metrics.paymentReview > 0 && <Link href="/admin/finance/review" className="border border-amber-200 bg-white px-3 py-2 text-[10px] font-bold text-amber-900">{metrics.paymentReview} pagamento(s) em revisão</Link>}{metrics.lowStock > 0 && <Link href="/admin/stock" className="border border-amber-200 bg-white px-3 py-2 text-[10px] font-bold text-amber-900">{metrics.lowStock} produto(s) com stock baixo</Link>}{metrics.outOfStock > 0 && <Link href="/admin/stock" className="border border-amber-200 bg-white px-3 py-2 text-[10px] font-bold text-amber-900">{metrics.outOfStock} produto(s) sem stock</Link>}</div></section>}
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(280px,0.8fr)]"><section className="border border-gray-200 bg-white p-4"><div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-sm font-black">Vendas liquidadas</h2><p className="mt-1 text-[10px] text-gray-500">Últimos 12 meses completos · {currency}</p></div><div className="flex gap-3 text-[9px] font-semibold text-gray-600"><span><i className="mr-1 inline-block h-2 w-2 bg-blue-600" />Vendas pagas</span><span><i className="mr-1 inline-block h-2 w-2 bg-gray-300" />Encomendas</span></div></div><div role="img" aria-label={`Vendas mensais liquidadas em ${currency} nos últimos 12 meses`} className="overflow-x-auto"><div className="flex h-48 min-w-[660px] items-end gap-2 border-b border-l border-gray-200 px-3 pb-5 pt-3">{chart.map((month) => { const revenue = currency === "AOA" ? month.revenueAOA : month.revenueEUR; const revenueHeight = revenue > 0 ? Math.max(3, revenue / maxRevenue * 100) : 0; const orderHeight = metrics.orders > 0 ? Math.max(3, month.orders / Math.max(1, ...chart.map((item) => item.orders)) * 100) : 0; return <div key={month.month} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end"><div className="flex h-[calc(100%-16px)] w-full items-end justify-center gap-0.5"><span title={`${month.label}: ${formatMoney(revenue, currency)}`} className="w-3 rounded-t bg-blue-600" style={{ height: `${revenueHeight}%` }} /><span title={`${month.label}: ${month.orders} encomendas`} className="w-2 rounded-t bg-gray-300" style={{ height: `${orderHeight}%` }} /></div><span className="mt-1 whitespace-nowrap text-[8px] text-gray-500">{month.label}</span></div>; })}</div></div><div className="mt-3 flex flex-wrap gap-4 text-[10px] text-gray-500"><span>{metrics.products.toLocaleString("pt-PT")} produtos no catálogo</span><span>{metrics.stockUnits.toLocaleString("pt-PT")} unidades em stock</span><span>Despesas no período: {formatMoney(currency === "AOA" ? metrics.expensesAOA : metrics.expensesEUR, currency)}</span></div></section>
+      <section className="border border-gray-200 bg-white"><div className="flex items-center justify-between border-b border-gray-100 px-4 py-3"><div><h2 className="text-sm font-black">Mais vendidos</h2><p className="mt-1 text-[10px] text-gray-500">Unidades em encomendas não canceladas</p></div><Link href="/admin/products" className="text-[10px] font-bold text-blue-700">Produtos <ArrowUpRight size={12} className="inline" /></Link></div><div className="divide-y divide-gray-100">{dashboard.bestSellers.length === 0 ? <p className="p-6 text-center text-xs text-gray-500">Ainda sem vendas suficientes.</p> : dashboard.bestSellers.map((product, index) => <div key={product.productId} className="flex items-center gap-3 px-4 py-3"><span className="w-4 text-[10px] font-black text-gray-400">{index + 1}</span><Image src={product.imageUrl || "/file.svg"} alt="" width={40} height={40} className="h-10 w-10 border border-gray-100 bg-white object-contain" /><div className="min-w-0 flex-1"><p className="truncate text-xs font-bold text-gray-800">{product.name}</p><p className="text-[10px] text-gray-500">{product.units} unidades vendidas</p></div></div>)}</div></section></div>
+      <section className="mt-5 border border-gray-200 bg-white"><div className="flex items-center justify-between border-b border-gray-100 px-4 py-3"><div><h2 className="text-sm font-black">Encomendas recentes</h2><p className="mt-1 text-[10px] text-gray-500">Atividade mais recente registada no sistema</p></div><Link href="/admin/orders" className="text-[10px] font-bold text-blue-700">Ver vendas <ArrowUpRight size={12} className="inline" /></Link></div><div className="hidden grid-cols-[1.2fr_1.4fr_1fr_0.9fr_1fr] gap-3 bg-gray-50 px-4 py-2 text-[9px] font-black uppercase text-gray-500 md:grid"><span>Encomenda</span><span>Cliente</span><span>Data</span><span>Estado</span><span className="text-right">Total</span></div><div className="divide-y divide-gray-100">{dashboard.recentOrders.length === 0 ? <p className="p-8 text-center text-xs text-gray-500">Ainda não existem encomendas.</p> : dashboard.recentOrders.map((order) => <Link key={order.id} href="/admin/orders" className="grid gap-2 px-4 py-3 hover:bg-gray-50 md:grid-cols-[1.2fr_1.4fr_1fr_0.9fr_1fr] md:items-center"><strong className="text-xs text-gray-900">{order.orderNumber}</strong><span className="truncate text-xs text-gray-700">{order.user.accountName || order.user.name || "Cliente"}</span><span className="text-[10px] text-gray-500">{new Date(order.createdAt).toLocaleDateString("pt-PT")}</span><span className={`w-fit px-2 py-1 text-[9px] font-bold ${statusStyles[order.status] || "bg-gray-100 text-gray-700"}`}>{statusLabels[order.status] || order.status}</span><strong className="text-right text-xs text-gray-900">{formatMoney(order.currency === "EUR" ? order.totalEUR : order.totalKZ, order.currency === "EUR" ? "EUR" : "AOA")}</strong></Link>)}</div></section>
+    </>}</div></AdminShell>;
 }
