@@ -15,6 +15,7 @@ export type ApiUser = jwt.JwtPayload & {
 
 const jwksClients = new Map<string, ReturnType<typeof jwksRsa>>();
 const rateLimitBuckets = new Map<string, { count: number; resetAt: number }>();
+const rateLimitBuckets = new Map<string, { count: number; resetAt: number }>();
 
 export function errorResponse(error: string, status: number, details?: unknown) {
   return Response.json({ error, ...(details === undefined ? {} : { details }) }, { status });
@@ -38,6 +39,35 @@ export async function readJson(request: Request): Promise<unknown> {
 function getClientKey(request: Request) {
   const forwarded = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
   return forwarded || request.headers.get('x-real-ip') || 'unknown';
+}
+
+export function rateLimit(request: Request, scope: string, limit: number, windowMs: number) {
+  const now = Date.now();
+  const key = `${scope}:${getClientKey(request)}`;
+  const current = rateLimitBuckets.get(key);
+  if (!current || current.resetAt <= now) {
+    rateLimitBuckets.set(key, { count: 1, resetAt: now + windowMs });
+    return null;
+  }
+  current.count += 1;
+  if (current.count > limit) {
+    return Response.json(
+      { error: 'Too many requests. Try again later.' },
+      { status: 429, headers: { 'Retry-After': String(Math.ceil((current.resetAt - now) / 1000)) } },
+    );
+  }
+  if (rateLimitBuckets.size > 10000) {
+    for (const [bucketKey, bucket] of rateLimitBuckets) {
+      if (bucket.resetAt <= now) rateLimitBuckets.delete(bucketKey);
+    }
+  }
+  return null;
+}
+
+function getClientKey(request: Request) {
+  return request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+    || request.headers.get('x-real-ip')
+    || 'unknown';
 }
 
 export function rateLimit(request: Request, scope: string, limit: number, windowMs: number) {
