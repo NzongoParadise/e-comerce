@@ -76,7 +76,7 @@ export default function Footer() {
         </div>
 
         <div className="mt-10 flex flex-col items-center justify-between gap-4 border-t border-gray-700 pt-6 sm:flex-row">
-          <p className="text-xs text-gray-500">© 2024 RUBRICA DILIGENTE (SU), LDA. Todos os direitos reservados.</p>
+          <p className="text-xs text-gray-500">© 2026 RUBRICA DILIGENTE (SU), LDA. Todos os direitos reservados.</p>
           <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
             {['Multicaixa','MB WAY','VISA','Mastercard'].map((p) => (
               <div key={p} className="rounded-md bg-white/5 px-2 py-1 text-[10px] font-bold text-gray-300">{p}</div>
