@@ -15,7 +15,6 @@ export type ApiUser = jwt.JwtPayload & {
 
 const jwksClients = new Map<string, ReturnType<typeof jwksRsa>>();
 const rateLimitBuckets = new Map<string, { count: number; resetAt: number }>();
-const rateLimitBuckets = new Map<string, { count: number; resetAt: number }>();
 
 export function errorResponse(error: string, status: number, details?: unknown) {
   return Response.json({ error, ...(details === undefined ? {} : { details }) }, { status });
@@ -29,45 +28,12 @@ export function prismaErrorCode(error: unknown) {
 export async function readJson(request: Request): Promise<unknown> {
   const contentLength = Number(request.headers.get('content-length') || 0);
   if (Number.isFinite(contentLength) && contentLength > 1024 * 1024) return undefined;
-  try {
-    return await request.json();
-  } catch {
-    return undefined;
-  }
-}
-
-function getClientKey(request: Request) {
-  const forwarded = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
-  return forwarded || request.headers.get('x-real-ip') || 'unknown';
-}
-
-export function rateLimit(request: Request, scope: string, limit: number, windowMs: number) {
-  const now = Date.now();
-  const key = `${scope}:${getClientKey(request)}`;
-  const current = rateLimitBuckets.get(key);
-  if (!current || current.resetAt <= now) {
-    rateLimitBuckets.set(key, { count: 1, resetAt: now + windowMs });
-    return null;
-  }
-  current.count += 1;
-  if (current.count > limit) {
-    return Response.json(
-      { error: 'Too many requests. Try again later.' },
-      { status: 429, headers: { 'Retry-After': String(Math.ceil((current.resetAt - now) / 1000)) } },
-    );
-  }
-  if (rateLimitBuckets.size > 10000) {
-    for (const [bucketKey, bucket] of rateLimitBuckets) {
-      if (bucket.resetAt <= now) rateLimitBuckets.delete(bucketKey);
-    }
-  }
-  return null;
+  try { return await request.json(); } catch { return undefined; }
 }
 
 function getClientKey(request: Request) {
   return request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-    || request.headers.get('x-real-ip')
-    || 'unknown';
+    || request.headers.get('x-real-ip') || 'unknown';
 }
 
 export function rateLimit(request: Request, scope: string, limit: number, windowMs: number) {
@@ -106,13 +72,11 @@ export async function authenticate(request: Request): Promise<ApiUser | null> {
   const authorization = request.headers.get('authorization');
   if (!authorization?.startsWith('Bearer ')) {
     return process.env.NODE_ENV !== 'production' && process.env.ALLOW_INSECURE_AUTH === 'true'
-      ? { sub: 'local-user', roles: ['admin'], accessRole: 'ADMIN', status: 'ACTIVE' }
-      : null;
+      ? { sub: 'local-user', roles: ['admin'], accessRole: 'ADMIN', status: 'ACTIVE' } : null;
   }
 
   const token = authorization.slice('Bearer '.length).trim();
   if (!token) return null;
-
   const decoded = jwt.decode(token, { complete: true });
   if (!decoded || typeof decoded === 'string') return null;
 
@@ -120,15 +84,11 @@ export async function authenticate(request: Request): Promise<ApiUser | null> {
   if (decoded.header.alg === 'HS256') {
     const secret = process.env.JWT_SECRET;
     if (!secret) return null;
-    try {
-      verifiedUser = jwt.verify(token, secret, { algorithms: ['HS256'] }) as ApiUser;
-    } catch {
-      return null;
-    }
+    try { verifiedUser = jwt.verify(token, secret, { algorithms: ['HS256'] }) as ApiUser; }
+    catch { return null; }
   } else {
     const jwksUri = process.env.JWKS_URI;
     if (!jwksUri || decoded.header.alg !== 'RS256') return null;
-
     const client = getJwksClient(jwksUri);
     verifiedUser = await new Promise((resolve) => {
       jwt.verify(token, (header, callback) => {
@@ -145,40 +105,23 @@ export async function authenticate(request: Request): Promise<ApiUser | null> {
     });
   }
 
-  if (!verifiedUser) return null;
-  if (verifiedUser.sub === 'local-user') return null;
+  if (!verifiedUser || verifiedUser.sub === 'local-user') return null;
 
   try {
     const profile = typeof verifiedUser.sub === 'string'
       ? await prisma.user.findUnique({
         where: { externalId: verifiedUser.sub },
         select: { accessRole: true, accountType: true, status: true, b2bRequestStatus: true, email: true },
-      })
-      : null;
-    if (!profile) {
-      return new URL(request.url).pathname === '/api/auth/me' ? verifiedUser : null;
-    }
+      }) : null;
+    if (!profile) return new URL(request.url).pathname === '/api/auth/me' ? verifiedUser : null;
     if (profile.status !== 'ACTIVE') return null;
-
     const roles = getUserRoles({ accessRole: profile.accessRole });
     return {
-      ...verifiedUser,
-      email: profile.email || verifiedUser.email,
-      accessRole: profile.accessRole,
-      accountType: profile.accountType,
-      status: profile.status,
-      b2bRequestStatus: profile.b2bRequestStatus,
-      roles,
+      ...verifiedUser, email: profile.email || verifiedUser.email, accessRole: profile.accessRole,
+      accountType: profile.accountType, status: profile.status, b2bRequestStatus: profile.b2bRequestStatus, roles,
     };
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
-export function isAdmin(user: ApiUser | null) {
-  return isAdminUser(user);
-}
-
-export function userSubject(user: ApiUser | null) {
-  return typeof user?.sub === 'string' ? user.sub : null;
-}
+export function isAdmin(user: ApiUser | null) { return isAdminUser(user); }
+export function userSubject(user: ApiUser | null) { return typeof user?.sub === 'string' ? user.sub : null; }
