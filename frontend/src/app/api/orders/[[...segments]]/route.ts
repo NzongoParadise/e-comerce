@@ -3,6 +3,7 @@ import { authenticate, errorResponse, readJson, userSubject } from '@/lib/server
 import { cancelAwaitingPaymentAndReleaseStock } from '@/lib/server/orders/inventory';
 import { isStripeCurrencySupported, toStripeMinorUnits } from '@/lib/server/payments/stripeAmounts';
 import { isDefinitiveStripeRejection, isStripeSessionForOrder, stripeCheckoutIdempotencyKey } from '@/lib/server/payments/stripeRequestRules';
+import { calculateShipping, estimateCartWeightKg } from '@/lib/shipping';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -269,8 +270,17 @@ export async function POST(request: Request) {
       if (Math.abs(Number(eurPrice) - item.priceEUR) > 0.01 || Math.abs(Number(aoPrice) - item.priceKZ) > 0.01) throw new Error('PRICE_CHANGED');
       return { item, product, eurPrice: Number(eurPrice), aoPrice: Number(aoPrice) };
     });
-    const totalEUR = calculatedItems.reduce((sum, entry) => sum + entry.eurPrice * entry.item.quantity, 0) + (parsed.data.shippingMethod === 'express' ? 15 : 0);
-    const totalKZ = calculatedItems.reduce((sum, entry) => sum + entry.aoPrice * entry.item.quantity, 0) + (parsed.data.shippingMethod === 'express' ? 15000 : 0);
+    const estimatedCartWeightKg = estimateCartWeightKg(parsed.data.items);
+    const shippingCost = calculateShipping({
+      country: parsed.data.country,
+      deliveryMode: parsed.data.deliveryMode,
+      shippingMethod: parsed.data.shippingMethod,
+      weightKg: estimatedCartWeightKg,
+    });
+    const productTotalEUR = calculatedItems.reduce((sum, entry) => sum + entry.eurPrice * entry.item.quantity, 0);
+    const productTotalKZ = calculatedItems.reduce((sum, entry) => sum + entry.aoPrice * entry.item.quantity, 0);
+    const totalEUR = productTotalEUR + (parsed.data.country === 'PT' ? shippingCost : 0);
+    const totalKZ = productTotalKZ + (parsed.data.country === 'AO' ? shippingCost : 0);
     if (parsed.data.paymentMethod === 'card' && !isStripeCurrencySupported(currency)) return errorResponse('Pagamentos por cartão não estão disponíveis para encomendas em AOA. Selecione MULTICAIXA.', 400);
     if (parsed.data.paymentMethod === 'card' && !process.env.STRIPE_SECRET_KEY) return errorResponse('Pagamentos por cartão não estão configurados', 503);
     const stripeExpiresAt = parsed.data.paymentMethod === 'card' ? new Date(Date.now() + 60 * 60 * 1000) : undefined;
@@ -305,7 +315,7 @@ export async function POST(request: Request) {
           address: parsed.data.address,
           phone: parsed.data.phone,
           carrier: process.env.DEFAULT_CARRIER || undefined,
-          trackingNumber: orderNumber,
+          trackingNumber: undefined,
           totalEUR,
           totalKZ,
           items: { create: calculatedItems.map(({ item, product, eurPrice }) => ({
@@ -327,7 +337,7 @@ export async function POST(request: Request) {
             currency,
             expiresAt: stripeExpiresAt,
           } },
-          trackingEvents: { create: { status: 'PROCESSING', location: parsed.data.address || 'Armazém RUBRICA DILIGENTE (SU), LDA', description: 'Encomenda recebida e em processamento.' } },
+          trackingEvents: { create: { status: 'PROCESSING', location: parsed.data.address || 'Armazém', description: 'Encomenda recebida e em processamento.' } },
         },
       });
     });

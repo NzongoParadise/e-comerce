@@ -16,3 +16,14 @@ export const calculatePortugalShipping = (weightKg: number, isExpress: boolean) 
 
 export const estimateCartWeightKg = <T extends { quantity: number }>(items: T[]) =>
   items.reduce((total, item) => total + item.quantity * 0.65, 0);
+
+export const calculateShipping = (options: {
+  country: "AO" | "PT";
+  deliveryMode: "address" | "pickup" | "business";
+  shippingMethod: "standard" | "express" | "pickup";
+  weightKg: number;
+}) => {
+  if (options.deliveryMode === "pickup" || options.shippingMethod === "pickup") return 0;
+  if (options.country === "AO") return options.shippingMethod === "express" ? 15000 : 0;
+  return calculatePortugalShipping(options.weightKg, options.shippingMethod === "express");
+};
