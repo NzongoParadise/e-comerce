@@ -14,6 +14,7 @@ export type ApiUser = jwt.JwtPayload & {
 };
 
 const jwksClients = new Map<string, ReturnType<typeof jwksRsa>>();
+const rateLimitBuckets = new Map<string, { count: number; resetAt: number }>();
 
 export function errorResponse(error: string, status: number, details?: unknown) {
   return Response.json({ error, ...(details === undefined ? {} : { details }) }, { status });
@@ -25,11 +26,41 @@ export function prismaErrorCode(error: unknown) {
 }
 
 export async function readJson(request: Request): Promise<unknown> {
+  const contentLength = Number(request.headers.get('content-length') || 0);
+  if (Number.isFinite(contentLength) && contentLength > 1024 * 1024) return undefined;
   try {
     return await request.json();
   } catch {
     return undefined;
   }
+}
+
+function getClientKey(request: Request) {
+  const forwarded = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
+  return forwarded || request.headers.get('x-real-ip') || 'unknown';
+}
+
+export function rateLimit(request: Request, scope: string, limit: number, windowMs: number) {
+  const now = Date.now();
+  const key = `${scope}:${getClientKey(request)}`;
+  const current = rateLimitBuckets.get(key);
+  if (!current || current.resetAt <= now) {
+    rateLimitBuckets.set(key, { count: 1, resetAt: now + windowMs });
+    return null;
+  }
+  current.count += 1;
+  if (current.count > limit) {
+    return Response.json(
+      { error: 'Too many requests. Try again later.' },
+      { status: 429, headers: { 'Retry-After': String(Math.ceil((current.resetAt - now) / 1000)) } },
+    );
+  }
+  if (rateLimitBuckets.size > 10000) {
+    for (const [bucketKey, bucket] of rateLimitBuckets) {
+      if (bucket.resetAt <= now) rateLimitBuckets.delete(bucketKey);
+    }
+  }
+  return null;
 }
 
 function getJwksClient(uri: string) {
@@ -44,7 +75,7 @@ function getJwksClient(uri: string) {
 export async function authenticate(request: Request): Promise<ApiUser | null> {
   const authorization = request.headers.get('authorization');
   if (!authorization?.startsWith('Bearer ')) {
-    return process.env.ALLOW_INSECURE_AUTH === 'true'
+    return process.env.NODE_ENV !== 'production' && process.env.ALLOW_INSECURE_AUTH === 'true'
       ? { sub: 'local-user', roles: ['admin'], accessRole: 'ADMIN', status: 'ACTIVE' }
       : null;
   }
@@ -85,7 +116,7 @@ export async function authenticate(request: Request): Promise<ApiUser | null> {
   }
 
   if (!verifiedUser) return null;
-  if (verifiedUser.sub === 'local-user' && process.env.ALLOW_INSECURE_AUTH === 'true') return verifiedUser;
+  if (verifiedUser.sub === 'local-user') return null;
 
   try {
     const profile = typeof verifiedUser.sub === 'string'
