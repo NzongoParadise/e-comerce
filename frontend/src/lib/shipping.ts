@@ -1,3 +1,35 @@
+const DEFAULT_PRODUCT_WEIGHT_GRAMS = 650;
+const VOLUMETRIC_DIVISOR_CM3_PER_KG = 5000;
+
+export type ShippingPhysicalItem = {
+  quantity: number;
+  weightGrams?: number | null;
+  lengthCm?: number | null;
+  widthCm?: number | null;
+  heightCm?: number | null;
+};
+
+const positive = (value: number | null | undefined) =>
+  typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
+
+export const calculateVolumetricWeightKg = (item: ShippingPhysicalItem) => {
+  const lengthCm = positive(item.lengthCm);
+  const widthCm = positive(item.widthCm);
+  const heightCm = positive(item.heightCm);
+  if (!lengthCm || !widthCm || !heightCm) return 0;
+
+  return (lengthCm * widthCm * heightCm) / VOLUMETRIC_DIVISOR_CM3_PER_KG;
+};
+
+export const calculateChargeableWeightKg = (item: ShippingPhysicalItem) => {
+  const realWeightKg = (positive(item.weightGrams) ?? DEFAULT_PRODUCT_WEIGHT_GRAMS) / 1000;
+  const volumetricWeightKg = calculateVolumetricWeightKg(item);
+  return Math.max(realWeightKg, volumetricWeightKg);
+};
+
+export const estimateCartWeightKg = <T extends ShippingPhysicalItem>(items: T[]) =>
+  items.reduce((total, item) => total + item.quantity * calculateChargeableWeightKg(item), 0);
+
 export const calculatePortugalShipping = (weightKg: number, isExpress: boolean) => {
   const baseWeight = Math.max(weightKg, 0.1);
 
@@ -14,9 +46,6 @@ export const calculatePortugalShipping = (weightKg: number, isExpress: boolean) 
   return Number((isExpress ? price * 1.5 : price).toFixed(2));
 };
 
-export const estimateCartWeightKg = <T extends { quantity: number }>(items: T[]) =>
-  items.reduce((total, item) => total + item.quantity * 0.65, 0);
-
 export const calculateShipping = (options: {
   country: "AO" | "PT";
   deliveryMode: "address" | "pickup" | "business";
@@ -24,6 +53,11 @@ export const calculateShipping = (options: {
   weightKg: number;
 }) => {
   if (options.deliveryMode === "pickup" || options.shippingMethod === "pickup") return 0;
-  if (options.country === "AO") return options.shippingMethod === "express" ? 15000 : 0;
+  if (options.country === "AO') return options.shippingMethod === "express" ? 15000 : 0;
   return calculatePortugalShipping(options.weightKg, options.shippingMethod === "express");
 };
+
+export const SHIPPING_RULES = {
+  volumetricDivisorCm3PerKg: VOLUMETRIC_DIVISOR_CM3_PER_KG,
+  defaultProductWeightGrams: DEFAULT_PRODUCT_WEIGHT_GRAMS,
+} as const;
