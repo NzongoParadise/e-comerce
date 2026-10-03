@@ -114,6 +114,11 @@ export async function POST(request: Request) {
       : action === 'register' ? rateLimit(request, 'auth:register', 5, 15 * 60_000)
         : null;
   if (limit) return limit;
+  const limit = action === 'login' ? rateLimit(request, 'auth:login', 10, 60_000)
+    : action === 'forgot-password' ? rateLimit(request, 'auth:forgot', 5, 15 * 60_000)
+      : action === 'register' ? rateLimit(request, 'auth:register', 5, 15 * 60_000)
+        : null;
+  if (limit) return limit;
   if (action === 'register') {
     const parsed = registerSchema.safeParse(await readJson(request));
     if (!parsed.success) return errorResponse('Invalid registration data', 400);
