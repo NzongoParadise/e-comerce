@@ -6,7 +6,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { canRequestB2BAccount, getUserRoles } from '@/lib/auth';
 import { prisma } from '@/lib/server/prisma';
-import { authenticate, errorResponse, isAdmin, prismaErrorCode, readJson, userSubject } from '@/lib/server/api';
+import { authenticate, errorResponse, isAdmin, prismaErrorCode, readJson, rateLimit, userSubject } from '@/lib/server/api';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -109,6 +109,16 @@ async function removeDocuments(files: { path: string }[]) {
 
 export async function POST(request: Request) {
   const action = routeName(request);
+  const limit = action === 'login' ? rateLimit(request, 'auth:login', 10, 60_000)
+    : action === 'forgot-password' ? rateLimit(request, 'auth:forgot', 5, 15 * 60_000)
+      : action === 'register' ? rateLimit(request, 'auth:register', 5, 15 * 60_000)
+        : null;
+  if (limit) return limit;
+  const limit = action === 'login' ? rateLimit(request, 'auth:login', 10, 60_000)
+    : action === 'forgot-password' ? rateLimit(request, 'auth:forgot', 5, 15 * 60_000)
+      : action === 'register' ? rateLimit(request, 'auth:register', 5, 15 * 60_000)
+        : null;
+  if (limit) return limit;
   if (action === 'register') {
     const parsed = registerSchema.safeParse(await readJson(request));
     if (!parsed.success) return errorResponse('Invalid registration data', 400);
@@ -192,8 +202,6 @@ export async function GET(request: Request) {
         accountName: profile.accountName,
         accountType: profile.accountType,
         b2bRequestStatus: profile.b2bRequestStatus,
-        companyDocumentPath: profile.companyDocumentPath,
-        personalDocumentPath: profile.personalDocumentPath,
         roles,
       },
     });
