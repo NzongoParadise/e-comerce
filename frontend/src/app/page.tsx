@@ -73,7 +73,7 @@ export default function HomePage() {
         {banners.map((src, index) => <div key={src} className={`absolute inset-0 transition-opacity duration-700 ${index === banner ? "opacity-100" : "pointer-events-none opacity-0"}`}><Image src={src} alt={`Campanha RUBRICA DILIGENTE (SU), LDA ${index + 1}`} fill sizes="(max-width: 1024px) 100vw, 75vw" priority={index === 0} className="object-cover" /></div>)}
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(246,183,60,0.30),_transparent_28%),linear-gradient(90deg,rgba(7,21,37,0.90)_0%,rgba(7,21,37,0.72)_38%,rgba(7,21,37,0.20)_100%)]" />
         <div className="relative z-10 flex min-h-[340px] max-w-xl flex-col justify-center px-6 py-9 text-white md:min-h-[410px] md:px-10">
-          <p className="mb-3 text-xs font-black uppercase tracking-[0.18em] text-[#f6b73c]">RUBRICA DILIGENTE (SU), LDA marketplace</p>
+          <p className="mb-3 text-xs font-black uppercase tracking-[0.18em] text-[#f6b73c]">RUBRICA DILIGENTE (SU), LDA</p>
           <h1 className="max-w-md text-4xl font-black leading-[1.02] sm:text-5xl">Tecnologia para avançar.</h1>
           <p className="mt-4 max-w-sm text-sm leading-6 text-blue-50 sm:text-base">Equipamentos originais, preços competitivos e entrega segura em Angola e Portugal.</p>
           <div className="mt-6 flex flex-wrap gap-2">
