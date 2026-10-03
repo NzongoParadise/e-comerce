@@ -270,7 +270,13 @@ export async function POST(request: Request) {
       if (Math.abs(Number(eurPrice) - item.priceEUR) > 0.01 || Math.abs(Number(aoPrice) - item.priceKZ) > 0.01) throw new Error('PRICE_CHANGED');
       return { item, product, eurPrice: Number(eurPrice), aoPrice: Number(aoPrice) };
     });
-    const estimatedCartWeightKg = estimateCartWeightKg(parsed.data.items);
+    const estimatedCartWeightKg = estimateCartWeightKg(calculatedItems.map(({ item, product }) => ({
+      quantity: item.quantity,
+      weightGrams: product.weightGrams,
+      lengthCm: product.lengthCm ? Number(product.lengthCm) : null,
+      widthCm: product.widthCm ? Number(product.widthCm) : null,
+      heightCm: product.heightCm ? Number(product.heightCm) : null,
+    })));
     const shippingCost = calculateShipping({
       country: parsed.data.country,
       deliveryMode: parsed.data.deliveryMode,
