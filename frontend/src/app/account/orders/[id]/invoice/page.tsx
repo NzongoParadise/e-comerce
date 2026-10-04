@@ -43,6 +43,9 @@ type InvoiceOrder = {
   totalKZ: string;
   discountTotalEUR?: string;
   discountTotalKZ?: string;
+  agtDocumentNo?: string | null;
+  agtStatus?: string | null;
+  agtQrUrl?: string | null;
   createdAt: string;
   items: InvoiceItem[];
   payment?: InvoicePayment | null;
@@ -117,7 +120,8 @@ export default function InvoicePage() {
     typeof window !== "undefined"
       ? `${window.location.origin}/account/orders/${id}/invoice`
       : `/account/orders/${id}/invoice`;
-  const qrUrl = `https://quickchart.io/qr?text=${encodeURIComponent(invoiceUrl)}&format=svg&size=220&margin=2`;
+  const consultationUrl = order.agtQrUrl || invoiceUrl;
+  const qrUrl = `https://quickchart.io/qr?text=${encodeURIComponent(consultationUrl)}&format=png&size=350&margin=2`;
 
   return (
     <>
@@ -147,7 +151,7 @@ export default function InvoicePage() {
               height={110}
               className="invoice-qr"
             />
-            <small>Consulta digital</small>
+            <small>{order.agtQrUrl ? "Consulta AGT" : "Consulta digital"}</small>
           </div>
         </header>
 
@@ -172,6 +176,8 @@ export default function InvoicePage() {
             <p>Data: {new Date(order.createdAt).toLocaleDateString("pt-PT")}</p>
             <p>Estado: {labelStatus(order.status)}</p>
             <p>Moeda: {currency}</p>
+            {order.agtDocumentNo && <p>Documento AGT: {order.agtDocumentNo}</p>}
+            {order.agtStatus && <p>Estado AGT: {order.agtStatus}</p>}
           </div>
         </section>
 
@@ -219,8 +225,12 @@ export default function InvoicePage() {
 
         <footer className="invoice-footer">
           <p>Obrigado pela sua compra.</p>
-          <p>Este documento é um comprovativo da encomenda e do pagamento registado no sistema.</p>
-          <p>Não substitui uma fatura fiscal certificada pela AGT quando tal certificação for legalmente exigida.</p>
+          <p>Este documento apresenta os dados da encomenda e, quando disponível, a referência fiscal AGT.</p>
+          {order.agtDocumentNo ? (
+            <p>Documento AGT: {order.agtDocumentNo}. QR destinado à consulta no serviço de verificação da AGT.</p>
+          ) : (
+            <p>Ainda sem número de documento fiscal AGT. A emissão fiscal depende da configuração e validação do software junto da AGT.</p>
+          )}
         </footer>
       </main>
 
