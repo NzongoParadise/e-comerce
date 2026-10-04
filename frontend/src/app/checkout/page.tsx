@@ -21,6 +21,7 @@ export default function CheckoutPage() {
   const [accountProfile, setAccountProfile] = useState<{ name?: string; email?: string }>({});
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
+  const [savedPaymentMethods, setSavedPaymentMethods] = useState<Array<{ id: number; type: string; label: string; lastFour?: string; phoneNumber?: string; isDefault: boolean; stripeReady?: boolean }>>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<number | null>(null);
   const [loadingAddresses, setLoadingAddresses] = useState(true);
   const [addressLoadError, setAddressLoadError] = useState(false);
@@ -69,6 +70,35 @@ export default function CheckoutPage() {
       });
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    if (!localStorage.getItem("jwt_token")) return () => { active = false; };
+
+    fetchWithAuth("/api/account/payment-methods")
+      .then((response) => {
+        if (!active) return;
+        const methods: Array<{ id: number; type: string; label: string; lastFour?: string; phoneNumber?: string; isDefault: boolean; stripeReady?: boolean }> = Array.isArray(response.data) ? response.data : [];
+        setSavedPaymentMethods(methods);
+
+        const availableMethods = methods.filter((method) => method.type !== "CARD" || method.stripeReady);
+        const defaultMethod = availableMethods.find((method) => method.isDefault) ?? availableMethods[0];
+        if (!defaultMethod) return;
+
+        if (country === "PT" && defaultMethod.type === "MBWAY") {
+          setPaymentMethod("mbway");
+        }
+
+        if (country === "PT" && defaultMethod.type === "CARD") {
+          setPaymentMethod("card");
+        }
+      })
+      .catch(() => {
+        if (active) setSavedPaymentMethods([]);
+      });
+
+    return () => { active = false; };
+  }, [country]);
   
   if (!isLoaded) {
     return <div className="container mx-auto px-4 py-24 text-center text-sm text-gray-500" role="status">A carregar o carrinho...</div>;
@@ -84,7 +114,10 @@ export default function CheckoutPage() {
   }
 
   const selectedAddress = savedAddresses.find((savedAddress) => savedAddress.id === selectedAddressId);
-  const phone = selectedAddress?.phone || "";
+  const defaultSavedPhone = savedPaymentMethods.find((method) => method.isDefault)?.phoneNumber || savedPaymentMethods[0]?.phoneNumber || "";
+  const availableSavedMethods = savedPaymentMethods.filter((method) => method.type !== "CARD" || method.stripeReady);
+  const defaultSavedMethod = availableSavedMethods.find((method) => method.isDefault) ?? availableSavedMethods[0];
+  const phone = selectedAddress?.phone || defaultSavedPhone || "";
   const billingName = accountProfile.name || selectedAddress?.recipient || "";
   const activeDeliveryMode = country === "PT" && deliveryMode === "pickup" ? "address" : deliveryMode;
   const activeShippingMethod = country === "PT" && deliveryMode === "pickup" ? "standard" : shippingMethod;
@@ -123,6 +156,10 @@ export default function CheckoutPage() {
     }
     if (country === "AO" && activePaymentMethod === "multicaixa_express" && !phone.trim()) {
       setMessage("Indique o telefone associado ao pagamento MULTICAIXA.");
+      return;
+    }
+    if (country === "PT" && activePaymentMethod === "mbway" && !phone.trim()) {
+      setMessage("Indique o telefone associado ao pagamento MB WAY.");
       return;
     }
     if (!acceptedTerms) {
@@ -305,19 +342,63 @@ export default function CheckoutPage() {
               <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-white font-bold">3</span>
               <h2 className="text-lg font-bold text-gray-900">Método de pagamento</h2>
             </div>
+            <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800">
+              {defaultSavedMethod ? (
+                <span>
+                  Pagamento rápido ativo: <strong>{defaultSavedMethod.type === "CARD" ? "Cartão guardado" : defaultSavedMethod.type === "MBWAY" ? "MB WAY guardado" : "Método guardado"}</strong>.
+                </span>
+              ) : (
+                <span>Escolha uma opção abaixo para concluir o pagamento de forma segura.</span>
+              )}
+            </div>
+
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {[
                 ["multicaixa_reference", "Referência MULTICAIXA", "Pague numa caixa automática ou no homebanking", CreditCard],
                 ["multicaixa_express", "MULTICAIXA Express", "Autorize o pagamento na aplicação MCX Express", CreditCard],
                 ["transfer", "Transferência bancária", "Confirmação em até 24h", Building2],
                 ["card", "Cartão de crédito / débito", "Visa e Mastercard", CreditCard],
+                ["mbway", "MB WAY", "Pague usando o seu telemóvel", CreditCard],
                 ["cash", "Pagamento na entrega", "Disponível em Luanda", Banknote],
-              ].filter(([value]) => (country === "AO" || !["multicaixa_reference", "multicaixa_express", "cash"].includes(value as string)) && !(country === "AO" && value === "card") && !(value === "multicaixa_express" && !phone)).map(([value, title, description, Icon]) => {
+              ].filter(([value]) => {
+                if (country === "AO") {
+                  return !["card", "mbway", "cash"].includes(value as string) && !(value === "multicaixa_express" && !phone);
+                }
+                if (country === "PT") {
+                  return !["multicaixa_reference", "multicaixa_express", "cash"].includes(value as string);
+                }
+                return true;
+              }).map(([value, title, description, Icon]) => {
                 const PaymentIcon = Icon as typeof CreditCard;
+                const showSavedBadge =
+                  (value === "card" && defaultSavedMethod?.type === "CARD") ||
+                  (value === "mbway" && defaultSavedMethod?.type === "MBWAY");
+                const paymentTitle = value === "card" && defaultSavedMethod?.type === "CARD" && defaultSavedMethod.lastFour
+                  ? `${defaultSavedMethod.label} •••• ${defaultSavedMethod.lastFour}`
+                  : title as string;
+
                 return (
-                  <button type="button" key={value as string} aria-pressed={activePaymentMethod === value} onClick={() => setPaymentMethod(value as string)} className={`flex items-center gap-3 rounded-lg border p-4 text-left transition ${activePaymentMethod === value ? "border-primary bg-blue-50" : "border-gray-200 hover:border-gray-300"}`}>
-                    <PaymentIcon size={22} className={activePaymentMethod === value ? "text-primary" : "text-gray-500"} aria-hidden="true" />
-                    <span><span className="block text-sm font-bold text-gray-900">{title as string}</span><span className="block text-xs text-gray-500">{description as string}</span></span>
+                  <button
+                    type="button"
+                    key={value as string}
+                    aria-pressed={activePaymentMethod === value}
+                    onClick={() => setPaymentMethod(value as string)}
+                    className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${activePaymentMethod === value ? "border-primary bg-blue-50 shadow-sm" : "border-gray-200 hover:border-gray-300"}`}
+                  >
+                    <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-gray-100">
+                      <PaymentIcon size={22} className={activePaymentMethod === value ? "text-primary" : "text-gray-500"} aria-hidden="true" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="block text-sm font-bold text-gray-900">{paymentTitle}</span>
+                        {showSavedBadge && (
+                          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-emerald-700">
+                            Guardado
+                          </span>
+                        )}
+                      </div>
+                      <span className="mt-1 block text-xs text-gray-500">{description as string}</span>
+                    </div>
                   </button>
                 );
               })}

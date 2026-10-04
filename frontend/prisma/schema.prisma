@@ -106,6 +106,7 @@ model User {
   accountType  String   @default("B2C")
   accessRole   String   @default("CUSTOMER")
   status       String   @default("ACTIVE")
+  stripeCustomerId String? @unique
   b2bRequestStatus String @default("NONE")
   companyDocumentPath String?
   personalDocumentPath String?

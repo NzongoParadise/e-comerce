@@ -2,10 +2,12 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/server/prisma';
 import { authenticate, errorResponse, readJson, userSubject } from '@/lib/server/api';
 import { cancelAwaitingPaymentAndReleaseStock } from '@/lib/server/orders/inventory';
+import { logger } from '@/lib/server/logger';
 import { isStripeCurrencySupported, toStripeMinorUnits } from '@/lib/server/payments/stripeAmounts';
 import { isDefinitiveStripeRejection, isStripeSessionForOrder, stripeCheckoutIdempotencyKey } from '@/lib/server/payments/stripeRequestRules';
 import { calculateShipping, estimateCartWeightKg } from '@/lib/shipping';
 import { evaluateOrderPromotions, legacyCouponDiscount, reservePromotionUsages } from '@/lib/server/promotions/engine';
+import { ensureStripeCustomer } from '@/lib/server/payments/stripeCustomers';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -24,7 +26,7 @@ const orderSchema = z.object({
   currency: z.enum(['AOA', 'EUR']).optional(),
   deliveryMode: z.enum(['address', 'pickup', 'business']),
   shippingMethod: z.enum(['standard', 'express', 'pickup']),
-  paymentMethod: z.enum(['multicaixa_reference', 'multicaixa_express', 'multicaixa', 'transfer', 'card', 'cash']),
+  paymentMethod: z.enum(['multicaixa_reference', 'multicaixa_express', 'multicaixa', 'transfer', 'card', 'mbway', 'cash']),
   address: z.string().max(500).optional(),
   phone: z.string().max(40).optional(),
   billingName: z.string().max(200).optional(),
@@ -71,10 +73,11 @@ function parseStripeCheckoutSession(value: unknown): StripeCheckoutSession {
   };
 }
 
-async function createStripeCheckout(orderId: number, orderNumber: string, amount: number, expiresAt: Date) {
+async function createStripeCheckout(orderId: number, orderNumber: string, amount: number, expiresAt: Date, paymentMethod: 'card' | 'mbway') {
   const secretKey = process.env.STRIPE_SECRET_KEY;
   if (!secretKey) throw new Error('PAYMENT_PROVIDER_NOT_CONFIGURED');
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const paymentMethodTypes = paymentMethod === 'mbway' ? ['mb_way'] : ['card'];
   const params = new URLSearchParams({
     mode: 'payment',
     success_url: `${frontendUrl}/confirmation/${orderId}?payment=success`,
@@ -86,6 +89,16 @@ async function createStripeCheckout(orderId: number, orderNumber: string, amount
     expires_at: String(Math.floor(expiresAt.getTime() / 1000)),
     client_reference_id: orderNumber,
     'metadata[orderId]': String(orderId),
+  });
+  if (paymentMethod === 'card') {
+    const order = await prisma.order.findUnique({ where: { id: orderId }, select: { userId: true } });
+    if (!order) throw new Error('Order not found for Stripe checkout');
+    params.set('customer', await ensureStripeCustomer(order.userId));
+    params.set('saved_payment_method_options[payment_method_save]', 'enabled');
+    params.set('saved_payment_method_options[allow_redisplay]', 'always');
+  }
+  paymentMethodTypes.forEach((method, index) => {
+    params.set(`payment_method_types[${index}]`, method);
   });
   const response = await fetch('https://api.stripe.com/v1/checkout/sessions', {
     method: 'POST',
@@ -142,9 +155,9 @@ async function findStripeCheckoutForOrder(orderId: number, orderNumber: string, 
   return matches[0];
 }
 
-async function createOrReconcileStripeCheckout(orderId: number, orderNumber: string, amount: number, expiresAt: Date, createdAt: Date) {
+async function createOrReconcileStripeCheckout(orderId: number, orderNumber: string, amount: number, expiresAt: Date, createdAt: Date, paymentMethod: 'card' | 'mbway') {
   try {
-    return await createStripeCheckout(orderId, orderNumber, amount, expiresAt);
+    return await createStripeCheckout(orderId, orderNumber, amount, expiresAt, paymentMethod);
   } catch (error) {
     if (error instanceof StripeCheckoutRejectedError || (error instanceof Error && error.message === 'PAYMENT_PROVIDER_NOT_CONFIGURED')) throw error;
     const checkout = await findStripeCheckoutForOrder(orderId, orderNumber, createdAt);
@@ -153,10 +166,10 @@ async function createOrReconcileStripeCheckout(orderId: number, orderNumber: str
   }
 }
 
-async function saveStripeCheckout(orderId: number, checkout: StripeCheckoutSession, fallbackExpiresAt: Date) {
+async function saveStripeCheckout(orderId: number, checkout: StripeCheckoutSession, fallbackExpiresAt: Date, paymentMethod: 'card' | 'mbway') {
   return prisma.$transaction(async (transaction) => {
     const pendingOrder = await transaction.order.updateMany({
-      where: { id: orderId, status: 'AWAITING_PAYMENT' },
+      where: { id: orderId, status: { in: ['AWAITING_PAYMENT', 'PROCESSING'] }, paymentMethod },
       data: { status: 'AWAITING_PAYMENT' },
     });
     if (!pendingOrder.count) return false;
@@ -164,7 +177,7 @@ async function saveStripeCheckout(orderId: number, checkout: StripeCheckoutSessi
       where: { orderId, status: { in: ['PENDING', 'REQUIRES_PAYMENT'] } },
       data: {
         provider: 'stripe',
-        method: 'card',
+        method: paymentMethod,
         status: 'REQUIRES_PAYMENT',
         reference: checkout.id,
         expiresAt: checkout.expiresAt || fallbackExpiresAt,
@@ -189,10 +202,10 @@ async function handleDefinitiveStripeRejection(orderId: number, items: { product
     const cancelled = await cancelForStripeRejection(orderId, items, 'Encomenda cancelada porque o gateway recusou a criação do pagamento.');
     if (!cancelled) return errorResponse('O estado da encomenda mudou durante a tentativa de pagamento.', 409);
   } catch (rollbackError) {
-    console.error('Failed to release stock after Stripe rejection:', rollbackError);
+    logger.error('Failed to release stock after Stripe rejection', { orderId, error: rollbackError instanceof Error ? rollbackError.message : rollbackError, items });
     return errorResponse('Não foi possível concluir o pagamento. Contacte o suporte antes de repetir.', 503);
   }
-  console.error('Stripe rejected checkout creation:', error.statusCode);
+  logger.error('Stripe rejected checkout creation', { orderId, statusCode: error.statusCode });
   return errorResponse('O gateway recusou iniciar o pagamento. Tente novamente.', 502);
 }
 
@@ -212,11 +225,12 @@ export async function POST(request: Request) {
     });
     if (existingOrder?.status === 'CANCELLED') return errorResponse('Esta tentativa foi cancelada. Inicie uma nova tentativa de checkout.', 409);
     if (existingOrder) {
-      if (existingOrder.paymentMethod === 'card' && existingOrder.status === 'AWAITING_PAYMENT' && existingOrder.payment?.status !== 'PAID') {
+      if ((existingOrder.paymentMethod === 'card' || existingOrder.paymentMethod === 'mbway') && ['AWAITING_PAYMENT', 'PROCESSING'].includes(existingOrder.status) && existingOrder.payment?.status !== 'PAID') {
         const payment = existingOrder.payment;
         if (!payment) return errorResponse('Pagamento da encomenda não encontrado. Contacte o suporte.', 503);
         const expiresAt = payment.expiresAt;
         if (!expiresAt) return errorResponse('A tentativa de pagamento requer reconciliação. Contacte o suporte.', 503);
+        const stripePaymentMethod = existingOrder.paymentMethod === 'mbway' ? 'mbway' : 'card';
         try {
           const checkout = payment.reference
             ? await retrieveStripeCheckout(payment.reference)
@@ -226,6 +240,7 @@ export async function POST(request: Request) {
               Number(existingOrder.totalEUR),
               expiresAt,
               existingOrder.createdAt,
+              stripePaymentMethod,
             );
           if (checkout.status === 'expired') {
             await prisma.$transaction((transaction) => cancelAwaitingPaymentAndReleaseStock(
@@ -237,7 +252,7 @@ export async function POST(request: Request) {
             ));
             return errorResponse('A sessão de pagamento expirou. Inicie uma nova tentativa.', 409);
           }
-          await saveStripeCheckout(existingOrder.id, checkout, expiresAt);
+          await saveStripeCheckout(existingOrder.id, checkout, expiresAt, stripePaymentMethod);
           return Response.json({ data: {
             id: existingOrder.id,
             orderNumber: existingOrder.orderNumber,
@@ -249,7 +264,7 @@ export async function POST(request: Request) {
             return handleDefinitiveStripeRejection(existingOrder.id, existingOrder.items, error);
           }
           if (error instanceof Error && error.message === 'PAYMENT_PROVIDER_NOT_CONFIGURED') return errorResponse('Pagamentos por cartão não estão configurados', 503);
-          console.error('Error reconciling Stripe checkout:', error);
+          logger.error('Error reconciling Stripe checkout', { orderId: existingOrder.id, orderNumber: existingOrder.orderNumber, error: error instanceof Error ? error.message : error });
           return errorResponse('Não foi possível confirmar o estado da tentativa. Tente novamente ou contacte o suporte.', 503);
         }
       }
@@ -314,13 +329,13 @@ export async function POST(request: Request) {
     }
     const promoDiscount = promotionResult.discountTotal + (legacyCoupon?.amount || 0);
     const promoShippingDiscount = promotionResult.shippingDiscount;
-    const finalProductTotal = Math.max(0, promotionSubtotal - promoDiscount);
     const finalShipping = Math.max(0, shippingCost - promoShippingDiscount);
     const totalEUR = Math.max(0, productTotalEUR - (parsed.data.country === 'PT' ? promoDiscount : 0) + (parsed.data.country === 'PT' ? finalShipping : 0));
     const totalKZ = Math.max(0, productTotalKZ - (parsed.data.country === 'AO' ? promoDiscount : 0) + (parsed.data.country === 'AO' ? finalShipping : 0));
-    if (parsed.data.paymentMethod === 'card' && !isStripeCurrencySupported(currency)) return errorResponse('Pagamentos por cartão não estão disponíveis para encomendas em AOA. Selecione MULTICAIXA.', 400);
-    if (parsed.data.paymentMethod === 'card' && !process.env.STRIPE_SECRET_KEY) return errorResponse('Pagamentos por cartão não estão configurados', 503);
-    const stripeExpiresAt = parsed.data.paymentMethod === 'card' ? new Date(Date.now() + 60 * 60 * 1000) : undefined;
+    const isStripePayment = parsed.data.paymentMethod === 'card' || parsed.data.paymentMethod === 'mbway';
+    if (isStripePayment && !isStripeCurrencySupported(currency)) return errorResponse('Pagamentos por cartão e MB WAY não estão disponíveis para encomendas em AOA. Selecione MULTICAIXA.', 400);
+    if (isStripePayment && !process.env.STRIPE_SECRET_KEY) return errorResponse('Pagamentos por cartão não estão configurados', 503);
+    const stripeExpiresAt = isStripePayment ? new Date(Date.now() + 60 * 60 * 1000) : undefined;
     const orderNumber = `TG${new Date().getFullYear()}${String(Date.now()).slice(-8)}`;
     const order = await prisma.$transaction(async (transaction) => {
       for (const entry of calculatedItems) {
@@ -334,7 +349,7 @@ export async function POST(request: Request) {
         data: {
           orderNumber,
           idempotencyKey,
-          status: ['card', 'multicaixa_reference', 'multicaixa_express', 'multicaixa'].includes(parsed.data.paymentMethod) ? 'AWAITING_PAYMENT' : 'PROCESSING',
+          status: ['card', 'mbway', 'multicaixa_reference', 'multicaixa_express', 'multicaixa'].includes(parsed.data.paymentMethod) ? 'AWAITING_PAYMENT' : 'PROCESSING',
           userId: user.id,
           deliveryMode: parsed.data.deliveryMode,
           shippingMethod: parsed.data.shippingMethod,
@@ -368,7 +383,7 @@ export async function POST(request: Request) {
           })) },
           payment: { create: {
             userId: user.id,
-            provider: parsed.data.paymentMethod === 'card' ? 'stripe' : parsed.data.paymentMethod,
+            provider: isStripePayment ? 'stripe' : parsed.data.paymentMethod,
             method: parsed.data.paymentMethod,
             status: 'PENDING',
             amountEUR: totalEUR,
@@ -404,9 +419,10 @@ export async function POST(request: Request) {
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5000, timeout: 10000 });
 
     let checkoutUrl: string | undefined;
-    if (parsed.data.paymentMethod === 'card') {
+    if (isStripePayment) {
       try {
-        const checkout = await createOrReconcileStripeCheckout(order.id, order.orderNumber, totalEUR, stripeExpiresAt!, order.createdAt);
+        const stripePaymentMethod = parsed.data.paymentMethod === 'mbway' ? 'mbway' : 'card';
+        const checkout = await createOrReconcileStripeCheckout(order.id, order.orderNumber, totalEUR, stripeExpiresAt!, order.createdAt, stripePaymentMethod);
         if (checkout.status === 'expired') {
           await prisma.$transaction((transaction) => cancelAwaitingPaymentAndReleaseStock(
             transaction,
@@ -418,7 +434,7 @@ export async function POST(request: Request) {
           return errorResponse('A sessão de pagamento expirou. Inicie uma nova tentativa.', 409);
         }
         checkoutUrl = checkout.status === 'open' ? checkout.url : undefined;
-        const saved = await saveStripeCheckout(order.id, checkout, stripeExpiresAt!);
+        const saved = await saveStripeCheckout(order.id, checkout, stripeExpiresAt!, stripePaymentMethod);
         if (!saved) return errorResponse('O estado da encomenda mudou durante a criação do pagamento.', 409);
       } catch (error) {
         if (error instanceof StripeCheckoutRejectedError) {
@@ -429,7 +445,7 @@ export async function POST(request: Request) {
           );
         }
         if (error instanceof Error && error.message === 'PAYMENT_PROVIDER_NOT_CONFIGURED') return errorResponse('Pagamentos por cartão não estão configurados', 503);
-        console.error('Error creating Stripe checkout:', error);
+        logger.error('Error creating Stripe checkout', { orderId: order.id, orderNumber: order.orderNumber, amountEUR: totalEUR, error: error instanceof Error ? error.message : error });
         return errorResponse('Não foi possível confirmar o estado da tentativa de pagamento. Contacte o suporte antes de repetir.', 503);
       }
     }
@@ -440,7 +456,7 @@ export async function POST(request: Request) {
     if (error instanceof Error && error.message === 'PRICE_CHANGED') return errorResponse('O preço de um produto foi atualizado. Reveja o carrinho.', 409);
     if (error instanceof Error && ['PROMOTION_CHANGED', 'PROMOTION_LIMIT', 'PROMOTION_CUSTOMER_LIMIT'].includes(error.message)) return errorResponse('A promoção já não está disponível. Atualize o carrinho e tente novamente.', 409);
     if ((error as Prisma.PrismaClientKnownRequestError)?.code === 'P2034') return errorResponse('A operação concorreu com outra compra. Tente novamente.', 409);
-    console.error('Error creating order:', error);
+    logger.error('Error creating order', { error: error instanceof Error ? error.message : error });
     return errorResponse('Unable to create order', 503);
   }
 }

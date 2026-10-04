@@ -2,8 +2,10 @@ import crypto from 'node:crypto';
 import { prisma } from '@/lib/server/prisma';
 import { cancelAwaitingPaymentAndReleaseStock } from '@/lib/server/orders/inventory';
 import { multicaixaProvider } from '@/lib/server/payments/multicaixaProvider';
+import { logger } from '@/lib/server/logger';
 import { isStripeCurrencySupported, matchesStripePayment } from '@/lib/server/payments/stripeAmounts';
 import { authenticate, errorResponse, readJson, userSubject } from '@/lib/server/api';
+import { setStripeDefaultPaymentMethod } from '@/lib/server/payments/stripeCustomers';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -96,7 +98,7 @@ export async function POST(request: Request) {
   } catch (error) {
     await prisma.paymentAttempt.update({ where: { id: attempt.id }, data: { status: error instanceof Error && error.message === 'MULTICAIXA_NOT_CONFIGURED' ? 'PAYMENT_NOT_CONFIGURED' : 'FAILED' } });
     if (error instanceof Error && error.message === 'MULTICAIXA_NOT_CONFIGURED') return errorResponse('Gateway MULTICAIXA não configurado', 503);
-    console.error('MULTICAIXA payment error:', error);
+    logger.error('MULTICAIXA payment error', { orderId: order.id, paymentId: order.payment.id, method: parsed.data.method, error: error instanceof Error ? error.message : error });
     return errorResponse('Não foi possível iniciar o pagamento MULTICAIXA', 502);
   }
 }
@@ -116,13 +118,16 @@ export async function GET(request: Request) {
 
 async function handleMulticaixaWebhook(request: Request) {
   const rawBody = Buffer.from(await request.arrayBuffer());
-  if (!multicaixaProvider.verifyWebhook(rawBody, request.headers.get('x-multicaixa-signature') || undefined)) {
+  const signature = request.headers.get('x-multicaixa-signature') || undefined;
+  if (!multicaixaProvider.verifyWebhook(rawBody, signature)) {
+    logger.warn('Rejected Multicaixa webhook signature', { hasSignature: Boolean(signature) });
     return errorResponse('Invalid webhook signature', 401);
   }
   let event;
   try {
     event = multicaixaProvider.parseWebhook(rawBody);
-  } catch {
+  } catch (error) {
+    logger.warn('Invalid Multicaixa webhook payload', { error: error instanceof Error ? error.message : error });
     return errorResponse('Invalid webhook payload', 400);
   }
   const payment = await prisma.payment.findUnique({ where: { providerPaymentId: event.providerPaymentId } });
@@ -154,24 +159,81 @@ async function handleStripeWebhook(request: Request) {
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
   const signature = request.headers.get('stripe-signature');
   const rawBody = Buffer.from(await request.arrayBuffer());
-  if (!secret || !signature) return errorResponse('Invalid Stripe webhook configuration', 400);
+  if (!secret || !signature) {
+    logger.warn('Stripe webhook misconfigured', { hasSecret: Boolean(secret), hasSignature: Boolean(signature) });
+    return errorResponse('Invalid Stripe webhook configuration', 400);
+  }
   const timestamp = signature.match(/(?:^|,)t=(\d+)/)?.[1];
   const received = signature.match(/(?:^|,)v1=([^,]+)/)?.[1];
-  if (!timestamp || !received || Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) return errorResponse('Invalid Stripe signature', 400);
+  if (!timestamp || !received || Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) {
+    logger.warn('Rejected Stripe webhook signature: invalid timestamp or payload', { hasTimestamp: Boolean(timestamp), hasSignature: Boolean(received) });
+    return errorResponse('Invalid Stripe signature', 400);
+  }
   const signedPayload = `${timestamp}.${rawBody.toString('utf8')}`;
   const expected = crypto.createHmac('sha256', secret).update(signedPayload).digest('hex');
-  if (expected.length !== received.length || !crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(received))) return errorResponse('Invalid Stripe signature', 401);
+  if (expected.length !== received.length || !crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(received))) {
+    logger.warn('Rejected Stripe webhook signature: hash mismatch');
+    return errorResponse('Invalid Stripe signature', 401);
+  }
   let event: {
     id?: unknown;
     type?: unknown;
-    data?: { object?: { id?: unknown; metadata?: { orderId?: unknown }; currency?: unknown; amount_total?: unknown; payment_status?: unknown; status?: unknown } };
+    data?: { object?: { id?: unknown; customer?: unknown; payment_method?: unknown; metadata?: { orderId?: unknown; userId?: unknown; label?: unknown; isDefault?: unknown }; currency?: unknown; amount_total?: unknown; payment_status?: unknown; status?: unknown } };
   };
   try {
     event = JSON.parse(rawBody.toString('utf8'));
-  } catch {
+  } catch (error) {
+    logger.warn('Invalid Stripe webhook payload', { error: error instanceof Error ? error.message : error });
     return errorResponse('Invalid Stripe webhook payload', 400);
   }
   const eventType = String(event.type);
+  logger.info('Received Stripe webhook', { eventType, orderId: Number(event.data?.object?.metadata?.orderId) || null, sessionId: event.data?.object?.id || null });
+  if (eventType === 'setup_intent.succeeded') {
+    const intent = event.data?.object;
+    if (!intent) return errorResponse('Invalid Stripe setup intent', 400);
+    const userId = Number(intent?.metadata?.userId);
+    const customerId = intent?.customer;
+    const paymentMethodId = intent?.payment_method;
+    if (!Number.isSafeInteger(userId) || typeof customerId !== 'string' || typeof paymentMethodId !== 'string' || typeof event.id !== 'string') {
+      return errorResponse('Invalid Stripe setup intent', 400);
+    }
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { stripeCustomerId: true } });
+    if (!user?.stripeCustomerId || user.stripeCustomerId !== customerId) return errorResponse('Stripe customer mismatch', 422);
+    const secretKey = process.env.STRIPE_SECRET_KEY;
+    if (!secretKey) return errorResponse('Stripe is not configured', 503);
+    const methodResponse = await fetch(`https://api.stripe.com/v1/payment_methods/${encodeURIComponent(paymentMethodId)}`, {
+      headers: { Authorization: `Bearer ${secretKey}` },
+    });
+    const method = await methodResponse.json() as { id?: unknown; customer?: unknown; type?: unknown; card?: { brand?: unknown; last4?: unknown } };
+    const lastFour = method.card?.last4;
+    if (!methodResponse.ok || method.id !== paymentMethodId || method.customer !== customerId || method.type !== 'card' || typeof lastFour !== 'string') {
+      return errorResponse('Stripe payment method is invalid', 422);
+    }
+    const existing = await prisma.savedPaymentMethod.findFirst({ where: { userId, providerToken: paymentMethodId } });
+    const hasDefault = await prisma.savedPaymentMethod.findFirst({ where: { userId, isDefault: true } });
+    const makeDefault = intent.metadata?.isDefault === 'true' || !hasDefault;
+    if (makeDefault) await setStripeDefaultPaymentMethod(customerId, paymentMethodId);
+    const cardBrand = typeof method.card?.brand === 'string' ? method.card.brand.toUpperCase() : 'CARTÃO';
+    const label = typeof intent.metadata?.label === 'string' && intent.metadata.label.trim()
+      ? intent.metadata.label.trim().slice(0, 80)
+      : `${cardBrand} terminado em ${lastFour}`;
+    await prisma.$transaction(async (transaction) => {
+      if (makeDefault) await transaction.savedPaymentMethod.updateMany({ where: { userId }, data: { isDefault: false } });
+      if (existing) {
+        await transaction.savedPaymentMethod.update({ where: { id: existing.id }, data: { label, type: 'CARD', lastFour, isDefault: makeDefault } });
+      } else {
+        await transaction.savedPaymentMethod.create({ data: {
+          userId,
+          type: 'CARD',
+          label,
+          lastFour,
+          providerToken: paymentMethodId,
+          isDefault: makeDefault,
+        } });
+      }
+    });
+    return Response.json({ received: true });
+  }
   const successEvent = ['checkout.session.completed', 'checkout.session.async_payment_succeeded'].includes(eventType);
   const failedEvent = ['checkout.session.expired', 'checkout.session.async_payment_failed'].includes(eventType);
   if (!successEvent && !failedEvent) return Response.json({ received: true });

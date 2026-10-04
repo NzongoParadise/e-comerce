@@ -43,10 +43,18 @@ npm run lint --workspace frontend
 ## Environment files
 
 - `.env.example` documents the root variables used by Docker Compose.
-- `frontend/.env.example` documents API, authentication, and payment-provider variables.
-- Never commit `.env`, `frontend/.env.local`, credentials, or production secrets.
+- `frontend/.env.example` documents the local development template.
+- `frontend/.env.production.example` documents the required production values for Vercel/Render deployment.
+- Never commit `.env`, `frontend/.env.local`, `.env.production`, credentials, or production secrets.
 
 Payment providers and external authentication integrations require their corresponding environment variables before they can be used. External identity providers need `JWKS_URI` and, when required by the provider, `AUTH_ISSUER` and `AUTH_AUDIENCE`. Password reset returns a development-only token until an email delivery provider is configured.
+
+Production checklist:
+
+1. Copy `frontend/.env.production.example` to `frontend/.env.production` for a local production-like check.
+2. Fill in the real `DATABASE_URL`, `JWT_SECRET`, `FRONTEND_URL`, `JWKS_URI`, `AUTH_ISSUER`, `AUTH_AUDIENCE`, and payment keys.
+3. Configure `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `MULTICAIXA_*`, and `TRACKING_*` if those flows are enabled.
+4. On Render/Vercel, inject the same values as environment variables in the host dashboard, not in the repository.
 
 ## Online demo deployment
 

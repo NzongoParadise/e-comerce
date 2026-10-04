@@ -20,7 +20,23 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}) {
     if (response.status === 401 && typeof window !== 'undefined') {
       localStorage.removeItem('jwt_token');
     }
-    throw new Error(`API error: ${response.status}`);
+
+    let message = `API error: ${response.status}`;
+    try {
+      const payload = await response.clone().json();
+      if (payload && typeof payload === 'object') {
+        const errorText = 'error' in payload && typeof payload.error === 'string' ? payload.error.trim() : '';
+        if (errorText) {
+          message = errorText;
+        } else if ('message' in payload && typeof payload.message === 'string' && payload.message.trim()) {
+          message = payload.message.trim();
+        }
+      }
+    } catch {
+      // Ignore non-JSON error responses and keep the generic status code message.
+    }
+
+    throw new Error(message);
   }
 
   if (response.status === 204) return null;

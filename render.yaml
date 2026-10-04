@@ -24,9 +24,39 @@ services:
         sync: false
       - key: FRONTEND_URL
         sync: false
+      - key: ADMIN_EMAILS
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: DEFAULT_CARRIER
+        sync: false
+      - key: TRACKING_API_URL
+        sync: false
+      - key: TRACKING_API_KEY
+        sync: false
+      - key: MULTICAIXA_API_URL
+        sync: false
+      - key: MULTICAIXA_SECRET_KEY
+        sync: false
+      - key: MULTICAIXA_MERCHANT_ID
+        sync: false
+      - key: MULTICAIXA_ENVIRONMENT
+        value: "production"
+      - key: MULTICAIXA_PUBLIC_WEBHOOK_URL
+        sync: false
+      - key: MULTICAIXA_TIMEOUT_MS
+        value: "10000"
+      - key: MULTICAIXA_EXPIRATION_MINUTES
+        value: "30"
+      - key: LOW_STOCK_THRESHOLD
+        value: "10"
       - key: NEXT_PUBLIC_GOOGLE_AUTH_URL
         sync: false
       - key: NEXT_PUBLIC_APPLE_AUTH_URL
         sync: false
       - key: NEXT_PUBLIC_REGISTER_URL
+        sync: false
+      - key: NEXT_PUBLIC_STORE_PICKUP_ADDRESS
         sync: false

@@ -7,21 +7,21 @@
     "build": "npm run prisma:generate && next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx --test src/lib/server/payments/provider.test.ts src/lib/auth.test.ts src/lib/server/orders/adminOrderRules.test.ts src/lib/server/finance/analytics.test.ts",
-    "prisma:generate": "prisma generate --schema prisma/schema.prisma",
+    "test": "tsx --test src/lib/api.test.ts src/lib/server/logger.test.ts src/lib/server/payments/provider.test.ts src/lib/auth.test.ts src/lib/server/orders/adminOrderRules.test.ts src/lib/server/finance/analytics.test.ts",
+    "prisma:generate": "node scripts/prisma-generate.mjs",
     "db:migrate": "node scripts/prisma-with-env.mjs migrate deploy --schema prisma/schema.prisma"
   },
   "dependencies": {
-    "@prisma/client": "^5.19.1",
-    "lucide-react": "^1.47.0",
-    "next": "16.3.5",
-    "react": "19.2.8",
-    "react-dom": "19.2.8",
+    "@prisma/client": "^5.22.0",
     "bcryptjs": "^3.0.3",
     "jsonwebtoken": "^9.0.3",
     "jwks-rsa": "^4.1.0",
-    "zod": "^3.23.8",
-    "prisma": "^5.19.1"
+    "lucide-react": "^1.47.0",
+    "next": "16.3.5",
+    "prisma": "^5.19.1",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "zod": "^3.23.8"
   },
   "optionalDependencies": {
     "@tailwindcss/oxide-linux-x64-gnu": "4.3.3",
@@ -35,7 +35,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.5",
     "tailwindcss": "^4",
-    "typescript": "^5",
-    "tsx": "^4.20.6"
+    "tsx": "^4.20.6",
+    "typescript": "^5"
   }
 }

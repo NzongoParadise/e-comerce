@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/server/prisma';
 import { authenticate, errorResponse, readJson, userSubject } from '@/lib/server/api';
+import { detachStripePaymentMethod, ensureStripeCustomer, setStripeDefaultPaymentMethod } from '@/lib/server/payments/stripeCustomers';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -17,13 +18,44 @@ const addressSchema = z.object({
   isDefault: z.boolean().default(false),
 });
 const paymentSchema = z.object({
-  type: z.enum(['MULTICAIXA_REFERENCE', 'MULTICAIXA_EXPRESS', 'CARD', 'TRANSFER']),
+  type: z.enum(['MULTICAIXA_REFERENCE', 'MULTICAIXA_EXPRESS', 'CARD', 'MBWAY', 'TRANSFER']),
   label: z.string().trim().min(2).max(80),
   lastFour: z.string().regex(/^\d{4}$/).optional(),
   phoneNumber: z.string().trim().max(30).optional(),
-  providerToken: z.string().trim().max(255).optional(),
   isDefault: z.boolean().default(false),
 });
+
+function validateSavedPaymentPayload(payload: Partial<z.infer<typeof paymentSchema>> & { label: string; isDefault: boolean }) {
+  if ((payload.type === 'MBWAY' || payload.type === 'MULTICAIXA_EXPRESS') && !payload.phoneNumber) return 'O telemóvel é obrigatório para este método de pagamento.';
+  return null;
+}
+
+async function createStripeCardSetup(userId: number, label: string, isDefault: boolean) {
+  const secretKey = process.env.STRIPE_SECRET_KEY;
+  if (!secretKey) throw new Error('STRIPE_NOT_CONFIGURED');
+  const customerId = await ensureStripeCustomer(userId);
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const params = new URLSearchParams({
+    mode: 'setup',
+    customer: customerId,
+    'payment_method_types[0]': 'card',
+    success_url: `${frontendUrl}/account/payment?card=added`,
+    cancel_url: `${frontendUrl}/account/payment?card=cancelled`,
+    client_reference_id: String(userId),
+    'setup_intent_data[usage]': 'off_session',
+    'setup_intent_data[metadata][userId]': String(userId),
+    'setup_intent_data[metadata][label]': label,
+    'setup_intent_data[metadata][isDefault]': String(isDefault),
+  });
+  const response = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${secretKey}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: params,
+  });
+  const session = await response.json() as { url?: unknown };
+  if (!response.ok || typeof session.url !== 'string') throw new Error('STRIPE_SETUP_FAILED');
+  return session.url;
+}
 
 function segments(request: Request) {
   return new URL(request.url).pathname.split('/').filter(Boolean).slice(2);
@@ -49,7 +81,8 @@ export async function GET(request: Request) {
     return Response.json({ data: await prisma.address.findMany({ where: { userId }, orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }] }) });
   }
   if (resource === 'payment-methods') {
-    return Response.json({ data: await prisma.savedPaymentMethod.findMany({ where: { userId }, orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }] }) });
+    const methods = await prisma.savedPaymentMethod.findMany({ where: { userId }, orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }] });
+    return Response.json({ data: methods.map(({ providerToken, ...method }) => ({ ...method, stripeReady: method.type !== 'CARD' || Boolean(providerToken) })) });
   }
   if (resource === 'coupons') {
     const coupons = await prisma.userCoupon.findMany({ where: { userId }, include: { coupon: true }, orderBy: { claimedAt: 'desc' } });
@@ -88,13 +121,34 @@ export async function POST(request: Request) {
   if (resource === 'payment-methods' && !id) {
     const parsed = paymentSchema.safeParse(body);
     if (!parsed.success) return errorResponse('Dados de pagamento inválidos', 400);
+    if (parsed.data.type === 'CARD') return errorResponse('Adicione cartões através do fluxo seguro da Stripe.', 400);
+    const validationError = validateSavedPaymentPayload(parsed.data);
+    if (validationError) return errorResponse(validationError, 400);
     if (parsed.data.isDefault) await prisma.savedPaymentMethod.updateMany({ where: { userId }, data: { isDefault: false } });
     return Response.json({ data: await prisma.savedPaymentMethod.create({ data: { ...parsed.data, userId } }) }, { status: 201 });
+  }
+  if (resource === 'payment-methods' && id === 'setup') {
+    const parsed = z.object({ label: z.string().trim().min(2).max(80), isDefault: z.boolean().default(false) }).safeParse(body);
+    if (!parsed.success) return errorResponse('Indique um nome válido para o cartão.', 400);
+    try {
+      const checkoutUrl = await createStripeCardSetup(userId, parsed.data.label, parsed.data.isDefault);
+      return Response.json({ data: { checkoutUrl } });
+    } catch (error) {
+      if (error instanceof Error && error.message === 'STRIPE_NOT_CONFIGURED') return errorResponse('Stripe não está configurado.', 503);
+      return errorResponse('Não foi possível iniciar a adição segura do cartão.', 502);
+    }
   }
   if (resource === 'payment-methods' && action === 'default') {
     const methodId = invalidId(id);
     if (!methodId) return errorResponse('Método não encontrado', 404);
     try {
+      const savedMethod = await prisma.savedPaymentMethod.findFirst({ where: { id: methodId, userId } });
+      if (!savedMethod) return errorResponse('Método não encontrado', 404);
+      if (savedMethod.type === 'CARD' && savedMethod.providerToken) {
+        const user = await prisma.user.findUnique({ where: { id: userId }, select: { stripeCustomerId: true } });
+        if (!user?.stripeCustomerId) return errorResponse('Cliente Stripe não encontrado.', 409);
+        await setStripeDefaultPaymentMethod(user.stripeCustomerId, savedMethod.providerToken);
+      }
       await prisma.savedPaymentMethod.updateMany({ where: { userId }, data: { isDefault: false } });
       return Response.json({ data: await prisma.savedPaymentMethod.update({ where: { id: methodId, userId }, data: { isDefault: true } }) });
     } catch {
@@ -123,15 +177,46 @@ export async function PATCH(request: Request) {
   if (!userId) return errorResponse('Authentication required', 401);
   const [resource, value] = segments(request);
   const id = invalidId(value);
-  if (resource !== 'addresses' || !id) return errorResponse('Dados de endereço inválidos', 400);
-  const parsed = addressSchema.partial().safeParse(await readJson(request));
-  if (!parsed.success) return errorResponse('Dados de endereço inválidos', 400);
-  if (parsed.data.isDefault) await prisma.address.updateMany({ where: { userId }, data: { isDefault: false } });
-  try {
-    return Response.json({ data: await prisma.address.update({ where: { id, userId }, data: parsed.data }) });
-  } catch {
-    return errorResponse('Endereço não encontrado', 404);
+
+  if (resource === 'addresses') {
+    if (!id) return errorResponse('Dados de endereço inválidos', 400);
+    const parsed = addressSchema.partial().safeParse(await readJson(request));
+    if (!parsed.success) return errorResponse('Dados de endereço inválidos', 400);
+    if (parsed.data.isDefault) await prisma.address.updateMany({ where: { userId }, data: { isDefault: false } });
+    try {
+      return Response.json({ data: await prisma.address.update({ where: { id, userId }, data: parsed.data }) });
+    } catch {
+      return errorResponse('Endereço não encontrado', 404);
+    }
   }
+
+  if (resource === 'payment-methods') {
+    if (!id) return errorResponse('Método não encontrado', 404);
+    const parsed = paymentSchema.partial().safeParse(await readJson(request));
+    if (!parsed.success) return errorResponse('Dados de pagamento inválidos', 400);
+    const validationError = parsed.data.type ? validateSavedPaymentPayload({ ...parsed.data, label: parsed.data.label ?? '', isDefault: parsed.data.isDefault ?? false }) : null;
+    if (validationError) return errorResponse(validationError, 400);
+    try {
+      const existing = await prisma.savedPaymentMethod.findFirst({ where: { id, userId } });
+      if (!existing) return errorResponse('Método não encontrado', 404);
+      if (existing.type === 'CARD') {
+        if (parsed.data.type && parsed.data.type !== 'CARD') return errorResponse('Não é possível alterar o tipo de um cartão guardado.', 400);
+        if (parsed.data.isDefault && existing.providerToken) {
+          const user = await prisma.user.findUnique({ where: { id: userId }, select: { stripeCustomerId: true } });
+          if (!user?.stripeCustomerId) return errorResponse('Cliente Stripe não encontrado.', 409);
+          await setStripeDefaultPaymentMethod(user.stripeCustomerId, existing.providerToken);
+        }
+        if (parsed.data.isDefault) await prisma.savedPaymentMethod.updateMany({ where: { userId }, data: { isDefault: false } });
+        return Response.json({ data: await prisma.savedPaymentMethod.update({ where: { id, userId }, data: { label: parsed.data.label, isDefault: parsed.data.isDefault } }) });
+      }
+      if (parsed.data.isDefault) await prisma.savedPaymentMethod.updateMany({ where: { userId }, data: { isDefault: false } });
+      return Response.json({ data: await prisma.savedPaymentMethod.update({ where: { id, userId }, data: parsed.data }) });
+    } catch {
+      return errorResponse('Método não encontrado', 404);
+    }
+  }
+
+  return errorResponse('Dados inválidos', 400);
 }
 
 export async function DELETE(request: Request) {
@@ -142,7 +227,12 @@ export async function DELETE(request: Request) {
   if (!id) return errorResponse(resource === 'addresses' ? 'Endereço não encontrado' : 'Método não encontrado', 404);
   try {
     if (resource === 'addresses') await prisma.address.delete({ where: { id, userId } });
-    else if (resource === 'payment-methods') await prisma.savedPaymentMethod.delete({ where: { id, userId } });
+    else if (resource === 'payment-methods') {
+      const savedMethod = await prisma.savedPaymentMethod.findFirst({ where: { id, userId } });
+      if (!savedMethod) return errorResponse('Método não encontrado', 404);
+      if (savedMethod.type === 'CARD' && savedMethod.providerToken) await detachStripePaymentMethod(savedMethod.providerToken);
+      await prisma.savedPaymentMethod.delete({ where: { id, userId } });
+    }
     else return errorResponse('Not found', 404);
     return new Response(null, { status: 204 });
   } catch {

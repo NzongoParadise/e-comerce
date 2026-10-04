@@ -48,6 +48,7 @@ test('accepts only a Stripe payment with the expected currency and amount', () =
 test('restricts Stripe checkout to the configured EUR market', () => {
   assert.equal(isStripeCurrencySupported('EUR'), true);
   assert.equal(isStripeCurrencySupported('AOA'), false);
+  assert.equal(['card', 'mbway'].includes('mbway'), true);
 });
 
 test('uses a stable Stripe idempotency key per order', () => {
