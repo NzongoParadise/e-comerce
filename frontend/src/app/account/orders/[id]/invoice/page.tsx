@@ -113,6 +113,11 @@ export default function InvoicePage() {
   const discount = isAO ? order.discountTotalKZ : order.discountTotalEUR;
   const subtotal = order.items.reduce((sum, item) => sum + Number(item.subtotal || 0), 0);
   const shippingAndDiscountAdjustment = Number(total) - subtotal + Number(discount || 0);
+  const invoiceUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/account/orders/${id}/invoice`
+      : `/account/orders/${id}/invoice`;
+  const qrUrl = `https://quickchart.io/qr?text=${encodeURIComponent(invoiceUrl)}&format=svg&size=220&margin=2`;
 
   return (
     <>
@@ -135,6 +140,14 @@ export default function InvoicePage() {
           <div className="invoice-company">
             <strong>e-Commerce</strong>
             <span>Angola · Portugal</span>
+            <img
+              src={qrUrl}
+              alt={`QR Code da encomenda ${order.orderNumber}`}
+              width={110}
+              height={110}
+              className="invoice-qr"
+            />
+            <small>Consulta digital</small>
           </div>
         </header>
 
@@ -277,9 +290,21 @@ export default function InvoicePage() {
           color: #6b7280;
         }
 
-        .invoice-company strong {
+.invoice-company strong {
           color: #111827;
           font-size: 15px;
+        }
+
+        .invoice-qr {
+          width: 110px;
+          height: 110px;
+          margin-top: .35rem;
+          object-fit: contain;
+        }
+
+        .invoice-company small {
+          font-size: 9px;
+          color: #6b7280;
         }
 
         .invoice-meta {
