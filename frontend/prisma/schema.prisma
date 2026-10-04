@@ -50,6 +50,7 @@ model Supplier {
   @@unique([country, taxId])
   @@index([name])
   @@index([active])
+  purchases   Purchase[]
 }
 
 model Product {
@@ -74,6 +75,7 @@ model Product {
   quoteItems  QuoteItem[]
   attributes  ProductAttribute[]
   promotionProducts PromotionProduct[]
+  purchaseItems PurchaseItem[]
 }
 
 model ProductAttribute {
@@ -553,6 +555,7 @@ model FinanceEntry {
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
   events          FinanceEntryEvent[]
+  purchase        Purchase?
   @@index([type, status, transactionDate])
   @@index([category])
 }
@@ -566,4 +569,56 @@ model FinanceEntryEvent {
   createdAt         DateTime    @default(now())
   entry            FinanceEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
   @@index([entryId, createdAt])
+}
+
+
+model Purchase {
+  id              Int       @id @default(autoincrement())
+  purchaseNumber  String    @unique
+  supplierId      Int?
+  supplier        Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  status          String    @default("DRAFT")
+  paymentStatus   String    @default("PENDING")
+  currency        String    @default("AOA")
+  subtotal        Decimal   @db.Decimal(12,2)
+  total           Decimal   @db.Decimal(12,2)
+  transactionDate DateTime  @default(now())
+  dueDate         DateTime?
+  reference       String?
+  notes           String?
+  financeEntryId  Int?      @unique
+  financeEntry    FinanceEntry? @relation(fields: [financeEntryId], references: [id], onDelete: SetNull)
+  createdBy       String?
+  updatedBy       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  items           PurchaseItem[]
+  events          PurchaseEvent[]
+  @@index([supplierId, transactionDate])
+  @@index([status, paymentStatus])
+}
+
+model PurchaseItem {
+  id          Int      @id @default(autoincrement())
+  purchaseId  Int
+  productId   Int
+  description String
+  quantity    Int
+  unitCost    Decimal  @db.Decimal(12,2)
+  subtotal    Decimal  @db.Decimal(12,2)
+  purchase    Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  product     Product  @relation(fields: [productId], references: [id])
+  @@index([purchaseId])
+  @@index([productId])
+}
+
+model PurchaseEvent {
+  id              Int      @id @default(autoincrement())
+  purchaseId      Int
+  actorExternalId String?
+  eventType       String
+  payload         Json
+  createdAt       DateTime @default(now())
+  purchase        Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  @@index([purchaseId, createdAt])
 }
