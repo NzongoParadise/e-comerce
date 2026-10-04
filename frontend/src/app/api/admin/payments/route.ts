@@ -28,9 +28,12 @@ export async function GET(request: Request) {
   const parsed = querySchema.safeParse(Object.fromEntries(new URL(request.url).searchParams));
   if (!parsed.success) return errorResponse('Invalid payment query', 400);
   const { search, status, currency, from, to, page, pageSize } = parsed.data;
+  const baseWhere: Prisma.PaymentWhereInput = { provider: 'stripe', ...(currency !== 'ALL' ? { currency } : {}), ...(from || to ? { createdAt: { ...(from ? { gte: new Date(from) } : {}), ...(to ? { lte: new Date(to) } : {}) } } : {}) };
+  const statusWhere: Prisma.PaymentWhereInput = status !== 'ALL' ? { status } : {};
 
   const where: Prisma.PaymentWhereInput = {
-    provider: 'stripe',
+    ...baseWhere,
+    ...statusWhere,
     ...(status !== 'ALL' ? { status } : {}),
     ...(currency !== 'ALL' ? { currency } : {}),
     ...(from || to ? { createdAt: { ...(from ? { gte: new Date(from) } : {}), ...(to ? { lte: new Date(to) } : {}) } } : {}),
@@ -46,7 +49,7 @@ export async function GET(request: Request) {
   };
 
   try {
-    const [data, total, paid, pending, failed, refunded, fees] = await prisma.$transaction([
+    const [data, total, paid, pending, failed, refunded, fees, gross, net, refundCount, disputeCount] = await prisma.$transaction([
       prisma.payment.findMany({
         where,
         orderBy: { createdAt: 'desc' },
@@ -67,12 +70,16 @@ export async function GET(request: Request) {
       prisma.payment.count({ where: { ...where, status: 'FAILED' } }),
       prisma.payment.count({ where: { ...where, status: { in: ['REFUNDED', 'PARTIALLY_REFUNDED'] } } }),
       prisma.payment.aggregate({ where, _sum: { stripeFee: true } }),
+      prisma.payment.aggregate({ where: baseWhere, _sum: { grossAmount: true } }),
+      prisma.payment.aggregate({ where: baseWhere, _sum: { netAmount: true } }),
+      prisma.stripeRefund.count({ where: { payment: baseWhere } }),
+      prisma.stripeDispute.count({ where: { payment: baseWhere } }),
     ]);
 
     return Response.json({
       data,
       meta: { total, page, pageSize, pageCount: Math.ceil(total / pageSize) },
-      stats: { paid, pending, failed, refunded, stripeFeesMinor: fees._sum.stripeFee || 0 },
+      stats: { paid, pending, failed, refunded, stripeFeesMinor: fees._sum.stripeFee || 0, grossMinor: gross._sum.grossAmount || 0, netMinor: net._sum.netAmount || 0, refundCount, disputeCount },
     });
   } catch (error) {
     console.error('Unable to load Stripe payments:', error);
