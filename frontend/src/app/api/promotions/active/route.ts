@@ -8,12 +8,33 @@ export async function GET() {
     where: { active: true, status: "ACTIVE", startAt: { lte: now }, OR: [{ endAt: null }, { endAt: { gte: now } }] },
     select: {
       id: true, name: true, description: true, code: true, startAt: true, endAt: true, priority: true,
+      minOrderAOA: true, minOrderEUR: true, usageLimit: true,
       actions: { select: { type: true, value: true, maxDiscount: true } },
+      rules: { select: { kind: true, operator: true, value: true } },
       products: { select: { productId: true } },
       categories: { select: { categoryId: true } },
       brands: { select: { brandId: true } },
+      _count: { select: { usages: true } },
     },
     orderBy: [{ priority: "desc" }, { startAt: "desc" }],
   });
-  return Response.json({ data: promotions });
+  const availablePromotions = promotions
+    .filter((promotion) => promotion.usageLimit === null || promotion._count.usages < promotion.usageLimit)
+    .map((promotion) => ({
+      id: promotion.id,
+      name: promotion.name,
+      description: promotion.description,
+      code: promotion.code,
+      startAt: promotion.startAt,
+      endAt: promotion.endAt,
+      priority: promotion.priority,
+      minOrderAOA: promotion.minOrderAOA,
+      minOrderEUR: promotion.minOrderEUR,
+      actions: promotion.actions,
+      rules: promotion.rules,
+      products: promotion.products,
+      categories: promotion.categories,
+      brands: promotion.brands,
+    }));
+  return Response.json({ data: availablePromotions });
 }
