@@ -314,8 +314,8 @@ export async function POST(request: Request) {
     const promoShippingDiscount = promotionResult.shippingDiscount;
     const finalProductTotal = Math.max(0, promotionSubtotal - promoDiscount);
     const finalShipping = Math.max(0, shippingCost - promoShippingDiscount);
-    const totalEUR = parsed.data.country === 'PT' ? finalProductTotal + finalShipping : 0;
-    const totalKZ = parsed.data.country === 'AO' ? finalProductTotal + finalShipping : 0;
+    const totalEUR = Math.max(0, productTotalEUR - (parsed.data.country === 'PT' ? promoDiscount : 0) + (parsed.data.country === 'PT' ? finalShipping : 0));
+    const totalKZ = Math.max(0, productTotalKZ - (parsed.data.country === 'AO' ? promoDiscount : 0) + (parsed.data.country === 'AO' ? finalShipping : 0));
     if (parsed.data.paymentMethod === 'card' && !isStripeCurrencySupported(currency)) return errorResponse('Pagamentos por cartão não estão disponíveis para encomendas em AOA. Selecione MULTICAIXA.', 400);
     if (parsed.data.paymentMethod === 'card' && !process.env.STRIPE_SECRET_KEY) return errorResponse('Pagamentos por cartão não estão configurados', 503);
     const stripeExpiresAt = parsed.data.paymentMethod === 'card' ? new Date(Date.now() + 60 * 60 * 1000) : undefined;
