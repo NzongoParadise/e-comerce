@@ -360,11 +360,9 @@ export async function POST(request: Request) {
             name: product.name,
             slug: product.slug,
             imageUrl: product.imageUrl,
-            unitPrice: parsed.data.country === "PT" ? eurPrice : Number(product.prices.find((price) => price.market === "AO")?.amount ?? product.basePrice),
+            unitPrice: eurPrice,
             quantity: item.quantity,
-            subtotal: parsed.data.country === "PT"
-              ? eurPrice * item.quantity
-              : Number(product.prices.find((price) => price.market === "AO")?.amount ?? product.basePrice) * item.quantity,
+            subtotal: eurPrice * item.quantity,
           })) },
           payment: { create: {
             userId: user.id,
