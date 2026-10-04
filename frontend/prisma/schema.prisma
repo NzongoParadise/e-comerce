@@ -21,6 +21,7 @@ model Category {
   name      String    @unique
   slug      String    @unique
   products  Product[]
+  promotionCategories PromotionCategory[]
 }
 
 model Brand {
@@ -28,6 +29,7 @@ model Brand {
   name      String     @unique
   slug      String     @unique
   products  Product[]
+  promotionBrands PromotionBrand[]
 }
 
 model Supplier {
@@ -71,6 +73,7 @@ model Product {
   prices      Price[]
   quoteItems  QuoteItem[]
   attributes  ProductAttribute[]
+  promotionProducts PromotionProduct[]
 }
 
 model ProductAttribute {
@@ -118,6 +121,7 @@ model User {
   addresses       Address[]
   savedPaymentMethods SavedPaymentMethod[]
   coupons         UserCoupon[]
+  promotionUsages PromotionUsage[]
 }
 
 model Address {
@@ -239,6 +243,10 @@ model Order {
   payment        Payment?
   trackingEvents TrackingEvent[]
   returnRequests ReturnRequest[]
+  discounts      OrderDiscount[]
+  promotionUsages PromotionUsage[]
+  discountTotalEUR Decimal @default(0) @db.Decimal(10,2)
+  discountTotalKZ  Decimal @default(0) @db.Decimal(12,2)
 }
 
 model OrderItem {
@@ -360,6 +368,116 @@ model ReturnRequest {
   updatedAt     DateTime @updatedAt
   order         Order    @relation(fields: [orderId], references: [id])
   user          User     @relation(fields: [userId], references: [id])
+}
+
+
+model Promotion {
+  id                  Int      @id @default(autoincrement())
+  name                String
+  slug                String   @unique
+  description         String?
+  code                String?  @unique
+  status              String   @default("DRAFT")
+  startAt             DateTime
+  endAt               DateTime?
+  priority            Int      @default(0)
+  stackable           Boolean  @default(false)
+  exclusive           Boolean  @default(false)
+  usageLimit          Int?
+  perCustomerLimit    Int?
+  minOrderAOA         Decimal? @db.Decimal(12,2)
+  minOrderEUR         Decimal? @db.Decimal(10,2)
+  active              Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  rules               PromotionRule[]
+  actions             PromotionAction[]
+  products            PromotionProduct[]
+  categories          PromotionCategory[]
+  brands              PromotionBrand[]
+  usages              PromotionUsage[]
+  orderDiscounts      OrderDiscount[]
+  @@index([status, active, startAt, endAt])
+  @@index([priority])
+}
+
+model PromotionRule {
+  id          Int       @id @default(autoincrement())
+  promotionId Int
+  kind        String
+  operator    String    @default("EQ")
+  value       String
+  promotion   Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  @@index([promotionId, kind])
+}
+
+model PromotionAction {
+  id             Int       @id @default(autoincrement())
+  promotionId    Int
+  type           String
+  value          Decimal?  @db.Decimal(12,2)
+  maxDiscount    Decimal?  @db.Decimal(12,2)
+  promotion      Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  @@index([promotionId])
+}
+
+model PromotionProduct {
+  promotionId Int
+  productId   Int
+  promotion   Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  @@id([promotionId, productId])
+  @@index([productId])
+}
+
+model PromotionCategory {
+  promotionId Int
+  categoryId  Int
+  promotion   Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  category    Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  @@id([promotionId, categoryId])
+  @@index([categoryId])
+}
+
+model PromotionBrand {
+  promotionId Int
+  brandId     Int
+  promotion   Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  brand       Brand     @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  @@id([promotionId, brandId])
+  @@index([brandId])
+}
+
+model PromotionUsage {
+  id             Int       @id @default(autoincrement())
+  promotionId    Int
+  userId         Int
+  orderId        Int
+  couponCode     String?
+  discountAmount Decimal   @db.Decimal(12,2)
+  currency       String
+  createdAt      DateTime  @default(now())
+  promotion      Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  user           User      @relation(fields: [userId], references: [id])
+  order          Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  @@unique([promotionId, orderId])
+  @@index([promotionId, userId])
+}
+
+model OrderDiscount {
+  id             Int       @id @default(autoincrement())
+  orderId        Int
+  promotionId    Int?
+  promotionName  String
+  code           String?
+  type           String
+  amount         Decimal   @db.Decimal(12,2)
+  currency       String
+  metadata       Json?
+  order           Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  promotion      Promotion? @relation(fields: [promotionId], references: [id], onDelete: SetNull)
+  @@index([orderId])
+  @@index([promotionId])
 }
 
 model FinanceEntry {

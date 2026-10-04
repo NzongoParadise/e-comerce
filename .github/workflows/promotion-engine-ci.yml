@@ -1,0 +1,29 @@
+name: Promotion Engine CI
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - "frontend/**"
+  push:
+    branches: [feat/promotion-engine-omnichannel]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ecommerce_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npx prisma validate --schema prisma/schema.prisma
+      - run: npm run prisma:generate
+      - run: npx tsc --noEmit
