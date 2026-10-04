@@ -34,8 +34,11 @@ export async function POST(request: Request) {
   if (!payment) return errorResponse('Stripe payment not found', 404);
   if (!['PAID', 'PARTIALLY_REFUNDED'].includes(payment.status)) return errorResponse('Only paid Stripe payments can be refunded', 409);
 
+  const requestIdempotencyKey = request.headers.get('idempotency-key');
+  if (!requestIdempotencyKey || requestIdempotencyKey.length > 128) return errorResponse('Idempotency-Key is required', 400);
+
   try {
-    const refund = await createStripeRefund(paymentId, parsed.data.amountMinor, parsed.data.reason);
+    const refund = await createStripeRefund(paymentId, parsed.data.amountMinor, parsed.data.reason, requestIdempotencyKey);
     await prisma.paymentEvent.create({
       data: {
         paymentId,
