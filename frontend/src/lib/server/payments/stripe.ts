@@ -231,7 +231,8 @@ export async function processStripeWebhookEvent(event: StripeObject) {
 
     await prisma.$transaction(async (transaction) => {
       await transaction.paymentEvent.create({ data: baseEvent });
-      if (type === 'payment_intent.succeeded' || type === 'checkout.session.completed' || type === 'checkout.session.async_payment_succeeded') {
+      const checkoutPaid = type === 'checkout.session.completed' && objectString(object.payment_status) === 'paid';
+      if (type === 'payment_intent.succeeded' || checkoutPaid || type === 'checkout.session.async_payment_succeeded') {
         await transaction.payment.update({
           where: { id: payment.id },
           data: {
@@ -247,7 +248,9 @@ export async function processStripeWebhookEvent(event: StripeObject) {
           where: { id: payment.orderId, status: { notIn: ['CANCELLED', 'DELIVERED', 'SHIPPED'] } },
           data: { status: 'PAYMENT_CONFIRMED' },
         });
-      } else if (type === 'payment_intent.payment_failed') {
+      } else if (type === 'payment_intent.processing') {
+        await transaction.payment.update({ where: { id: payment.id }, data: { status: 'PROCESSING' } });
+      } else if (type === 'payment_intent.payment_failed' || type === 'checkout.session.async_payment_failed' || type === 'charge.failed') {
         await transaction.payment.update({
           where: { id: payment.id },
           data: {
