@@ -1,9 +1,11 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/server/prisma';
 import { authenticate, errorResponse, readJson, userSubject } from '@/lib/server/api';
 import { cancelAwaitingPaymentAndReleaseStock } from '@/lib/server/orders/inventory';
 import { isStripeCurrencySupported, toStripeMinorUnits } from '@/lib/server/payments/stripeAmounts';
 import { isDefinitiveStripeRejection, isStripeSessionForOrder, stripeCheckoutIdempotencyKey } from '@/lib/server/payments/stripeRequestRules';
 import { calculateShipping, estimateCartWeightKg } from '@/lib/shipping';
+import { evaluateOrderPromotions, legacyCouponDiscount, reservePromotionUsages } from '@/lib/server/promotions/engine';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -478,4 +480,3 @@ export async function GET(request: Request) {
   });
   if (!order) return errorResponse('Order not found', 404);
   return Response.json({ data: order });
-}
