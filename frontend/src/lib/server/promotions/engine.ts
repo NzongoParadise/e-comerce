@@ -52,12 +52,11 @@ function calculateAction(action: any, items: PromotionCartItem[]) {
 }
 
 async function getCustomerProfile(userId: number) {
-  const orders = await prisma.order.findMany({ where: { userId, status: { not: "CANCELLED" } }, select: { totalKZ: true, totalEUR: true } });
-  const totalAOA = orders.reduce((sum, order) => sum + Number(order.totalKZ), 0);
-  const totalEUR = orders.reduce((sum, order) => sum + Number(order.totalEUR), 0);
-  const lifetime = totalAOA + totalEUR * 1000;
-  const customerTier = lifetime >= 1000000 ? "VIP" : lifetime >= 500000 ? "GOLD" : lifetime >= 200000 ? "SILVER" : "BRONZE";
-  return { isFirstOrder: orders.length === 0, customerTier };
+  const paidOrders = await prisma.order.count({
+    where: { userId, status: { in: ["PAYMENT_CONFIRMED", "SHIPPED", "DELIVERED"] }, payment: { status: "PAID" } },
+  });
+  const customerTier = paidOrders >= 10 ? "VIP" : paidOrders >= 6 ? "GOLD" : paidOrders >= 3 ? "SILVER" : "BRONZE";
+  return { isFirstOrder: paidOrders === 0, customerTier };
 }
 
 export async function evaluatePromotions(context: PromotionContext, client = prisma): Promise<PromotionResult> {
