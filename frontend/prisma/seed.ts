@@ -79,6 +79,47 @@ async function main() {
   for (const coupon of coupons) {
     await prisma.coupon.upsert({ where: { code: coupon.code }, update: coupon, create: coupon });
   }
+  const now = new Date();
+  const promotionEnd = new Date(now);
+  promotionEnd.setDate(promotionEnd.getDate() + 30);
+  const firstOrderPromotion = await prisma.promotion.upsert({
+    where: { slug: 'primeira-compra-10' },
+    update: { status: 'ACTIVE', active: true, startAt: now, endAt: promotionEnd },
+    create: {
+      name: 'Primeira compra · 10% OFF',
+      slug: 'primeira-compra-10',
+      description: '10% de desconto para novos clientes.',
+      code: 'PRIMEIRA10',
+      status: 'ACTIVE',
+      startAt: now,
+      endAt: promotionEnd,
+      priority: 200,
+      stackable: false,
+      exclusive: true,
+      perCustomerLimit: 1,
+      actions: { create: [{ type: 'PERCENTAGE', value: 10 }] },
+      rules: { create: [{ kind: 'FIRST_ORDER', operator: 'EQ', value: 'true' }] },
+    },
+  });
+  const freeShippingPromotion = await prisma.promotion.upsert({
+    where: { slug: 'frete-gratis-100k' },
+    update: { status: 'ACTIVE', active: true, startAt: now, endAt: promotionEnd },
+    create: {
+      name: 'Frete grátis · compras elegíveis',
+      slug: 'frete-gratis-100k',
+      description: 'Frete grátis para compras acima do mínimo configurado.',
+      status: 'ACTIVE',
+      startAt: now,
+      endAt: promotionEnd,
+      priority: 50,
+      stackable: true,
+      minOrderAOA: 100000,
+      minOrderEUR: 100,
+      actions: { create: [{ type: 'FREE_SHIPPING' }] },
+    },
+  });
+  void firstOrderPromotion;
+  void freeShippingPromotion;
   console.log(`TechGlobal catalog seeded: ${catalog.length} products`);
 }
 
