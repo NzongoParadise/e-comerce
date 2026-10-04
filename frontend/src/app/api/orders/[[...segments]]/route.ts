@@ -33,6 +33,7 @@ const orderSchema = z.object({
   deliveryRegion: z.string().max(100).optional(),
   postalCode: z.string().max(20).optional(),
   deliveryNotes: z.string().max(500).optional(),
+  couponCode: z.string().trim().max(40).optional().nullable(),
 });
 
 function segments(request: Request) {
@@ -268,7 +269,7 @@ export async function POST(request: Request) {
       const eurPrice = product.prices.find((price) => price.market === 'PT')?.amount ?? product.basePrice;
       const aoPrice = product.prices.find((price) => price.market === 'AO')?.amount ?? product.basePrice;
       if (Math.abs(Number(eurPrice) - item.priceEUR) > 0.01 || Math.abs(Number(aoPrice) - item.priceKZ) > 0.01) throw new Error('PRICE_CHANGED');
-      return { item, product, eurPrice: Number(eurPrice), aoPrice: Number(aoPrice) };
+      return { item, product, eurPrice: Number(eurPrice), aoPrice: Number(aoPrice), categoryId: product.categoryId, brandId: product.brandId };
     });
     const estimatedCartWeightKg = estimateCartWeightKg(calculatedItems.map(({ item, product }) => ({
       quantity: item.quantity,
@@ -285,8 +286,36 @@ export async function POST(request: Request) {
     });
     const productTotalEUR = calculatedItems.reduce((sum, entry) => sum + entry.eurPrice * entry.item.quantity, 0);
     const productTotalKZ = calculatedItems.reduce((sum, entry) => sum + entry.aoPrice * entry.item.quantity, 0);
-    const totalEUR = productTotalEUR + (parsed.data.country === 'PT' ? shippingCost : 0);
-    const totalKZ = productTotalKZ + (parsed.data.country === 'AO' ? shippingCost : 0);
+    const promotionMarket = parsed.data.country;
+    const promotionCurrency = promotionMarket === 'PT' ? 'EUR' : 'AOA';
+    const promotionItems = calculatedItems.map(({ item, product, eurPrice, aoPrice, categoryId, brandId }) => ({
+      productId: product.id,
+      quantity: item.quantity,
+      unitPrice: promotionMarket === 'PT' ? eurPrice : aoPrice,
+      categoryId,
+      brandId,
+    }));
+    const promotionSubtotal = promotionMarket === 'PT' ? productTotalEUR : productTotalKZ;
+    const promotionResult = await evaluateOrderPromotions({
+      userId: user.id,
+      market: promotionMarket,
+      currency: promotionCurrency,
+      channel: 'ONLINE',
+      subtotal: promotionSubtotal,
+      items: promotionItems,
+      shippingCost,
+      couponCode: parsed.data.couponCode,
+    });
+    const legacyCoupon = await legacyCouponDiscount(user.id, parsed.data.couponCode, promotionSubtotal, promotionCurrency);
+    if (parsed.data.couponCode && !promotionResult.applied.some((entry) => entry.code === parsed.data.couponCode?.trim().toUpperCase()) && !legacyCoupon) {
+      return errorResponse('Cupão ou código promocional inválido, expirado ou não elegível.', 400);
+    }
+    const promoDiscount = promotionResult.discountTotal + (legacyCoupon?.amount || 0);
+    const promoShippingDiscount = promotionResult.shippingDiscount;
+    const finalProductTotal = Math.max(0, promotionSubtotal - promoDiscount);
+    const finalShipping = Math.max(0, shippingCost - promoShippingDiscount);
+    const totalEUR = parsed.data.country === 'PT' ? finalProductTotal + finalShipping : 0;
+    const totalKZ = parsed.data.country === 'AO' ? finalProductTotal + finalShipping : 0;
     if (parsed.data.paymentMethod === 'card' && !isStripeCurrencySupported(currency)) return errorResponse('Pagamentos por cartão não estão disponíveis para encomendas em AOA. Selecione MULTICAIXA.', 400);
     if (parsed.data.paymentMethod === 'card' && !process.env.STRIPE_SECRET_KEY) return errorResponse('Pagamentos por cartão não estão configurados', 503);
     const stripeExpiresAt = parsed.data.paymentMethod === 'card' ? new Date(Date.now() + 60 * 60 * 1000) : undefined;
@@ -299,7 +328,7 @@ export async function POST(request: Request) {
         });
         if (result.count !== 1) throw new Error(`STOCK:${entry.product.name}`);
       }
-      return transaction.order.create({
+      const createdOrder = await transaction.order.create({
         data: {
           orderNumber,
           idempotencyKey,
@@ -324,14 +353,18 @@ export async function POST(request: Request) {
           trackingNumber: undefined,
           totalEUR,
           totalKZ,
+          discountTotalEUR: parsed.data.country === "PT" ? promoDiscount : 0,
+          discountTotalKZ: parsed.data.country === "AO" ? promoDiscount : 0,
           items: { create: calculatedItems.map(({ item, product, eurPrice }) => ({
             productId: product.id,
             name: product.name,
             slug: product.slug,
             imageUrl: product.imageUrl,
-            unitPrice: eurPrice,
+            unitPrice: parsed.data.country === "PT" ? eurPrice : Number(product.prices.find((price) => price.market === "AO")?.amount ?? product.basePrice),
             quantity: item.quantity,
-            subtotal: eurPrice * item.quantity,
+            subtotal: parsed.data.country === "PT"
+              ? eurPrice * item.quantity
+              : Number(product.prices.find((price) => price.market === "AO")?.amount ?? product.basePrice) * item.quantity,
           })) },
           payment: { create: {
             userId: user.id,
@@ -346,7 +379,29 @@ export async function POST(request: Request) {
           trackingEvents: { create: { status: 'PROCESSING', location: parsed.data.address || 'Armazém', description: 'Encomenda recebida e em processamento.' } },
         },
       });
-    });
+      if (promotionResult.applied.length) {
+        await reservePromotionUsages(transaction, user.id, createdOrder.id, promotionResult);
+      }
+      if (legacyCoupon) {
+        await transaction.userCoupon.upsert({
+          where: { userId_couponId: { userId: user.id, couponId: legacyCoupon.couponId } },
+          create: { userId: user.id, couponId: legacyCoupon.couponId, usedAt: new Date() },
+          update: { usedAt: new Date() },
+        });
+        await transaction.orderDiscount.create({
+          data: {
+            orderId: createdOrder.id,
+            promotionName: legacyCoupon.description,
+            code: legacyCoupon.code,
+            type: "LEGACY_COUPON",
+            amount: legacyCoupon.amount,
+            currency: promotionCurrency,
+            metadata: { legacyCoupon: true },
+          },
+        });
+      }
+      return createdOrder;
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5000, timeout: 10000 });
 
     let checkoutUrl: string | undefined;
     if (parsed.data.paymentMethod === 'card') {
@@ -383,6 +438,8 @@ export async function POST(request: Request) {
     if (error instanceof Error && error.message.startsWith('STOCK:')) return errorResponse(`Stock insuficiente: ${error.message.slice(6)}`, 409);
     if (error instanceof Error && error.message === 'PRODUCT_MISMATCH') return errorResponse('Os dados do produto não correspondem ao catálogo atual', 400);
     if (error instanceof Error && error.message === 'PRICE_CHANGED') return errorResponse('O preço de um produto foi atualizado. Reveja o carrinho.', 409);
+    if (error instanceof Error && ['PROMOTION_CHANGED', 'PROMOTION_LIMIT', 'PROMOTION_CUSTOMER_LIMIT'].includes(error.message)) return errorResponse('A promoção já não está disponível. Atualize o carrinho e tente novamente.', 409);
+    if ((error as Prisma.PrismaClientKnownRequestError)?.code === 'P2034') return errorResponse('A operação concorreu com outra compra. Tente novamente.', 409);
     console.error('Error creating order:', error);
     return errorResponse('Unable to create order', 503);
   }
