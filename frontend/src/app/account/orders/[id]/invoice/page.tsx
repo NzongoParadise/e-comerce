@@ -26,6 +26,7 @@ type InvoiceOrder = {
   id: number;
   orderNumber: string;
   status: string;
+  paymentMethod: string;
   country: "AO" | "PT";
   currency: string;
   billingName?: string | null;
