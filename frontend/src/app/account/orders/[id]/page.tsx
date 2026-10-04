@@ -152,10 +152,10 @@ export default function OrderDetailPage() {
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <button onClick={() => window.print()} className="btn-secondary inline-flex items-center gap-2 px-4 py-2.5 text-xs">
+              <Link href={`/account/orders/${id}/invoice`} className="btn-secondary inline-flex items-center gap-2 px-4 py-2.5 text-xs">
                 <Download size={15} />
                 Fatura
-              </button>
+              </Link>
               <Link href={`/account/orders/${id}/tracking`} className="btn-primary inline-flex items-center gap-2 px-4 py-2.5 text-xs">
                 <Truck size={15} />
                 Acompanhar
