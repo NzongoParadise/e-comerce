@@ -1,0 +1,2 @@
+ALTER TABLE "OrderItem" ADD COLUMN "unitPriceKZ" DECIMAL(12,2);
+ALTER TABLE "OrderItem" ADD COLUMN "subtotalKZ" DECIMAL(12,2);

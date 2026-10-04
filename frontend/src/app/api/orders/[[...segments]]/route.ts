@@ -8,6 +8,7 @@ import { isDefinitiveStripeRejection, isStripeSessionForOrder, stripeCheckoutIde
 import { calculateShipping, estimateCartWeightKg } from '@/lib/shipping';
 import { evaluateOrderPromotions, legacyCouponDiscount, reservePromotionUsages } from '@/lib/server/promotions/engine';
 import { ensureStripeCustomer } from '@/lib/server/payments/stripeCustomers';
+import { buildAgtQrUrl } from '@/lib/server/agt';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -378,8 +379,10 @@ export async function POST(request: Request) {
             slug: product.slug,
             imageUrl: product.imageUrl,
             unitPrice: eurPrice,
+            unitPriceKZ: aoPrice,
             quantity: item.quantity,
             subtotal: eurPrice * item.quantity,
+            subtotalKZ: aoPrice * item.quantity,
           })) },
           payment: { create: {
             userId: user.id,
@@ -495,5 +498,12 @@ export async function GET(request: Request) {
     include: { items: true, payment: true, trackingEvents: { orderBy: { occurredAt: 'desc' } } },
   });
   if (!order) return errorResponse('Order not found', 404);
-  return Response.json({ data: order });
+  return Response.json({
+    data: {
+      ...order,
+      agtQrUrl:
+        order.agtQrUrl ||
+        buildAgtQrUrl(order.agtDocumentNo || "", process.env.AGT_TAX_REGISTRATION_NUMBER),
+    },
+  });
 }

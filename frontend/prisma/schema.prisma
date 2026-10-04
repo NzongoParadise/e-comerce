@@ -248,6 +248,15 @@ model Order {
   promotionUsages PromotionUsage[]
   discountTotalEUR Decimal @default(0) @db.Decimal(10,2)
   discountTotalKZ  Decimal @default(0) @db.Decimal(12,2)
+  agtDocumentNo String? @unique
+  agtStatus String @default("NOT_SUBMITTED")
+  agtRequestId String?
+  agtJwsDocumentSignature String?
+  agtQrUrl String?
+  agtSubmittedAt DateTime?
+  agtValidatedAt DateTime?
+  agtError Json?
+  @@index([agtStatus])
 }
 
 model OrderItem {
@@ -259,8 +268,10 @@ model OrderItem {
   slug      String
   imageUrl  String?
   unitPrice Decimal  @db.Decimal(10,2)
+  unitPriceKZ Decimal? @db.Decimal(12,2)
   quantity  Int
   subtotal  Decimal  @db.Decimal(12,2)
+  subtotalKZ Decimal? @db.Decimal(12,2)
 }
 
 model Payment {
@@ -463,6 +474,23 @@ model PromotionUsage {
   order          Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
   @@unique([promotionId, orderId])
   @@index([promotionId, userId])
+}
+
+model AgtSeries {
+  id                     Int      @id @default(autoincrement())
+  seriesCode              String   @unique
+  seriesYear              Int
+  documentType            String
+  establishmentNumber     String
+  firstDocumentApproved   String
+  lastDocumentApproved    String
+  nextDocumentNumber      Int
+  seriesStatus            String   @default("A")
+  invoicingMethod         String?
+  seriesContingencyIndicator String @default("N")
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  @@index([seriesYear, documentType, seriesStatus])
 }
 
 model OrderDiscount {
