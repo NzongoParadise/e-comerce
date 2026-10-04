@@ -24,7 +24,7 @@ function statusLabel(status: string) {
 
 export default function StripePaymentsPage() {
   const [payments, setPayments] = useState<Payment[]>([]);
-  const [stats, setStats] = useState({ paid: 0, pending: 0, failed: 0, refunded: 0, stripeFeesMinor: 0 });
+  const [stats, setStats] = useState({ paid: 0, pending: 0, failed: 0, refunded: 0, stripeFeesMinor: 0, grossMinor: 0, netMinor: 0, refundCount: 0, disputeCount: 0 });
   const [detail, setDetail] = useState<Detail | null>(null);
   const [status, setStatus] = useState("ALL");
   const [currency, setCurrency] = useState("ALL");
@@ -100,7 +100,7 @@ export default function StripePaymentsPage() {
       <div className="mb-5 flex flex-col justify-between gap-3 md:flex-row md:items-end"><div><p className="text-[10px] font-black uppercase tracking-[.16em] text-blue-700">Módulo financeiro</p><h1 className="text-2xl font-black">Pagamentos Stripe</h1><p className="mt-1 text-xs text-gray-500">Transações, taxas, reembolsos e auditoria. Stripe continua separado de MULTICAIXA.</p></div><div className="flex flex-wrap gap-2"><Link href="/admin/payments/disputes" className="border bg-white px-3 py-2 text-xs font-bold">Disputas</Link><Link href="/admin/payments/payouts" className="border bg-white px-3 py-2 text-xs font-bold">Payouts</Link><button onClick={() => void load()} className="inline-flex items-center gap-2 border bg-white px-3 py-2 text-xs font-bold"><RefreshCw size={14}/>Atualizar</button></div></div>
       {message && <div role="alert" className="mb-4 border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">{message}</div>}
       <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        {[["Pagos", stats.paid],["Pendentes", stats.pending],["Falhados", stats.failed],["Reembolsados", stats.refunded],["Taxas Stripe", moneyMinor(stats.stripeFeesMinor,"EUR")]].map(([label,value]) => <div key={String(label)} className="border bg-white p-4"><p className="text-[10px] font-bold uppercase text-gray-500">{label}</p><p className="mt-2 text-xl font-black">{value}</p></div>)}
+        {[["Bruto", moneyMinor(stats.grossMinor,"EUR")],["Líquido", moneyMinor(stats.netMinor,"EUR")],["Pagos", stats.paid],["Pendentes", stats.pending],["Falhados", stats.failed],["Reembolsos", stats.refundCount],["Disputas", stats.disputeCount],["Taxas Stripe", moneyMinor(stats.stripeFeesMinor,"EUR")]].map(([label,value]) => <div key={String(label)} className="border bg-white p-4"><p className="text-[10px] font-bold uppercase text-gray-500">{label}</p><p className="mt-2 text-xl font-black">{value}</p></div>)}
       </div>
       <div className="mb-4 flex flex-wrap items-end gap-2">
         <div><label className="mb-1 block text-[10px] font-bold uppercase text-gray-500">De</label><input type="date" value={from} onChange={e=>{setPage(1);setFrom(e.target.value)}} className="border bg-white px-3 py-2 text-xs"/></div>
