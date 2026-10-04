@@ -69,7 +69,7 @@ model Product {
   categoryId  Int
   category    Category   @relation(fields: [categoryId], references: [id])
   brandId     Int
-  brand       Brand      @relation(fields: [brandId], references: [id])
+  brand       Brand     @relation(fields: [brandId], references: [id])
   prices      Price[]
   quoteItems  QuoteItem[]
   attributes  ProductAttribute[]
@@ -177,8 +177,8 @@ model UserCoupon {
   couponId Int
   claimedAt DateTime @default(now())
   usedAt   DateTime?
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  coupon   Coupon    @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  coupon   Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
   @@id([userId, couponId])
   @@index([couponId])
 }
@@ -207,9 +207,9 @@ model PasswordResetToken {
   tokenHash String   @unique
   userId    Int
   expiresAt DateTime
-  usedAt    DateTime?
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  usedAt     DateTime?
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@index([userId, expiresAt])
 }
 
@@ -264,29 +264,40 @@ model OrderItem {
 }
 
 model Payment {
-  id        Int      @id @default(autoincrement())
-  orderId   Int      @unique
-  userId    Int
-  provider  String
-  method    String
-  status    String   @default("PENDING")
-  providerPaymentId String? @unique
-  reference String?
-  entity    String?
-  referenceNumber String?
-  expiresAt DateTime?
-  phoneNumber String?
-  currency  String   @default("AOA")
-  amountEUR Decimal   @db.Decimal(10,2)
-  amountKZ  Decimal   @db.Decimal(12,2)
-  paidAt    DateTime?
-  failedAt  DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id])
-  attempts  PaymentAttempt[]
-  events    PaymentEvent[]
+  id                    Int      @id @default(autoincrement())
+  orderId               Int      @unique
+  userId                Int
+  provider               String
+  method                 String
+  status                 String   @default("PENDING")
+  providerPaymentId      String?  @unique
+  stripePaymentIntentId  String?  @unique
+  stripeChargeId        String?  @unique
+  grossAmount            Int?
+  stripeFee              Int?
+  netAmount              Int?
+  failureCode            String?
+  failureMessage         String?
+  disputedAt             DateTime?
+  reference              String?
+  entity                 String?
+  referenceNumber        String?
+  expiresAt              DateTime?
+  phoneNumber            String?
+  currency               String   @default("AOA")
+  amountEUR              Decimal  @db.Decimal(10,2)
+  amountKZ               Decimal  @db.Decimal(12,2)
+  paidAt                 DateTime?
+  failedAt               DateTime?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  order                  Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user                   User     @relation(fields: [userId], references: [id])
+  attempts               PaymentAttempt[]
+  events                 PaymentEvent[]
+  refunds                StripeRefund[]
+  disputes               StripeDispute[]
+  @@index([status, createdAt])
 }
 
 model PaymentAttempt {
@@ -314,6 +325,52 @@ model PaymentEvent {
   createdAt       DateTime  @default(now())
   payment         Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
   @@index([paymentId])
+  @@index([eventType, createdAt])
+}
+
+model StripeRefund {
+  id              Int      @id @default(autoincrement())
+  paymentId       Int
+  stripeRefundId  String   @unique
+  amount          Int
+  currency        String
+  reason          String?
+  status          String
+  failureReason   String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  payment         Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  @@index([paymentId, createdAt])
+  @@index([status])
+}
+
+model StripeDispute {
+  id              Int      @id @default(autoincrement())
+  paymentId       Int
+  stripeDisputeId String   @unique
+  amount          Int
+  currency        String
+  reason          String?
+  status          String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  closedAt        DateTime?
+  payment         Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  @@index([paymentId, createdAt])
+  @@index([status])
+}
+
+model StripePayout {
+  id             Int      @id @default(autoincrement())
+  stripePayoutId String   @unique
+  amount         Int
+  currency       String
+  status         String
+  arrivalDate    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  @@index([status, arrivalDate])
+  @@index([createdAt])
 }
 
 model TrackingEvent {
@@ -352,8 +409,8 @@ model QuoteItem {
   unitPrice Decimal  @db.Decimal(10,2)
   quantity  Int
   subtotal  Decimal  @db.Decimal(12,2)
-  quote     Quote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
-  product   Product  @relation(fields: [productId], references: [id])
+  quote     Quote     @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id])
 }
 
 model ReturnRequest {
@@ -370,7 +427,6 @@ model ReturnRequest {
   order         Order    @relation(fields: [orderId], references: [id])
   user          User     @relation(fields: [userId], references: [id])
 }
-
 
 model Promotion {
   id                  Int      @id @default(autoincrement())
@@ -389,15 +445,15 @@ model Promotion {
   minOrderAOA         Decimal? @db.Decimal(12,2)
   minOrderEUR         Decimal? @db.Decimal(10,2)
   active              Boolean  @default(true)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
   rules               PromotionRule[]
   actions             PromotionAction[]
-  products            PromotionProduct[]
-  categories          PromotionCategory[]
-  brands              PromotionBrand[]
-  usages              PromotionUsage[]
-  orderDiscounts      OrderDiscount[]
+  products             PromotionProduct[]
+  categories           PromotionCategory[]
+  brands               PromotionBrand[]
+  usages               PromotionUsage[]
+  orderDiscounts       OrderDiscount[]
   @@index([status, active, startAt, endAt])
   @@index([priority])
 }
@@ -414,11 +470,11 @@ model PromotionRule {
 
 model PromotionAction {
   id             Int       @id @default(autoincrement())
-  promotionId    Int
-  type           String
-  value          Decimal?  @db.Decimal(12,2)
-  maxDiscount    Decimal?  @db.Decimal(12,2)
-  promotion      Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  promotionId   Int
+  type          String
+  value         Decimal? @db.Decimal(12,2)
+  maxDiscount   Decimal? @db.Decimal(12,2)
+  promotion     Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
   @@index([promotionId])
 }
 
@@ -444,9 +500,9 @@ model PromotionBrand {
   promotionId Int
   brandId     Int
   promotion   Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
-  brand       Brand     @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  brand       Brand     @relation(fields: [promotionId], references: [id], onDelete: Cascade)
   @@id([promotionId, brandId])
-  @@index([brandId])
+  @@index([categoryId])
 }
 
 model PromotionUsage {

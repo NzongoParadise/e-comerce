@@ -22,6 +22,7 @@ import {
   UserRound,
   Users,
   Wallet,
+  CreditCard,
 } from "lucide-react";
 import { fetchWithAuth } from "@/lib/api";
 
@@ -78,6 +79,7 @@ const menuItems: MenuItem[] = [
   { label: "Clientes", href: "/admin/clients", Icon: Users },
   { label: "Fornecedores", href: "/admin/suppliers", Icon: Truck },
   { label: "Financeiro", href: "/admin/finance", Icon: Wallet },
+  { label: "Pagamentos Stripe", href: "/admin/payments", Icon: CreditCard },
   { label: "Marketing", href: "/admin/marketing", Icon: BarChart3 },
   { label: "Logs do sistema", href: "/admin/logs", Icon: ClipboardList },
   { label: "Utilizadores", href: "/admin/users", Icon: Users },
