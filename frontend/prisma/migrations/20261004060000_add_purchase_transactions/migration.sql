@@ -47,8 +47,6 @@ CREATE TABLE "PurchaseEvent" (
 );
 CREATE INDEX "PurchaseEvent_purchaseId_createdAt_idx" ON "PurchaseEvent"("purchaseId","createdAt");
 
-ALTER TABLE "Supplier" ADD CONSTRAINT "Supplier_purchases_note" FOREIGN KEY ("id") REFERENCES "Purchase"("supplierId") ON DELETE SET NULL ON UPDATE CASCADE;
-ALTER TABLE "Purchase" DROP CONSTRAINT "Supplier_purchases_note";
 ALTER TABLE "Purchase" ADD CONSTRAINT "Purchase_supplierId_fkey" FOREIGN KEY ("supplierId") REFERENCES "Supplier"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 ALTER TABLE "Purchase" ADD CONSTRAINT "Purchase_financeEntryId_fkey" FOREIGN KEY ("financeEntryId") REFERENCES "FinanceEntry"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 ALTER TABLE "PurchaseItem" ADD CONSTRAINT "PurchaseItem_purchaseId_fkey" FOREIGN KEY ("purchaseId") REFERENCES "Purchase"("id") ON DELETE CASCADE ON UPDATE CASCADE;
