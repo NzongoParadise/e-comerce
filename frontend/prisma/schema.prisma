@@ -29,6 +29,7 @@ model Brand {
   name      String     @unique
   slug      String     @unique
   products  Product[]
+  promotionBrands PromotionBrand[]
 }
 
 model Supplier {
@@ -73,8 +74,6 @@ model Product {
   quoteItems  QuoteItem[]
   attributes  ProductAttribute[]
   promotionProducts PromotionProduct[]
-  promotionRulesByCategory PromotionCategory[]
-  promotionRulesByBrand PromotionBrand[]
 }
 
 model ProductAttribute {
