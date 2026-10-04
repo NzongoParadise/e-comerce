@@ -66,3 +66,78 @@ Deploy the `frontend/` directory as a Next.js project on Vercel. All runtime sou
 4. Deploy. Prisma Client is generated during the build. The current Neon database already has all migrations; for future schema changes, run `npm run db:migrate` before promoting the deployment.
 
 Neon Free suspends idle compute and has a 0.5 GB storage limit. Vercel Functions limit request bodies to 4.5 MB, so the current B2B document upload flow (up to 5 MB per file) needs direct-to-object-storage uploads or a lower size limit before relying on it in production. Password-reset email delivery and durable document storage also need providers before production use.
+
+## Stripe — módulo financeiro
+
+A loja usa Stripe como processador de pagamentos para encomendas em EUR. A arquitetura mantém uma relação **Order → Payment → PaymentIntent → Charge**, sem Stripe Connect/multi-seller. O Checkout hospedado existente continua a ser a interface de pagamento; a liquidação financeira é reconciliada pelo PaymentIntent e pelos webhooks.
+
+### Variáveis
+
+No ambiente do servidor configure:
+
+- `STRIPE_SECRET_KEY` — chave secreta TEST ou LIVE correspondente ao ambiente.
+- `STRIPE_WEBHOOK_SECRET` — segredo do endpoint de webhook.
+- `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` — reservado para integrações Stripe.js no browser; nunca coloque a secret key no frontend.
+
+### Webhook local
+
+Com Stripe CLI instalado:
+
+```powershell
+stripe login
+stripe listen --forward-to localhost:3000/api/stripe/webhook
+```
+
+Copie o `whsec_...` mostrado pelo CLI para `STRIPE_WEBHOOK_SECRET`.
+
+Para testes de eventos, use o Stripe CLI para encaminhar eventos para o endpoint. O servidor valida a assinatura do payload bruto, grava o `event.id` de forma única e só altera a encomenda depois de processar o evento.
+
+### Fluxo financeiro
+
+```text
+Checkout
+  ↓
+Order AWAITING_PAYMENT
+  ↓
+Stripe Checkout Session
+  ↓
+PaymentIntent (1 por encomenda)
+  ↓
+Stripe webhook
+  ↓
+Payment PAID / FAILED / PROCESSING
+  ↓
+Order PAYMENT_CONFIRMED quando o pagamento está confirmado
+```
+
+A página de sucesso não é utilizada como prova definitiva de pagamento. O fulfillment depende dos eventos Stripe no servidor.
+
+### Administração
+
+- `/admin/payments` — transações Stripe, filtros, taxas e líquido.
+- `/api/admin/payments/[id]/refund` — reembolso total/parcial.
+- `/api/admin/disputes` — disputas/chargebacks persistidos pelos webhooks.
+- `/api/admin/payouts?sync=1` — sincronização de payouts da conta Stripe.
+
+Nunca são armazenados número completo do cartão, CVV ou PIN. Os IDs Stripe são referências de auditoria.
+
+### Reembolsos
+
+O endpoint administrativo recebe `amountMinor` em unidade mínima da moeda. Para EUR, por exemplo, €100,00 = 10000. O backend calcula o valor ainda disponível e rejeita over-refund. A operação usa idempotência na chamada à Stripe e o estado final é reconciliado pelos eventos de refund.
+
+### Testes recomendados
+
+Use cartões de teste oficiais da Stripe no modo TEST. Valide, no mínimo:
+
+1. pagamento aprovado;
+2. cartão recusado;
+3. autenticação 3DS;
+4. webhook com assinatura inválida;
+5. webhook duplicado;
+6. reembolso total;
+7. reembolso parcial;
+8. tentativa de over-refund;
+9. disputa simulada/teste quando disponível no ambiente Stripe;
+10. payout recebido por webhook ou sincronização administrativa.
+
+A integração não altera MULTICAIXA nem transforma a aplicação em marketplace.

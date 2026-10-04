@@ -56,6 +56,7 @@ type StripeCheckoutSession = {
   url?: string;
   status: 'open' | 'complete' | 'expired';
   expiresAt?: Date;
+  paymentIntentId?: string;
 };
 
 function parseStripeCheckoutSession(value: unknown): StripeCheckoutSession {
@@ -70,6 +71,7 @@ function parseStripeCheckoutSession(value: unknown): StripeCheckoutSession {
     ...(typeof session.url === 'string' ? { url: session.url } : {}),
     status: session.status as StripeCheckoutSession['status'],
     ...(typeof session.expires_at === 'number' ? { expiresAt: new Date(session.expires_at * 1000) } : {}),
+    ...(typeof session.payment_intent === 'string' ? { paymentIntentId: session.payment_intent } : {}),
   };
 }
 
@@ -89,6 +91,9 @@ async function createStripeCheckout(orderId: number, orderNumber: string, amount
     expires_at: String(Math.floor(expiresAt.getTime() / 1000)),
     client_reference_id: orderNumber,
     'metadata[orderId]': String(orderId),
+    'metadata[orderNumber]': orderNumber,
+    'payment_intent_data[metadata][orderId]': String(orderId),
+    'payment_intent_data[metadata][orderNumber]': orderNumber,
   });
   if (paymentMethod === 'card') {
     const order = await prisma.order.findUnique({ where: { id: orderId }, select: { userId: true } });
@@ -180,6 +185,9 @@ async function saveStripeCheckout(orderId: number, checkout: StripeCheckoutSessi
         method: paymentMethod,
         status: 'REQUIRES_PAYMENT',
         reference: checkout.id,
+        stripePaymentIntentId: checkout.paymentIntentId,
+        providerPaymentId: checkout.paymentIntentId,
+        grossAmount: checkout.paymentIntentId ? toStripeMinorUnits(paymentMethod === 'card' || paymentMethod === 'mbway' ? Number((await transaction.order.findUnique({ where: { id: orderId }, select: { totalEUR: true } }))?.totalEUR || 0) : 0) : undefined,
         expiresAt: checkout.expiresAt || fallbackExpiresAt,
       },
     });
