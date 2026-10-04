@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { FileDown, LoaderCircle, Plus, Search, X } from "lucide-react";
+import { FileDown, LoaderCircle, Plus, Search, X, Megaphone } from "lucide-react";
 import { fetchWithAuth } from "@/lib/api";
 
 type Coupon = {
@@ -164,7 +164,7 @@ export default function MarketingCouponsPage() {
   }
 
   return <main>
-    <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-end"><div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-blue-700">Marketing · Campanhas</p><h1 className="mt-1 text-2xl font-black">Cupões promocionais</h1><p className="mt-1 text-sm text-gray-500">Crie descontos, acompanhe resgates e controle validade.</p></div><div className="flex gap-2"><button type="button" onClick={exportCoupons} className="inline-flex items-center gap-2 border border-gray-300 bg-white px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50"><FileDown size={15} />Exportar</button><button type="button" onClick={createCoupon} className="inline-flex items-center gap-2 bg-blue-700 px-3 py-2 text-xs font-bold text-white hover:bg-blue-800"><Plus size={15} />Novo cupão</button></div></div>
+    <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-end"><div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-blue-700">Marketing · Campanhas</p><h1 className="mt-1 text-2xl font-black">Cupões promocionais</h1><p className="mt-1 text-sm text-gray-500">Crie descontos, acompanhe resgates e controle validade.</p></div><div className="flex gap-2"><a href="/admin/marketing/promotions" className="inline-flex items-center gap-2 border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-800"><Megaphone size={15} />Promoções</a><button type="button" onClick={exportCoupons} className="inline-flex items-center gap-2 border border-gray-300 bg-white px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50"><FileDown size={15} />Exportar</button><button type="button" onClick={createCoupon} className="inline-flex items-center gap-2 bg-blue-700 px-3 py-2 text-xs font-bold text-white hover:bg-blue-800"><Plus size={15} />Novo cupão</button></div></div>
     {notice && <p role="status" className="mb-4 border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{notice}</p>}
     {error && <p role="alert" className="mb-4 border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</p>}
     <div className="mb-5 grid gap-3 sm:grid-cols-3">{[["Ativos", stats.active, "text-emerald-700"], ["Inativos", stats.inactive, "text-gray-600"], ["Expirados", stats.expired, "text-amber-700"]].map(([label, value, tone]) => <div key={String(label)} className="border border-gray-200 bg-white p-4"><p className="text-[10px] font-bold uppercase text-gray-500">{label}</p><p className={`mt-2 text-2xl font-black ${tone}`}>{value}</p></div>)}</div>
