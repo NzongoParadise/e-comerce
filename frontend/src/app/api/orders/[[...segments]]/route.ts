@@ -379,8 +379,10 @@ export async function POST(request: Request) {
             slug: product.slug,
             imageUrl: product.imageUrl,
             unitPrice: eurPrice,
+            unitPriceKZ: aoPrice,
             quantity: item.quantity,
             subtotal: eurPrice * item.quantity,
+            subtotalKZ: aoPrice * item.quantity,
           })) },
           payment: { create: {
             userId: user.id,
