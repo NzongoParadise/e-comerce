@@ -480,3 +480,4 @@ export async function GET(request: Request) {
   });
   if (!order) return errorResponse('Order not found', 404);
   return Response.json({ data: order });
+}
