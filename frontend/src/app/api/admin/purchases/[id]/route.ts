@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/server/prisma";
 import { authenticate, errorResponse, isAdmin, userSubject } from "@/lib/server/api";
-import { z } from "zod";
 
 export const runtime = "nodejs";
 
