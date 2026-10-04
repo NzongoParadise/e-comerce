@@ -89,7 +89,6 @@ async function main() {
       name: 'Primeira compra · 10% OFF',
       slug: 'primeira-compra-10',
       description: '10% de desconto para novos clientes.',
-      code: 'PRIMEIRA10',
       status: 'ACTIVE',
       startAt: now,
       endAt: promotionEnd,
