@@ -144,7 +144,7 @@ export async function syncChargeFinancials(paymentId: number, charge: StripeObje
   });
 }
 
-export async function createStripeRefund(paymentId: number, amount?: number, reason?: string) {
+export async function createStripeRefund(paymentId: number, amount?: number, reason?: string, idempotencyKey?: string) {
   const payment = await prisma.payment.findUnique({ where: { id: paymentId }, include: { refunds: true, order: true } });
   if (!payment) throw new Error('PAYMENT_NOT_FOUND');
   if (payment.provider !== 'stripe' || !payment.stripePaymentIntentId) throw new Error('STRIPE_PAYMENT_NOT_FOUND');
@@ -160,7 +160,7 @@ export async function createStripeRefund(paymentId: number, amount?: number, rea
   const refund = await stripeRequest<{ id: string; amount: number; currency: string; status: string; reason?: string; failure_reason?: string }>('refunds', {
     method: 'POST',
     params,
-    idempotencyKey: `refund-payment-${payment.id}-${refundAmount}-${refunded}`,
+    idempotencyKey: idempotencyKey || `refund-payment-${payment.id}-${refundAmount}-${refunded}`,
   });
   await prisma.stripeRefund.upsert({
     where: { stripeRefundId: refund.id },
