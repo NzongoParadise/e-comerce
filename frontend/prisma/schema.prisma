@@ -474,6 +474,23 @@ model PromotionUsage {
   @@index([promotionId, userId])
 }
 
+model AgtSeries {
+  id                     Int      @id @default(autoincrement())
+  seriesCode              String   @unique
+  seriesYear              Int
+  documentType            String
+  establishmentNumber     String
+  firstDocumentApproved   String
+  lastDocumentApproved    String
+  nextDocumentNumber      Int
+  seriesStatus            String   @default("A")
+  invoicingMethod         String?
+  seriesContingencyIndicator String @default("N")
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  @@index([seriesYear, documentType, seriesStatus])
+}
+
 model OrderDiscount {
   id             Int       @id @default(autoincrement())
   orderId        Int
