@@ -554,6 +554,9 @@ model FinanceEntry {
   updatedBy       String?
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
+  sourceType      String?
+  sourceId        Int?
+  idempotencyKey  String?             @unique
   events          FinanceEntryEvent[]
   purchase        Purchase?
   @@unique([sourceType, sourceId])
