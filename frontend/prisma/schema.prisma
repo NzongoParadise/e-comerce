@@ -268,8 +268,10 @@ model OrderItem {
   slug      String
   imageUrl  String?
   unitPrice Decimal  @db.Decimal(10,2)
+  unitPriceKZ Decimal? @db.Decimal(12,2)
   quantity  Int
   subtotal  Decimal  @db.Decimal(12,2)
+  subtotalKZ Decimal? @db.Decimal(12,2)
 }
 
 model Payment {
