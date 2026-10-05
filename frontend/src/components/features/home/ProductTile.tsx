@@ -65,6 +65,7 @@ export function ProductTile({ product }: { product: Product }) {
           alt={product.name}
           width={180}
           height={160}
+          unoptimized={Boolean(product.imageUrl && /^https?:\/\//i.test(product.imageUrl))}
           className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-[1.04]"
         />
       </Link>

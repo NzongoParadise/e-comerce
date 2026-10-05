@@ -17,7 +17,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="pt" className={inter.variable}>
+    <html lang="pt" className={inter.variable} suppressHydrationWarning>
       <body className="min-h-screen flex flex-col bg-[#f5f6fa] text-gray-900">
         <MarketProvider>
           <CartProvider>

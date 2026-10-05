@@ -19,6 +19,12 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## AI product comparison
+
+The product comparison page can request a capacity analysis from Google Gemini. Set `GEMINI_API_KEY` in the server-side environment (for local development, in `.env.local`). `GEMINI_MODEL` is optional and defaults to `gemini-3-flash-preview`.
+
+Keep the API key server-side and never use a `NEXT_PUBLIC_` prefix. When a customer requests an analysis, the selected products' names, brands, categories, and technical attributes are sent to Google. Descriptions, prices, and stock are not sent. The endpoint is rate-limited.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

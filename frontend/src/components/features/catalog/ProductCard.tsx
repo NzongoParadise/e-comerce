@@ -7,6 +7,8 @@ import { Heart, ShoppingCart } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { useFavorites } from "@/context/FavoritesContext";
 import { useMarket } from "@/context/MarketContext";
+import { getPromotionalUnitPrice } from "@/lib/promotions/pricing";
+import { usePublicPromotions } from "@/lib/promotions/usePublicPromotions";
 
 export type CatalogProduct = {
   id: number;
@@ -16,20 +18,29 @@ export type CatalogProduct = {
   basePrice: string | number;
   imageUrl: string | null;
   stock: number;
-  category: { name: string; slug: string };
-  brand: { name: string; slug: string };
+  category: { id: number; name: string; slug: string };
+  brand: { id: number; name: string; slug: string };
   prices?: { market: string; amount: string | number }[];
 };
 
 export function ProductCard({ product }: { product: CatalogProduct }) {
   const router = useRouter();
-  const { market, formatPrice, eurToKz } = useMarket();
+  const { market, eurToKz } = useMarket();
   const { addToCart } = useCart();
   const { isFavorite, toggleFavorite } = useFavorites();
+  const promotions = usePublicPromotions();
 
   const eur = Number(product.prices?.find((price) => price.market === "PT")?.amount ?? product.basePrice);
   const aoa = Number(product.prices?.find((price) => price.market === "AO")?.amount ?? eurToKz(eur));
+  const pricedProduct = { id: product.id, categoryId: product.category.id, brandId: product.brand.id };
+  const euroOffer = getPromotionalUnitPrice(pricedProduct, "PT", eur, promotions);
+  const kwanzaOffer = getPromotionalUnitPrice(pricedProduct, "AO", aoa, promotions);
+  const marketPrice = market === "AO" ? aoa : eur;
+  const marketOffer = market === "AO" ? kwanzaOffer : euroOffer;
   const favorite = isFavorite(product.id);
+  const formatMarketPrice = (amount: number) => market === "AO"
+    ? `Kz ${amount.toLocaleString("pt-AO", { maximumFractionDigits: 2 })}`
+    : `€ ${amount.toLocaleString("pt-PT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   return (
     <article key={product.id} className="group relative flex flex-col border border-gray-200 bg-white p-3 hover:shadow-md">
@@ -55,7 +66,7 @@ export function ProductCard({ product }: { product: CatalogProduct }) {
       </button>
 
       <Link href={`/products/${product.slug}`} className="mb-3 flex h-36 items-center justify-center bg-gray-50 p-3">
-        <Image src={product.imageUrl || "/file.svg"} alt={product.name} width={150} height={130} className="h-full w-full object-contain" />
+        <Image src={product.imageUrl || "/file.svg"} alt={product.name} width={150} height={130} unoptimized={Boolean(product.imageUrl && /^https?:\/\//i.test(product.imageUrl))} className="h-full w-full object-contain" />
       </Link>
 
       <Link href={`/products?brand=${product.brand.slug}`} className="text-[9px] font-bold uppercase text-[#1d6ac4]">
@@ -70,10 +81,11 @@ export function ProductCard({ product }: { product: CatalogProduct }) {
       </p>
 
       <div className="mt-auto pt-3">
-        <strong className="text-base font-black">{formatPrice(eur)}</strong>
-        <p className="mb-2 text-[10px] text-gray-500">
-          {market === "PT" ? `Kz ${aoa.toLocaleString("pt-AO")}` : `€ ${eur.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}`}
-        </p>
+        {marketOffer ? <div className="mb-1 flex flex-wrap items-baseline gap-x-2">
+          <del className="text-xs text-gray-500">{formatMarketPrice(marketPrice)}</del>
+          <strong className="text-base font-black text-red-700">{formatMarketPrice(marketOffer.promotionalPrice)}</strong>
+        </div> : <strong className="text-base font-black">{formatMarketPrice(marketPrice)}</strong>}
+        {marketOffer && <p className="mb-2 text-[10px] font-semibold text-red-700">{marketOffer.promotion.name} · preço promocional</p>}
         <button
           type="button"
           disabled={product.stock <= 0}

@@ -5,6 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import { fetchWithAuth } from "@/lib/api";
 import { useCart } from "@/context/CartContext";
 import { useFavorites } from "@/context/FavoritesContext";
+import { getPromotionalUnitPrice } from "@/lib/promotions/pricing";
+import { usePublicPromotions } from "@/lib/promotions/usePublicPromotions";
 import Link from "next/link";
 import { ShoppingCart, Heart, Package, Star, Truck, ShieldCheck, Zap, CreditCard, Maximize2, MapPin } from "lucide-react";
 
@@ -16,8 +18,8 @@ type ProductDetails = {
   basePrice: string;
   imageUrl: string;
   stock: number;
-  category: { name: string; slug: string };
-  brand: { name: string; slug: string };
+  category: { id: number; name: string; slug: string };
+  brand: { id: number; name: string; slug: string };
   prices: { market: string; currency: string; amount: string }[];
 };
 
@@ -27,6 +29,7 @@ export default function ProductDetailsPage() {
   const router = useRouter();
   const { addToCart } = useCart();
   const { isFavorite, toggleFavorite } = useFavorites();
+  const promotions = usePublicPromotions();
   
   const [product, setProduct] = useState<ProductDetails | null>(null);
   const [loading, setLoading] = useState(true);
@@ -66,6 +69,9 @@ export default function ProductDetailsPage() {
   // Calculate prices based on backend data if available, else defaults
   const ptPrice = product.prices.find(p => p.market === "PT")?.amount || product.basePrice;
   const aoPrice = product.prices.find(p => p.market === "AO")?.amount || (Number(product.basePrice) * 965).toString();
+  const promotionProduct = { id: product.id, categoryId: product.category.id, brandId: product.brand.id };
+  const euroOffer = getPromotionalUnitPrice(promotionProduct, "PT", Number(ptPrice), promotions);
+  const kwanzaOffer = getPromotionalUnitPrice(promotionProduct, "AO", Number(aoPrice), promotions);
 
   const handleAddToCart = () => {
     addToCart({
@@ -197,12 +203,9 @@ export default function ProductDetailsPage() {
                  <button type="button" onClick={() => setPurchaseMode("wholesale")} className={`flex-1 rounded-lg py-2 text-xs font-bold transition ${purchaseMode === "wholesale" ? "bg-white text-[#1d6ac4] shadow-sm" : "text-gray-500"}`}>Compra grossista</button>
                </div>
 
-               <div className="mb-1 text-3xl font-black tracking-tight text-gray-900">
-                 € {Number(ptPrice).toLocaleString("pt-PT", { minimumFractionDigits: 2 })}
-               </div>
-               <div className="mb-5 text-xs font-semibold text-gray-500">
-                 Kz {Number(aoPrice).toLocaleString("pt-PT")}
-               </div>
+               {euroOffer ? <div className="mb-1 flex flex-wrap items-baseline gap-2"><del className="text-sm text-gray-500">€ {Number(ptPrice).toLocaleString("pt-PT", { minimumFractionDigits: 2 })}</del><strong className="text-3xl font-black tracking-tight text-red-700">€ {euroOffer.promotionalPrice.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}</strong></div> : <div className="mb-1 text-3xl font-black tracking-tight text-gray-900">€ {Number(ptPrice).toLocaleString("pt-PT", { minimumFractionDigits: 2 })}</div>}
+               {kwanzaOffer ? <div className="mb-1 flex flex-wrap items-baseline gap-2"><del className="text-xs text-gray-500">Kz {Number(aoPrice).toLocaleString("pt-AO")}</del><strong className="text-sm font-black text-red-700">Kz {kwanzaOffer.promotionalPrice.toLocaleString("pt-AO")}</strong></div> : <div className="mb-5 text-xs font-semibold text-gray-500">Kz {Number(aoPrice).toLocaleString("pt-AO")}</div>}
+               {(euroOffer || kwanzaOffer) && <p className="mb-5 text-[10px] font-semibold text-red-700">{(euroOffer ?? kwanzaOffer)?.promotion.name} · preço promocional conforme elegibilidade</p>}
 
                {purchaseMode === "wholesale" && <p className="mb-4 rounded-lg bg-blue-50 px-3 py-2 text-xs font-semibold text-[#1d6ac4]">Preços para empresas disponíveis por cotação.</p>}
 
