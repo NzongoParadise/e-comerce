@@ -9,6 +9,7 @@ import { calculateShipping, estimateCartWeightKg } from '@/lib/shipping';
 import { evaluateOrderPromotions, legacyCouponDiscount, reservePromotionUsages } from '@/lib/server/promotions/engine';
 import { ensureStripeCustomer } from '@/lib/server/payments/stripeCustomers';
 import { z } from 'zod';
+import { createNotificationIfAllowed } from '@/lib/server/notifications';
 
 export const runtime = 'nodejs';
 
@@ -417,6 +418,20 @@ export async function POST(request: Request) {
       }
       return createdOrder;
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5000, timeout: 10000 });
+
+    await createNotificationIfAllowed({
+      userId: user.id,
+      channel: "orderUpdates",
+      type: "ORDER_CREATED",
+      title: "Encomenda recebida",
+      message: `A encomenda ${order.orderNumber} foi recebida e está em processamento.`,
+      link: `/account/orders/${order.id}`,
+    }).catch((notificationError) => {
+      logger.error("Failed to create order notification", {
+        orderId: order.id,
+        error: notificationError instanceof Error ? notificationError.message : notificationError,
+      });
+    });
 
     let checkoutUrl: string | undefined;
     if (isStripePayment) {
