@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import jwksRsa from 'jwks-rsa';
 import { getUserRoles, isAdminUser } from '@/lib/auth';
+import { hashToken } from '@/lib/server/security';
 import { prisma } from '@/lib/server/prisma';
 
 export type ApiUser = jwt.JwtPayload & {
@@ -108,6 +109,11 @@ export async function authenticate(request: Request): Promise<ApiUser | null> {
   if (!verifiedUser || verifiedUser.sub === 'local-user') return null;
 
   try {
+    if (typeof verifiedUser.jti === 'string') {
+      const session = await prisma.securitySession.findUnique({ where: { tokenHash: hashToken(verifiedUser.jti) } });
+      if (!session || session.revokedAt || session.expiresAt <= new Date()) return null;
+      await prisma.securitySession.update({ where: { id: session.id }, data: { lastActivityAt: new Date() } });
+    }
     const profile = typeof verifiedUser.sub === 'string'
       ? await prisma.user.findUnique({
         where: { externalId: verifiedUser.sub },
