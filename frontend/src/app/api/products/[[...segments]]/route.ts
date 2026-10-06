@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/server/prisma';
 import { authenticate, errorResponse, isAdmin, prismaErrorCode, readJson } from '@/lib/server/api';
 import { z } from 'zod';
+import { createNotificationsForChannel } from '@/lib/server/notifications';
 
 export const runtime = 'nodejs';
 
@@ -136,6 +137,17 @@ export async function POST(request: Request) {
       data: { ...productData, prices: prices ? { create: prices } : undefined, attributes: attributes ? { create: attributes } : undefined },
       include: { category: true, brand: true, prices: true, attributes: true },
     });
+
+    await createNotificationsForChannel({
+      channel: "newProducts",
+      type: "NEW_PRODUCT",
+      title: "Novo produto disponível",
+      message: `${product.name} já está disponível na nossa loja.`,
+      link: `/produto/${product.slug}`,
+    }).catch((notificationError) => {
+      console.error("Failed to create new-product notifications:", notificationError);
+    });
+
     return Response.json({ data: product }, { status: 201 });
   } catch (error) {
     if (prismaErrorCode(error) === 'P2002') return errorResponse('Product slug already exists', 409);
