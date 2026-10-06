@@ -8,7 +8,7 @@ import { z } from 'zod';
 export const runtime = 'nodejs';
 
 const updateSchema = z.object({
-  status: z.enum(['PAYMENT_CONFIRMED', 'SHIPPED', 'DELIVERED']).optional(),
+  status: z.enum(['PAYMENT_CONFIRMED', 'SHIPPED', 'IN_TRANSIT', 'DELIVERED']).optional(),
   carrier: z.string().trim().max(100).optional(),
   trackingNumber: z.string().trim().max(120).optional(),
   location: z.string().trim().max(160).optional(),
@@ -171,6 +171,10 @@ export async function PATCH(request: Request) {
         SHIPPED: {
           type: 'ORDER_SHIPPED', title: 'Encomenda enviada',
           message: `A encomenda ${result.order.orderNumber} foi enviada.`,
+        },
+        IN_TRANSIT: {
+          type: 'ORDER_IN_TRANSIT', title: 'Encomenda em trânsito',
+          message: `A encomenda ${result.order.orderNumber} está em trânsito.`,
         },
         DELIVERED: {
           type: 'ORDER_DELIVERED', title: 'Encomenda entregue',
