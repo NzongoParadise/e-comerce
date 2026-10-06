@@ -36,7 +36,7 @@ export async function POST(request: Request) {
   if (auth.error) return auth.error;
   const parsed = schema.safeParse(await readJson(request));
   if (!parsed.success) return errorResponse("Dados de reembolso inválidos", 400, parsed.error.flatten().fieldErrors);
-  const actor = userSubject(auth.user);
+  const actor = userSubject(auth.user);\n  const idempotencyKey = request.headers.get("idempotency-key")?.trim();\n  if (idempotencyKey && (idempotencyKey.length < 16 || idempotencyKey.length > 255)) return errorResponse("Idempotency-Key inválida", 400);
 
   const payment = await prisma.payment.findFirst({
     where: { orderId: parsed.data.orderId, status: "PAID" },
@@ -100,10 +100,10 @@ export async function POST(request: Request) {
     if (!paymentIntentId) throw new Error("PAYMENT_INTENT_MISSING");
 
     const amountMinor = Math.round(parsed.data.amount * 100);
-    const body = new URLSearchParams({ payment_intent: paymentIntentId, amount: String(amountMinor), metadata: JSON.stringify({ orderId: String(payment.orderId), refundId: String(refund.id) }) });
+    const body = new URLSearchParams({ payment_intent: paymentIntentId, amount: String(amountMinor), metadata: JSON.stringify({ orderId: String(payment.orderId), refundId: String(refund.id) }) });\n    const stripeIdempotencyKey = idempotencyKey || `refund-${refund.id}`;
     const stripeResponse = await fetch("https://api.stripe.com/v1/refunds", {
       method: "POST",
-      headers: { Authorization: `Bearer ${secret}`, "Content-Type": "application/x-www-form-urlencoded" },
+      headers: { Authorization: `Bearer ${secret}`, "Content-Type": "application/x-www-form-urlencoded", "Idempotency-Key": stripeIdempotencyKey },
       body,
     });
     const stripeRefund = await stripeResponse.json() as { id?: string; status?: string; failure_reason?: string; error?: { message?: string } };
