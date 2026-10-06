@@ -123,6 +123,10 @@ model User {
   savedPaymentMethods SavedPaymentMethod[]
   coupons         UserCoupon[]
   promotionUsages PromotionUsage[]
+  securitySessions SecuritySession[]
+  twoFactorAuth TwoFactorAuth?
+  recoveryCodes TwoFactorRecoveryCode[]
+  securityEvents SecurityEvent[]
 }
 
 model Address {
@@ -510,4 +514,59 @@ model FinanceEntryEvent {
   createdAt         DateTime    @default(now())
   entry            FinanceEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
   @@index([entryId, createdAt])
+}
+
+model SecuritySession {
+  id Int @id @default(autoincrement())
+  userId Int
+  tokenHash String @unique
+  deviceName String
+  browser String
+  operatingSystem String
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  lastActivityAt DateTime @default(now())
+  expiresAt DateTime
+  revokedAt DateTime?
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events SecurityEvent[]
+  @@index([userId, lastActivityAt])
+}
+
+model TwoFactorAuth {
+  id Int @id @default(autoincrement())
+  userId Int @unique
+  secretEncrypted String
+  enabled Boolean @default(false)
+  verifiedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model TwoFactorRecoveryCode {
+  id Int @id @default(autoincrement())
+  userId Int
+  codeHash String @unique
+  usedAt DateTime?
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, usedAt])
+}
+
+model SecurityEvent {
+  id Int @id @default(autoincrement())
+  userId Int
+  sessionId Int?
+  type String
+  status String
+  ipAddress String?
+  userAgent String?
+  metadata Json @default("{}")
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session SecuritySession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  @@index([userId, createdAt])
+  @@index([type, createdAt])
 }
