@@ -2,7 +2,7 @@
 
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
-import { Bell, Building2, Check, ChevronRight, Image, KeyRound, LockKeyhole, MapPin, MonitorSmartphone, Save, ShieldCheck, SlidersHorizontal, Trash2, UserRound } from "lucide-react";
+import { Bell, Building2, Check, ChevronRight, Image, KeyRound, LockKeyhole, MapPin, MonitorSmartphone, Save, ShieldCheck, SlidersHorizontal, Trash2, UserRound, Activity, AlertTriangle } from "lucide-react";
 import { fetchWithAuth } from "@/lib/api";
 import SecurityPanel from "@/components/features/account/SecurityPanel";
 
@@ -136,7 +136,7 @@ export default function SettingsPage() {
           {activeTab === "preferences" && <div className="space-y-5"><SectionTitle icon={SlidersHorizontal} title="Preferências" text="Personalize a sua experiência RUBRICA DILIGENTE (SU), LDA." /><Field label="Idioma"><select className="settings-input"><option>Português</option><option>English</option></select></Field><Field label="Mercado predefinido"><select className="settings-input"><option>Angola (Kz)</option><option>Portugal (€)</option></select></Field><SaveButton saving={false} label="Guardar preferências" onClick={() => setMessage("Preferências guardadas.")} /></div>}
           {message && <p role="status" className="mt-5 rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-800">{message}</p>}
         </section>
-        <aside className="space-y-4">{isBusinessAccount && <div className="card overflow-hidden"><div className="h-24 bg-gradient-to-br from-blue-100 to-blue-50" /><div className="p-5"><div className="flex items-center gap-2"><span className="flex h-8 w-8 items-center justify-center rounded-full bg-green-100 text-green-600"><Check size={18} /></span><div><h2 className="font-bold text-gray-900">Empresa verificada</h2><p className="text-[11px] text-gray-500">A sua empresa está verificada e tem acesso a condições especiais.</p></div></div></div></div>}<div className="card p-5"><SectionTitle icon={ShieldCheck} title="Segurança da conta" text="Mantenha a sua conta segura." /><SideAction icon={KeyRound} label="Gerir segurança" onClick={() => setActiveTab("security")} /><SideAction icon={ShieldCheck} label="Autenticação em dois factores" badge="Gerir" onClick={() => setActiveTab("security")} /><SideAction icon={MonitorSmartphone} label="Dispositivos activos" onClick={() => setActiveTab("security")} /><SideAction icon={LockKeyhole} label="Sessões recentes" onClick={() => setActiveTab("security")} /></div><div className="card p-5"><SectionTitle icon={Bell} title="Preferências de comunicação" text="Escolha que comunicações pretende receber." /><Preference label="Promoções e ofertas" text="Receber novidades e descontos." value={promotions} onChange={setPromotions} /><Preference label="Novos produtos" text="Conhecer novos lançamentos." value={launches} onChange={setLaunches} /><Preference label="Atualizações de encomendas" text="Estado das suas compras." value={updates} onChange={setUpdates} /></div><button type="button" onClick={() => setMessage("Para eliminar a conta, contacte o suporte.")} className="flex w-full items-center justify-between rounded-lg border border-red-100 bg-red-50 px-4 py-4 text-left text-red-600"><span className="flex items-center gap-2"><Trash2 size={18} /><span><strong className="block text-sm">Eliminar conta</strong><small className="text-[10px]">Esta ação é irreversível.</small></span></span><ChevronRight size={16} /></button></aside>
+        <aside className="space-y-4">{isBusinessAccount && <div className="card overflow-hidden"><div className="h-24 bg-gradient-to-br from-blue-100 to-blue-50" /><div className="p-5"><div className="flex items-center gap-2"><span className="flex h-8 w-8 items-center justify-center rounded-full bg-green-100 text-green-600"><Check size={18} /></span><div><h2 className="font-bold text-gray-900">Empresa verificada</h2><p className="text-[11px] text-gray-500">A sua empresa está verificada e tem acesso a condições especiais.</p></div></div></div></div>}<SecurityOverview onManage={() => setActiveTab("security")} /><div className="card p-5"><SectionTitle icon={Bell} title="Preferências de comunicação" text="Escolha que comunicações pretende receber." /><Preference label="Promoções e ofertas" text="Receber novidades e descontos." value={promotions} onChange={setPromotions} /><Preference label="Novos produtos" text="Conhecer novos lançamentos." value={launches} onChange={setLaunches} /><Preference label="Atualizações de encomendas" text="Estado das suas compras." value={updates} onChange={setUpdates} /></div><button type="button" onClick={() => setMessage("Para eliminar a conta, contacte o suporte.")} className="flex w-full items-center justify-between rounded-lg border border-red-100 bg-red-50 px-4 py-4 text-left text-red-600"><span className="flex items-center gap-2"><Trash2 size={18} /><span><strong className="block text-sm">Eliminar conta</strong><small className="text-[10px]">Esta ação é irreversível.</small></span></span><ChevronRight size={16} /></button></aside>
       </div>
     </div>
   );
@@ -146,6 +146,49 @@ function SectionTitle({ icon: Icon, title, text }: { icon: typeof UserRound; tit
 function CompanySection({ title, icon: Icon, onSave, children }: { title: string; icon: typeof UserRound; onSave: () => void; children: React.ReactNode }) { return <section className="rounded-lg border border-gray-200 bg-white p-5"><div className="mb-5 flex items-center justify-between gap-3 border-b border-gray-100 pb-4"><div className="flex items-center gap-2"><Icon size={18} className="text-[#1d6ac4]" /><h2 className="font-bold text-gray-900">{title}</h2></div><button type="button" onClick={onSave} className="btn-primary px-3 py-2 text-xs"><Save size={14} /> Guardar alterações</button></div>{children}</section>; }
 function Field({ label, children }: { label: string; children: React.ReactNode }) { return <label className="block"><span className="mb-2 block text-sm font-semibold text-gray-700">{label}</span>{children}</label>; }
 function InfoRow({ label, value }: { label: string; value: string }) { return <div className="flex items-center justify-between border-t border-gray-100 py-4 text-sm"><span className="font-semibold text-gray-700">{label}</span><span className="text-right text-gray-500">{value}</span></div>; }
+function SecurityOverview({ onManage }: { onManage: () => void }) {
+  const [data, setData] = useState<{ twoFactorEnabled: boolean; recoveryCodesRemaining: number; sessions: { lastActivityAt: string }[] } | null>(null);
+
+  useEffect(() => {
+    fetchWithAuth("/api/auth/security").then((response) => setData(response.data)).catch(() => setData(null));
+  }, []);
+
+  const twoFactorEnabled = Boolean(data?.twoFactorEnabled);
+  const sessions = data?.sessions || [];
+  const score = data
+    ? Math.min(100, 45 + (twoFactorEnabled ? 35 : 0) + (data.recoveryCodesRemaining > 0 ? 10 : 0) + (sessions.length <= 3 ? 10 : 0))
+    : 0;
+  const latest = sessions[0]?.lastActivityAt
+    ? new Intl.DateTimeFormat("pt-PT", { dateStyle: "short", timeStyle: "short" }).format(new Date(sessions[0].lastActivityAt))
+    : "Sem actividade recente";
+
+  return <div className="card overflow-hidden">
+    <div className="border-b border-gray-100 bg-gradient-to-br from-blue-50 via-white to-white p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-[#1d6ac4]"><ShieldCheck size={20} /></span>
+          <div><h2 className="font-bold text-gray-900">Segurança da conta</h2><p className="mt-0.5 text-xs text-gray-500">Mantenha a sua conta protegida e acompanhe os acessos.</p></div>
+        </div>
+        {data && <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${score >= 80 ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>{score >= 80 ? "Proteção forte" : "Atenção necessária"}</span>}
+      </div>
+      <div className="mt-5 rounded-xl border border-gray-200 bg-white p-4">
+        <div className="flex items-center justify-between text-xs font-bold"><span className="text-gray-700">Nível de proteção</span><span className="text-gray-900">{data ? `${score}/100` : "—"}</span></div>
+        <div className="mt-2 h-2 overflow-hidden rounded-full bg-gray-100"><div className="h-full rounded-full bg-[#1d6ac4] transition-all" style={{ width: `${score}%` }} /></div>
+        <p className="mt-2 text-[11px] text-gray-500">{data ? (twoFactorEnabled ? "A autenticação em dois factores está activa." : "Active a autenticação em dois factores para reforçar a proteção.") : "A carregar o estado de segurança..."}</p>
+      </div>
+    </div>
+    <div className="p-5">
+      <div className="divide-y divide-gray-100">
+        <SideAction icon={ShieldCheck} label="Autenticação em dois factores" badge={data ? (twoFactorEnabled ? "Activo" : "Desactivado") : "—"} onClick={onManage} />
+        <SideAction icon={MonitorSmartphone} label="Dispositivos activos" badge={data ? `${sessions.length}` : "—"} onClick={onManage} />
+        <SideAction icon={Activity} label="Último acesso" badge={data ? latest : "—"} onClick={onManage} />
+        {data && !twoFactorEnabled && <div className="flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-[11px] text-amber-800"><AlertTriangle size={15} className="mt-0.5 shrink-0" /><span>Recomendamos activar o 2FA para proteger a conta mesmo que a palavra-passe seja comprometida.</span></div>}
+      </div>
+      <button type="button" onClick={onManage} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[#1d6ac4] px-4 py-3 text-xs font-bold text-white transition hover:bg-[#1557a0]">Gerir segurança <ChevronRight size={15} /></button>
+    </div>
+  </div>;
+}
+
 function SideAction({ icon: Icon, label, badge, onClick }: { icon: typeof UserRound; label: string; badge?: string; onClick?: () => void }) { return <button type="button" onClick={onClick} className="flex w-full items-center justify-between border-t border-gray-100 py-3 text-left text-xs font-semibold text-gray-700"><span className="flex items-center gap-2"><Icon size={15} className="text-[#1d6ac4]" />{label}</span><span className="flex items-center gap-1 text-gray-400">{badge && <small className="rounded-full bg-green-100 px-2 py-0.5 text-[9px] font-bold text-green-700">{badge}</small>}<ChevronRight size={14} /></span></button>; }
 function PasswordField({ label, value, onChange, visible }: { label: string; value: string; onChange: (value: string) => void; visible: boolean }) { return <Field label={label}><div className="relative"><LockKeyhole size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" /><input type={visible ? "text" : "password"} value={value} onChange={(event) => onChange(event.target.value)} required minLength={8} className="settings-input pl-9 pr-3" /></div></Field>; }
 function SaveButton({ saving, label = "Guardar alterações", onClick }: { saving: boolean; label?: string; onClick?: () => void }) { return <button type={onClick ? "button" : "submit"} onClick={onClick} disabled={saving} className="btn-primary disabled:opacity-60"><Save size={16} />{saving ? "A guardar..." : label}</button>; }
