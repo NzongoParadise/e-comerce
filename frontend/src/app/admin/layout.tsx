@@ -10,7 +10,7 @@ import { fetchWithAuth } from "@/lib/api";
 const groups = [
   { label: "Operação", items: [["Visão geral", "/admin", LayoutDashboard], ["Vendas", "/admin/orders", ShoppingBag], ["Produtos", "/admin/products", Package], ["Stock", "/admin/stock", Boxes], ["Fornecedores", "/admin/suppliers", Truck]] },
   { label: "Clientes", items: [["Clientes", "/admin/clients", Users], ["Utilizadores", "/admin/users", Users]] },
-  { label: "Financeiro", items: [["Visão financeira", "/admin/finance", Wallet], ["Pagamentos", "/admin/finance/payments", Wallet], ["Revisão de pagamentos", "/admin/orders/payment-review", ShieldCheck], ["Reembolsos", "/admin/finance/refunds", Wallet], ["Conciliação", "/admin/finance/reconciliation", ShieldCheck], ["Relatórios", "/admin/finance/reports", BarChart3]] },
+  { label: "Financeiro", items: [["Visão financeira", "/admin/finance", Wallet], ["Pagamentos", "/admin/finance/payments", Wallet], ["Revisão de pagamentos", "/admin/finance/review", ShieldCheck], ["Reembolsos", "/admin/finance/refunds", Wallet], ["Conciliação", "/admin/finance/reconciliation", ShieldCheck], ["Relatórios", "/admin/finance/reports", BarChart3]] },
   { label: "Marketing", items: [["Cupões", "/admin/marketing", Megaphone], ["Promoções", "/admin/marketing/promotions", Megaphone], ["Newsletter", "/admin/marketing/newsletter", Megaphone], ["Depoimentos", "/admin/marketing/testimonials", Megaphone]] },
   { label: "Sistema", items: [["Logs", "/admin/logs", ClipboardList], ["Configurações", "/admin/settings", ClipboardList]] },
 ] as const;
@@ -56,7 +56,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <input value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && search.trim()) router.push(`/admin/orders?search=${encodeURIComponent(search.trim())}`); }} placeholder="Pesquisar encomendas, produtos ou clientes..." className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-3 text-xs outline-none transition focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100" aria-label="Pesquisa administrativa" />
           </div>
           <div className="ml-auto flex items-center gap-2">
-            <Link href="/admin/orders/payment-review" className="hidden items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] font-bold text-amber-800 hover:bg-amber-100 sm:inline-flex"><ShieldCheck size={14} />Revisões</Link>
+            <Link href="/admin/finance/review" className="hidden items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] font-bold text-amber-800 hover:bg-amber-100 sm:inline-flex"><ShieldCheck size={14} />Revisões</Link>
             <Link href="/admin/users" className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-900 text-[10px] font-black text-white ring-2 ring-white" aria-label="Abrir utilizadores">AD</Link>
           </div>
         </div>
