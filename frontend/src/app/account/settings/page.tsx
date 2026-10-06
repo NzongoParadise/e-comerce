@@ -33,7 +33,7 @@ const emptyCompany: CompanyDetails = {
 
 const tabs: { id: Tab; label: string; icon: typeof UserRound }[] = [
   { id: "profile", label: "Perfil", icon: UserRound },
-  ...(isBusinessAccount ? [{ id: "company" as Tab, label: "Empresa", icon: Building2 }] : []),
+  { id: "company", label: "Empresa", icon: Building2 },
   { id: "security", label: "Segurança", icon: ShieldCheck },
   { id: "notifications", label: "Notificações", icon: Bell },
   { id: "preferences", label: "Preferências", icon: SlidersHorizontal },
@@ -120,10 +120,12 @@ export default function SettingsPage() {
     reader.readAsDataURL(file);
   }
 
+  const visibleTabs = tabs.filter(({ id }) => id !== "company" || isBusinessAccount);
+
   return (
     <div>
       <div className="mb-6"><p className="text-xs font-bold uppercase tracking-[0.16em] text-[#1d6ac4]">A minha conta</p><h1 className="mt-2 text-2xl font-bold text-gray-900">Definições da conta</h1><p className="mt-1 text-sm text-gray-500">Gerir as informações da sua conta, preferências e segurança.</p></div>
-      <div className="mb-6 grid grid-cols-2 gap-2 md:grid-cols-5">{tabs.map(({ id, label, icon: Icon }) => <button type="button" key={id} onClick={() => { setActiveTab(id); setMessage(""); }} className={`flex items-center justify-center gap-2 rounded-lg border px-3 py-3 text-xs font-bold transition ${activeTab === id ? "border-[#1d6ac4] bg-blue-50 text-[#1d6ac4]" : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"}`}><Icon size={16} />{label}</button>)}</div>
+      <div className="mb-6 grid grid-cols-2 gap-2 md:grid-cols-5">{visibleTabs.map(({ id, label, icon: Icon }) => <button type="button" key={id} onClick={() => { setActiveTab(id); setMessage(""); }} className={`flex items-center justify-center gap-2 rounded-lg border px-3 py-3 text-xs font-bold transition ${activeTab === id ? "border-[#1d6ac4] bg-blue-50 text-[#1d6ac4]" : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"}`}><Icon size={16} />{label}</button>)}</div>
 
       <div className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
         <section className="card p-6 sm:p-8">
