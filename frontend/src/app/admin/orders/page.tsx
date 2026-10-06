@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { fetchWithAuth } from "@/lib/api";
 
-type OrderStatus = "AWAITING_PAYMENT" | "PROCESSING" | "PAYMENT_CONFIRMED" | "SHIPPED" | "DELIVERED" | "CANCELLED" | "PAYMENT_REVIEW_REQUIRED" | "PAYMENT_REVIEW_IN_PROGRESS";
+type OrderStatus = "AWAITING_PAYMENT" | "PROCESSING" | "PAYMENT_CONFIRMED" | "SHIPPED" | "IN_TRANSIT" | "DELIVERED" | "CANCELLED" | "PAYMENT_REVIEW_REQUIRED" | "PAYMENT_REVIEW_IN_PROGRESS";
 type OrderItem = { id: number; name: string; imageUrl?: string | null; quantity: number; subtotal: string | number };
 type Order = {
   id: number;
@@ -57,6 +57,7 @@ const statusLabels: Record<OrderStatus, string> = {
   PROCESSING: "Em processamento",
   PAYMENT_CONFIRMED: "Pagamento confirmado",
   SHIPPED: "Enviada",
+  IN_TRANSIT: "Em trânsito",
   DELIVERED: "Entregue",
   CANCELLED: "Cancelada",
   PAYMENT_REVIEW_REQUIRED: "Revisão de pagamento",
@@ -67,6 +68,7 @@ const statusStyles: Record<OrderStatus, string> = {
   PROCESSING: "bg-blue-50 text-blue-700",
   PAYMENT_CONFIRMED: "bg-emerald-50 text-emerald-700",
   SHIPPED: "bg-violet-50 text-violet-700",
+  IN_TRANSIT: "bg-sky-50 text-sky-700",
   DELIVERED: "bg-green-50 text-green-700",
   CANCELLED: "bg-red-50 text-red-700",
   PAYMENT_REVIEW_REQUIRED: "bg-orange-50 text-orange-700",
@@ -78,6 +80,7 @@ const statusFilters: { label: string; value: "ALL" | OrderStatus }[] = [
   { label: "Em processamento", value: "PROCESSING" },
   { label: "Pagas", value: "PAYMENT_CONFIRMED" },
   { label: "Enviadas", value: "SHIPPED" },
+  { label: "Em trânsito", value: "IN_TRANSIT" },
   { label: "Entregues", value: "DELIVERED" },
   { label: "Canceladas", value: "CANCELLED" },
 ];
@@ -311,7 +314,8 @@ export default function OrdersAdminPage() {
     ? ["PAYMENT_CONFIRMED"]
     : selected?.status === "PAYMENT_CONFIRMED"
       ? ["SHIPPED"]
-      : selected?.status === "SHIPPED" ? ["DELIVERED"] : [];
+      : selected?.status === "SHIPPED" ? ["IN_TRANSIT", "DELIVERED"]
+      : selected?.status === "IN_TRANSIT" ? ["DELIVERED"] : [];
   const canCancel = Boolean(selected && ["AWAITING_PAYMENT", "PROCESSING"].includes(selected.status) && selected.payment?.status !== "PAID");
   const canEditDelivery = Boolean(selected && ["AWAITING_PAYMENT", "PROCESSING"].includes(selected.status) && selected.payment?.status !== "PAID");
 
