@@ -15,6 +15,7 @@ export async function createNotificationIfAllowed(input: {
   title: string;
   message: string;
   link?: string;
+  dedupeKey?: string;
 }) {
   const field = preferenceField[input.channel];
   const preference = await prisma.communicationPreference.upsert({
@@ -33,6 +34,7 @@ export async function createNotificationIfAllowed(input: {
       title: input.title,
       message: input.message,
       link: input.link,
+      dedupeKey: input.dedupeKey,
     },
   });
 }
@@ -43,6 +45,7 @@ export async function createNotificationsForChannel(input: {
   title: string;
   message: string;
   link?: string;
+  dedupeKey?: string;
 }) {
   const field = preferenceField[input.channel];
   const users = await prisma.user.findMany({
@@ -61,6 +64,7 @@ export async function createNotificationsForChannel(input: {
       title: input.title,
       message: input.message,
       link: input.link,
+      dedupeKey: input.dedupeKey,
     })),
   });
 
