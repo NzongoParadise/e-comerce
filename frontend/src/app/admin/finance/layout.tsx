@@ -52,6 +52,7 @@ export default function FinanceLayout({ children }: { children: React.ReactNode 
             </div>
           </div>
           <Link href="/admin/marketing" className="flex items-center gap-3 px-3 py-2.5 text-blue-100 hover:bg-white/10"><BarChart3 size={15} />Marketing</Link>
+          <Link href="/admin/finance/refunds" className={`flex items-center gap-3 px-3 py-2.5 ${pathname.startsWith("/admin/finance/refunds") ? "bg-white/15 font-bold text-white" : "text-blue-100 hover:bg-white/10"}`}><Wallet size={15} />Reembolsos</Link>
           <Link href="/admin/finance/reconciliation" className={`flex items-center gap-3 px-3 py-2.5 ${pathname.startsWith("/admin/finance/reconciliation") ? "bg-white/15 font-bold text-white" : "text-blue-100 hover:bg-white/10"}`}><ShieldCheck size={15} />Conciliação</Link>
           <Link href="/admin/finance/reports" className={`flex items-center gap-3 px-3 py-2.5 ${pathname.startsWith("/admin/finance/reports") ? "bg-white/15 font-bold text-white" : "text-blue-100 hover:bg-white/10"}`}><BarChart3 size={15} />Relatórios</Link>
         </nav>
