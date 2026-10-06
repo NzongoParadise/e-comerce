@@ -3,7 +3,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import type { FormEvent } from "react";
+import { useState } from "react";
 import { ArrowRight, Eye, EyeOff, Globe2, LockKeyhole, Mail, Monitor, ShieldCheck, Truck } from "lucide-react";
 import { getDashboardDestination } from "@/lib/auth";
 

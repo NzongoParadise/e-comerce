@@ -1,5 +1,6 @@
 "use client";
-import { FormEvent, useEffect, useState } from "react";
+import type { FormEvent } from "react";
+import { useEffect, useState } from "react";
 import { Check, Copy, KeyRound, Laptop, LockKeyhole, LogOut, RefreshCw, ShieldCheck, Smartphone, XCircle } from "lucide-react";
 import { fetchWithAuth } from "@/lib/api";
 type Session={id:number;deviceName:string;browser:string;operatingSystem:string;ipAddress?:string|null;createdAt:string;lastActivityAt:string;expiresAt:string};

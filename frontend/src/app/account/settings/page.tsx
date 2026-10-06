@@ -1,6 +1,7 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import type { FormEvent } from "react";
+import { useEffect, useState } from "react";
 import { Bell, Building2, Check, ChevronRight, Image, KeyRound, LockKeyhole, MapPin, MonitorSmartphone, Save, ShieldCheck, SlidersHorizontal, Trash2, UserRound } from "lucide-react";
 import { fetchWithAuth } from "@/lib/api";
 import SecurityPanel from "@/components/features/account/SecurityPanel";
