@@ -27,6 +27,7 @@ type Session = {
   createdAt: string;
   lastActivityAt: string;
   expiresAt: string;
+  tokenHash?: string;
 };
 
 type Event = {
@@ -62,6 +63,9 @@ export default function SecurityPanel() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [messageType, setMessageType] = useState<"success" | "error">("success");
+  const [currentSessionId, setCurrentSessionId] = useState<number | null>(null);
+  const [recoveryRemaining, setRecoveryRemaining] = useState(0);
   const [secret, setSecret] = useState("");
   const [otpauth, setOtpauth] = useState("");
   const [code, setCode] = useState("");
@@ -75,9 +79,12 @@ export default function SecurityPanel() {
     try {
       const response = await fetchWithAuth("/api/auth/security");
       setEnabled(response.data.twoFactorEnabled);
+      setRecoveryRemaining(response.data.recoveryCodesRemaining ?? 0);
+      setCurrentSessionId(response.data.currentSessionId ?? null);
       setSessions(response.data.sessions);
       setEvents(response.data.events);
     } catch (error) {
+      setMessageType("error");
       setMessage(error instanceof Error ? error.message : "Não foi possível carregar a segurança.");
     } finally {
       setLoading(false);
@@ -154,6 +161,7 @@ export default function SecurityPanel() {
     event.preventDefault();
 
     if (newPassword !== confirmPassword) {
+      setMessageType("error");
       setMessage("As palavras-passe não coincidem.");
       return;
     }
@@ -170,15 +178,17 @@ export default function SecurityPanel() {
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
+      setMessageType("success");
       setMessage("Palavra-passe alterada com sucesso.");
     } catch (error) {
+      setMessageType("error");
       setMessage(error instanceof Error ? error.message : "Não foi possível alterar a palavra-passe.");
     } finally {
       setBusy(false);
     }
   }
 
-  const score = enabled ? 100 : 65;
+  const score = Math.min(100, 45 + (enabled ? 35 : 0) + (recoveryRemaining > 0 ? 10 : 0) + (sessions.length <= 3 ? 10 : 0));
 
   return (
     <div className="space-y-5">
@@ -219,7 +229,7 @@ export default function SecurityPanel() {
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Segurança</p>
               <p className={"text-xs font-black " + (enabled ? "text-green-700" : "text-amber-700")}>
-                {enabled ? "Proteção forte" : "Pode melhorar"}
+                {enabled && recoveryRemaining > 0 ? "Proteção forte" : enabled ? "Proteção ativa" : "Pode melhorar"}
               </p>
             </div>
           </div>
@@ -239,8 +249,8 @@ export default function SecurityPanel() {
       </header>
 
       {message && (
-        <div role="status" className="flex items-start gap-2 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-          <CheckCircle2 size={17} className="mt-0.5 shrink-0" />
+        <div role={messageType === "error" ? "alert" : "status"} className={"flex items-start gap-2 rounded-xl border px-4 py-3 text-sm " + (messageType === "error" ? "border-red-100 bg-red-50 text-red-800" : "border-green-100 bg-green-50 text-green-800")}>
+          <CheckCircle2 size={17} className={"mt-0.5 shrink-0 " + (messageType === "error" ? "text-red-600" : "text-green-600")} />
           <span>{message}</span>
         </div>
       )}
@@ -431,7 +441,11 @@ export default function SecurityPanel() {
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="truncate text-sm font-black text-gray-900">{session.browser} · {session.operatingSystem}</p>
-                        {index === 0 && <span className="rounded-full bg-green-100 px-2 py-0.5 text-[9px] font-black text-green-700">Mais recente</span>}
+                        {session.id === currentSessionId ? (
+                          <span className="rounded-full bg-green-100 px-2 py-0.5 text-[9px] font-black text-green-700">Este dispositivo</span>
+                        ) : index === 0 ? (
+                          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[9px] font-black text-gray-600">Mais recente</span>
+                        ) : null}
                       </div>
                       <p className="mt-1 text-xs text-gray-500">
                         {session.ipAddress || "IP indisponível"} · Última atividade {formatDate(session.lastActivityAt)}
