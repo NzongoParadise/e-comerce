@@ -208,7 +208,19 @@ async function securityPost(request: Request) {
     await securityEvent(profile.id, "TWO_FACTOR_DISABLED", request); return Response.json({ data: { enabled: false } });
   }
   if (body?.action === "revoke-session" && body.sessionId) { await prisma.securitySession.updateMany({ where: { id: body.sessionId, userId: profile.id }, data: { revokedAt: new Date() } }); await securityEvent(profile.id, "SESSION_REVOKED", request, { sessionId: body.sessionId }); return Response.json({ data: { success: true } }); }
-  if (body?.action === "revoke-all") { await prisma.securitySession.updateMany({ where: { userId: profile.id, revokedAt: null }, data: { revokedAt: new Date() } }); await securityEvent(profile.id, "ALL_SESSIONS_REVOKED", request); return Response.json({ data: { success: true } }); }
+  if (body?.action === "revoke-all") {
+    const currentJti = typeof user.jti === "string" ? user.jti : null;
+    await prisma.securitySession.updateMany({
+      where: {
+        userId: profile.id,
+        revokedAt: null,
+        ...(currentJti ? { tokenHash: { not: hashToken(currentJti) } } : {}),
+      },
+      data: { revokedAt: new Date() },
+    });
+    await securityEvent(profile.id, "ALL_SESSIONS_REVOKED", request);
+    return Response.json({ data: { success: true } });
+  }
   return errorResponse("Unknown security action", 400);
 }
 
