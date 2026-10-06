@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "npm run prisma:generate && next build",
+    "build": "npm run db:migrate && npm run prisma:generate && next build",
     "start": "next start",
     "lint": "eslint",
     "test": "tsx --test src/lib/api.test.ts src/lib/promotions/pricing.test.ts src/lib/products/capacityAnalysis.test.ts src/lib/server/logger.test.ts src/lib/server/payments/provider.test.ts src/lib/auth.test.ts src/lib/server/orders/adminOrderRules.test.ts src/lib/server/finance/analytics.test.ts",
@@ -18,7 +18,6 @@
     "jwks-rsa": "^4.1.0",
     "lucide-react": "^1.47.0",
     "next": "16.3.5",
-    "prisma": "^5.19.1",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "zod": "^3.23.8"
