@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ArrowLeftRight, Boxes, ChevronDown, FileText, Headphones, Heart, LayoutDashboard, LogOut, MapPin, Menu, Monitor, Package, Search, Settings, ShoppingBag, ShoppingCart, UserRound, Users, X } from "lucide-react";
+import { ArrowLeftRight, Bell, Boxes, ChevronDown, FileText, Headphones, Heart, LayoutDashboard, LogOut, MapPin, Menu, Monitor, Package, Search, Settings, ShoppingBag, ShoppingCart, UserRound, Users, X } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { useMarket } from "@/context/MarketContext";
 import { fetchWithAuth } from "@/lib/api";
@@ -11,6 +11,7 @@ import { BrandLogo } from "@/components/ui/BrandLogo";
 
 type Category = { id: number; name: string; slug: string };
 type AccountProfile = { name?: string; email?: string; accessRole?: string; accountType?: string; isAdmin?: boolean };
+type NotificationItem = { id: number; type: string; title: string; message: string; link?: string | null; readAt?: string | null; createdAt: string };
 
 const adminMenuItems = [
   { label: "Painel administrativo", href: "/admin", Icon: LayoutDashboard },
@@ -58,6 +59,9 @@ export default function Header() {
   const [locationLoading, setLocationLoading] = useState(false);
   const [profile, setProfile] = useState<AccountProfile | null>(null);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [notificationMenuOpen, setNotificationMenuOpen] = useState(false);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [notificationLoading, setNotificationLoading] = useState(false);
   const accessRole = profile?.accessRole?.toUpperCase() || "CUSTOMER";
   const isWholesale = accessRole === "CUSTOMER" && profile?.accountType?.toUpperCase() === "B2B";
   const profileMenuItems = profile?.isAdmin
@@ -94,6 +98,35 @@ export default function Header() {
       .catch(() => { if (active) setProfile(null); });
     return () => { active = false; };
   }, [pathname]);
+
+  useEffect(() => {
+    if (!profile) { setNotifications([]); return; }
+    let active = true;
+    setNotificationLoading(true);
+    fetchWithAuth("/api/notifications")
+      .then((response) => { if (active) setNotifications(response.data || []); })
+      .catch(() => { if (active) setNotifications([]); })
+      .finally(() => { if (active) setNotificationLoading(false); });
+    return () => { active = false; };
+  }, [profile?.email]);
+
+  async function markNotificationRead(id: number) {
+    try {
+      await fetchWithAuth("/api/notifications", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+      setNotifications((current) => current.map((item) => item.id === id ? { ...item, readAt: new Date().toISOString() } : item));
+    } catch { /* Keep the notification unread when the request fails. */ }
+  }
+
+  async function markAllNotificationsRead() {
+    try {
+      await fetchWithAuth("/api/notifications", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ all: true }) });
+      setNotifications((current) => current.map((item) => ({ ...item, readAt: item.readAt || new Date().toISOString() })));
+    } catch { /* Keep current state when the request fails. */ }
+  }
+
+  function notificationDate(value: string) {
+    return new Intl.DateTimeFormat("pt-PT", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
+  }
 
   function logout() {
     localStorage.removeItem("jwt_token");
@@ -154,6 +187,22 @@ export default function Header() {
               </div>}
             </>
           ) : <Link href="/login" aria-label="Entrar na conta" className="flex items-center gap-2 rounded-xl p-1.5 hover:bg-white/10 sm:p-2"><UserRound size={20} /><span className="hidden text-[10px] font-semibold xl:block">Entrar<br />Conta</span></Link>}
+        </div>
+        <div className="relative">
+          {profile && <><button type="button" onClick={() => { setNotificationMenuOpen((open) => !open); setAccountMenuOpen(false); }} aria-expanded={notificationMenuOpen} aria-label="Notificações" className="relative rounded-xl p-1.5 hover:bg-white/10 sm:p-2">
+            <Bell size={20} />
+            {notifications.some((item) => !item.readAt) && <span className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#f6b73c] px-1 text-[9px] font-black text-[#132238]">{notifications.filter((item) => !item.readAt).length > 99 ? "99+" : notifications.filter((item) => !item.readAt).length}</span>}
+          </button>}
+          {profile && notificationMenuOpen && <div className="absolute right-0 top-full z-60 mt-2 w-[min(24rem,calc(100vw-1rem))] overflow-hidden rounded-2xl border border-gray-200 bg-white text-gray-900 shadow-[0_20px_45px_rgba(15,23,42,0.14)]">
+            <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3"><div><p className="text-sm font-bold">Notificações</p><p className="text-[10px] text-gray-500">{notifications.filter((item) => !item.readAt).length} não lidas</p></div>{notifications.some((item) => !item.readAt) && <button type="button" onClick={markAllNotificationsRead} className="text-[10px] font-bold text-[#1d6ac4] hover:underline">Marcar todas como lidas</button>}</div>
+            <div className="max-h-96 overflow-y-auto">
+              {notificationLoading ? <p className="px-4 py-8 text-center text-xs text-gray-500">A carregar notificações...</p> :
+                notifications.length === 0 ? <div className="px-4 py-8 text-center"><Bell size={22} className="mx-auto text-gray-300" /><p className="mt-2 text-xs font-semibold text-gray-600">Não tem notificações.</p><p className="mt-1 text-[10px] text-gray-400">Novidades e atualizações da sua conta aparecerão aqui.</p></div> :
+                notifications.slice(0, 8).map((item) => <div key={item.id} className={`border-b border-gray-50 px-4 py-3 last:border-b-0 ${item.readAt ? "bg-white" : "bg-blue-50/60"}`}>
+                  <div className="flex items-start gap-3"><span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${item.readAt ? "bg-gray-100 text-gray-500" : "bg-blue-100 text-[#1d6ac4]"}`}><Bell size={15} /></span><div className="min-w-0 flex-1"><p className="text-xs font-bold text-gray-900">{item.title}</p><p className="mt-0.5 text-[11px] leading-4 text-gray-600">{item.message}</p><div className="mt-2 flex items-center justify-between gap-2"><span className="text-[9px] text-gray-400">{notificationDate(item.createdAt)}</span><div className="flex items-center gap-2">{!item.readAt && <button type="button" onClick={() => markNotificationRead(item.id)} className="text-[9px] font-bold text-[#1d6ac4] hover:underline">Marcar como lida</button>}{item.link && <Link href={item.link} onClick={() => { if (!item.readAt) void markNotificationRead(item.id); setNotificationMenuOpen(false); }} className="text-[9px] font-bold text-[#1d6ac4] hover:underline">Ver</Link>}</div></div></div></div>
+                </div>)}
+            </div>
+          </div>}
         </div>
         <Link href="/favorites" className="rounded-xl p-1.5 hover:bg-white/10 sm:p-2" aria-label="Favoritos"><Heart size={20} /></Link>
         <Link href="/compare" className="hidden rounded-xl p-2 hover:bg-white/10 sm:block" aria-label="Comparar produtos"><ArrowLeftRight size={19} /></Link>
