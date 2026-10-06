@@ -305,11 +305,11 @@ async function handleStripeWebhook(request: Request) {
       dedupeKey: `order:${orderId}:payment:failed`,
     }).catch((error) => console.error('Unable to create Stripe payment failure notification:', error));
     await createNotificationIfAllowed({
-      userId: payment.userId,
+      userId: payment.order.userId,
       channel: 'orderUpdates',
       type: 'ORDER_CANCELLED',
       title: 'Encomenda cancelada',
-      message: `A encomenda ${payment.orderNumber ?? orderId} foi cancelada após falha ou expiração do pagamento.`,
+      message: `A encomenda ${payment.order.orderNumber} foi cancelada após falha ou expiração do pagamento.`,
       link: `/account/orders/${orderId}`,
       dedupeKey: `order:${orderId}:status:CANCELLED`,
     }).catch((error) => console.error('Unable to create Stripe cancellation notification:', error));
