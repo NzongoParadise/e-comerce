@@ -16,6 +16,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [twoFactorChallenge, setTwoFactorChallenge] = useState("");
+  const [twoFactorCode, setTwoFactorCode] = useState("");
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setLoading(true); setMessage("");
@@ -23,6 +25,7 @@ export default function LoginPage() {
       const response = await fetch("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Não foi possível iniciar sessão.");
+      if (data.twoFactorRequired) { setTwoFactorChallenge(data.challengeToken || ""); setMessage("Introduza o código de 6 dígitos do seu autenticador."); return; }
       localStorage.setItem("jwt_token", data.token);
       const profileResponse = await fetch("/api/auth/me", { headers: { Authorization: `Bearer ${data.token}` } });
       if (!profileResponse.ok) { localStorage.removeItem("jwt_token"); throw new Error("Não foi possível carregar o perfil. Tente novamente."); }
@@ -80,7 +83,7 @@ export default function LoginPage() {
           <button type="button" onClick={() => handleProviderLogin("apple")} className="inline-flex items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-white px-3 py-3 text-sm font-bold text-gray-700 shadow-sm transition hover:border-[#1d6ac4] hover:bg-[#f5f9ff] hover:text-[#1d6ac4]"><span className="text-lg leading-none" aria-hidden="true">&#63743;</span>Apple</button>
         </div>
         <div className="my-7 flex items-center gap-3 text-[11px] font-semibold uppercase tracking-wide text-gray-400"><span className="h-px flex-1 bg-gray-200" />ou email<span className="h-px flex-1 bg-gray-200" /></div>
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={twoFactorChallenge ? async (event) => { event.preventDefault(); setLoading(true); setMessage(""); try { const response = await fetch("/api/auth/login-2fa", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ challengeToken: twoFactorChallenge, code: twoFactorCode }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error || "Código inválido."); localStorage.setItem("jwt_token", data.token); router.push("/account"); } catch (error) { setMessage(error instanceof Error ? error.message : "Não foi possível validar o código."); } finally { setLoading(false); } } : handleSubmit} className="space-y-5">
           <div>
             <label htmlFor="email" className="mb-2 block text-sm font-bold text-gray-700">Email</label>
             <div className="relative">
@@ -97,7 +100,7 @@ export default function LoginPage() {
             </div>
           </div>
           {message && <p role="alert" className="border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700">{message}</p>}
-          <button type="submit" disabled={loading} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#1d6ac4] px-4 py-3.5 text-sm font-black text-white shadow-lg shadow-[#1d6ac4]/20 transition hover:bg-[#155099] disabled:cursor-not-allowed disabled:opacity-70">{loading ? "A entrar..." : "Entrar na minha conta"}<ArrowRight size={17} /></button>
+          {twoFactorChallenge && <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4"><div className="flex items-center gap-2 text-[#1d6ac4]"><ShieldCheck size={18}/><strong className="text-sm">Verificação em dois factores</strong></div><p className="mt-2 text-xs text-gray-600">Introduza o código atual do seu aplicativo autenticador.</p><input value={twoFactorCode} onChange={event => setTwoFactorCode(event.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" maxLength={6} autoComplete="one-time-code" placeholder="000000" className="mt-3 w-full rounded-2xl border border-gray-200 bg-white py-3 text-center text-xl font-black tracking-[0.5em] outline-none focus:border-[#1d6ac4]"/></div>}{twoFactorChallenge && <button type="button" onClick={() => { setTwoFactorChallenge(""); setTwoFactorCode(""); }} className="text-xs font-bold text-[#1d6ac4]">Voltar ao login</button>}<button type="submit" disabled={loading || (Boolean(twoFactorChallenge) && twoFactorCode.length !== 6)} className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#1d6ac4] px-4 py-3.5 text-sm font-black text-white shadow-lg shadow-[#1d6ac4]/20 transition hover:bg-[#155099] disabled:cursor-not-allowed disabled:opacity-70">{loading ? "A verificar..." : twoFactorChallenge ? "Confirmar código" : "Entrar na minha conta"}<ArrowRight size={17} /></button>
         </form>
         <div className="mt-8 border-t border-gray-200 pt-6 text-center"><p className="text-sm text-gray-500">Ainda não tem conta? <Link href="/register" className="font-black text-[#1d6ac4] hover:underline">Criar conta</Link></p><p className="mt-3 text-xs text-gray-400">Precisa de ajuda? <Link href="/account/support" className="font-semibold text-[#1d6ac4] hover:underline">Contactar suporte</Link></p></div>
       </div>
