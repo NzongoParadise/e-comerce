@@ -247,6 +247,85 @@ async function handleStripeWebhook(request: Request) {
     });
     return Response.json({ received: true });
   }
+  if (['refund.created', 'refund.updated'].includes(eventType)) {
+    const refundEvent = event.data?.object as Record<string, unknown> | undefined;
+    const refundId = typeof refundEvent?.id === 'string' ? refundEvent.id : null;
+    const metadata = refundEvent?.metadata as Record<string, unknown> | undefined;
+    const internalRefundId = Number(metadata?.refundId);
+    if (!refundId || !Number.isSafeInteger(internalRefundId)) return errorResponse('Invalid Stripe refund event', 400);
+
+    const refund = await prisma.refund.findUnique({
+      where: { id: internalRefundId },
+      include: { payment: true },
+    });
+    if (!refund || refund.provider !== 'stripe') return errorResponse('Refund not found', 404);
+
+    const stripeStatus = String(refundEvent?.status || '');
+    const nextStatus = stripeStatus === 'succeeded'
+      ? 'SUCCEEDED'
+      : stripeStatus === 'failed' || stripeStatus === 'canceled'
+        ? 'FAILED'
+        : 'PROCESSING';
+
+    await prisma.$transaction(async (transaction) => {
+      await transaction.paymentEvent.create({
+        data: {
+          paymentId: refund.paymentId,
+          providerEventId: event.id as string,
+          eventType,
+          status: `REFUND_${nextStatus}`,
+          amountKZ: refund.payment.amountKZ,
+          currency: refund.payment.currency,
+          payload: event as never,
+          processedAt: new Date(),
+        },
+      }).catch((error) => {
+        if (!(error instanceof Error) || !error.message.includes('Unique constraint')) throw error;
+      });
+
+      const updated = await transaction.refund.update({
+        where: { id: refund.id },
+        data: {
+          providerRefundId: refundId,
+          status: nextStatus,
+          failureReason: nextStatus === 'FAILED' ? String(refundEvent?.failure_reason || 'Stripe recusou o reembolso.') : null,
+          processedAt: nextStatus === 'SUCCEEDED' ? new Date() : null,
+        },
+      });
+
+      if (nextStatus === 'SUCCEEDED') {
+        const totals = await transaction.refund.aggregate({
+          where: { paymentId: refund.paymentId, status: 'SUCCEEDED' },
+          _sum: { amountEUR: true, amountKZ: true },
+        });
+        const refundedTotal = refund.payment.currency === 'EUR'
+          ? Number(totals._sum.amountEUR || 0)
+          : Number(totals._sum.amountKZ || 0);
+        const originalTotal = refund.payment.currency === 'EUR'
+          ? Number(refund.payment.amountEUR)
+          : Number(refund.payment.amountKZ);
+        await transaction.order.update({
+          where: { id: refund.orderId },
+          data: { status: refundedTotal + 0.000001 >= originalTotal ? 'REFUNDED' : 'PARTIALLY_REFUNDED' },
+        });
+      }
+
+      if (updated.status === 'SUCCEEDED') {
+        await createNotificationIfAllowed({
+          userId: refund.userId,
+          channel: 'orderUpdates',
+          type: 'REFUND_PROCESSED',
+          title: 'Reembolso processado',
+          message: `O reembolso da encomenda foi confirmado pelo Stripe.`,
+          link: `/account/orders/${refund.orderId}`,
+          dedupeKey: `refund:${refund.id}:stripe-succeeded`,
+        }).catch(() => undefined);
+      }
+    });
+
+    return Response.json({ received: true });
+  }
+
   const successEvent = ['checkout.session.completed', 'checkout.session.async_payment_succeeded'].includes(eventType);
   const failedEvent = ['checkout.session.expired', 'checkout.session.async_payment_failed'].includes(eventType);
   if (!successEvent && !failedEvent) return Response.json({ received: true });
