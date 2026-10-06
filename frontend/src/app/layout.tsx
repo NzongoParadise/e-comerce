@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import Header from "@/components/layout/Header";
-import Footer from "@/components/layout/Footer";
+import AppShell from "@/components/layout/AppShell";
 
 import { CartProvider } from "@/context/CartContext";
 import { MarketProvider } from "@/context/MarketContext";
@@ -22,9 +21,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <MarketProvider>
           <CartProvider>
             <FavoritesProvider>
-              <Header />
-              <main className="flex-1">{children}</main>
-              <Footer />
+              <AppShell>{children}</AppShell>
             </FavoritesProvider>
           </CartProvider>
         </MarketProvider>
