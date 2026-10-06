@@ -12,7 +12,7 @@ const groups = [
   { label: "Clientes", items: [["Clientes", "/admin/clients", Users], ["Utilizadores", "/admin/users", Users]] },
   { label: "Financeiro", items: [["Visão financeira", "/admin/finance", Wallet], ["Pagamentos", "/admin/finance/payments", Wallet], ["Revisão de pagamentos", "/admin/orders/payment-review", ShieldCheck], ["Reembolsos", "/admin/finance/refunds", Wallet], ["Conciliação", "/admin/finance/reconciliation", ShieldCheck], ["Relatórios", "/admin/finance/reports", BarChart3]] },
   { label: "Marketing", items: [["Marketing", "/admin/marketing", Megaphone], ["Promoções", "/admin/marketing/promotions", Megaphone]] },
-  { label: "Sistema", items: [["Logs", "/admin/logs", ClipboardList]] },
+  { label: "Sistema", items: [["Logs", "/admin/logs", ClipboardList], ["Configurações", "/admin/settings", ClipboardList]] },
 ] as const;
 
 function isActivePath(pathname: string, href: string) {
