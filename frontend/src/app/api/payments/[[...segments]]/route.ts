@@ -6,6 +6,7 @@ import { logger } from '@/lib/server/logger';
 import { isStripeCurrencySupported, matchesStripePayment } from '@/lib/server/payments/stripeAmounts';
 import { authenticate, errorResponse, readJson, userSubject } from '@/lib/server/api';
 import { setStripeDefaultPaymentMethod } from '@/lib/server/payments/stripeCustomers';
+import { createNotificationIfAllowed } from '@/lib/server/notifications';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -130,7 +131,10 @@ async function handleMulticaixaWebhook(request: Request) {
     logger.warn('Invalid Multicaixa webhook payload', { error: error instanceof Error ? error.message : error });
     return errorResponse('Invalid webhook payload', 400);
   }
-  const payment = await prisma.payment.findUnique({ where: { providerPaymentId: event.providerPaymentId } });
+  const payment = await prisma.payment.findUnique({
+    where: { providerPaymentId: event.providerPaymentId },
+    include: { order: { select: { id: true, orderNumber: true, userId: true } } },
+  });
   if (!payment) return errorResponse('Payment not found', 404);
   if (Number(payment.amountKZ) !== event.amountKZ || payment.currency !== event.currency) return errorResponse('Payment amount or currency mismatch', 422);
   try {
@@ -151,6 +155,15 @@ async function handleMulticaixaWebhook(request: Request) {
   } catch (error) {
     if (error instanceof Error && error.message.includes('Unique constraint')) return Response.json({ received: true, duplicate: true });
     throw error;
+  }
+  const lifecycle = event.status === 'PAID'
+    ? { type: 'ORDER_PAYMENT_CONFIRMED', title: 'Pagamento confirmado', message: `O pagamento da encomenda ${payment.order.orderNumber} foi confirmado.` }
+    : ['FAILED', 'EXPIRED', 'CANCELLED'].includes(event.status)
+      ? { type: 'ORDER_PAYMENT_FAILED', title: 'Pagamento não concluído', message: `O pagamento da encomenda ${payment.order.orderNumber} não foi concluído.` }
+      : null;
+  if (lifecycle) {
+    await createNotificationIfAllowed({ userId: payment.order.userId, channel: 'orderUpdates', ...lifecycle, link: `/account/orders/${payment.order.id}`, dedupeKey: `order:${payment.order.id}:payment:${event.status}` })
+      .catch((error) => console.error('Unable to create Multicaixa payment notification:', error));
   }
   return Response.json({ received: true });
 }
@@ -282,6 +295,24 @@ async function handleStripeWebhook(request: Request) {
       if (error instanceof Error && error.message.includes('Unique constraint')) return Response.json({ received: true, duplicate: true });
       throw error;
     }
+    await createNotificationIfAllowed({
+      userId: payment.userId,
+      channel: 'orderUpdates',
+      type: 'ORDER_PAYMENT_FAILED',
+      title: 'Pagamento não concluído',
+      message: `O pagamento da encomenda ${payment.orderNumber ?? orderId} não foi concluído. A encomenda foi cancelada.`,
+      link: `/account/orders/${orderId}`,
+      dedupeKey: `order:${orderId}:payment:failed`,
+    }).catch((error) => console.error('Unable to create Stripe payment failure notification:', error));
+    await createNotificationIfAllowed({
+      userId: payment.userId,
+      channel: 'orderUpdates',
+      type: 'ORDER_CANCELLED',
+      title: 'Encomenda cancelada',
+      message: `A encomenda ${payment.orderNumber ?? orderId} foi cancelada após falha ou expiração do pagamento.`,
+      link: `/account/orders/${orderId}`,
+      dedupeKey: `order:${orderId}:status:CANCELLED`,
+    }).catch((error) => console.error('Unable to create Stripe cancellation notification:', error));
     return Response.json({ received: true });
   }
   if (session.payment_status !== 'paid') return Response.json({ received: true, pending: true });
