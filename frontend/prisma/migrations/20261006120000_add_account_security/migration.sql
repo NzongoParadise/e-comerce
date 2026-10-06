@@ -1,0 +1,16 @@
+CREATE TABLE "SecuritySession" ("id" SERIAL NOT NULL,"userId" INTEGER NOT NULL,"tokenHash" TEXT NOT NULL,"deviceName" TEXT NOT NULL,"browser" TEXT NOT NULL,"operatingSystem" TEXT NOT NULL,"ipAddress" TEXT,"userAgent" TEXT,"createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,"lastActivityAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,"expiresAt" TIMESTAMP(3) NOT NULL,"revokedAt" TIMESTAMP(3),CONSTRAINT "SecuritySession_pkey" PRIMARY KEY ("id"));
+CREATE UNIQUE INDEX "SecuritySession_tokenHash_key" ON "SecuritySession"("tokenHash");
+CREATE INDEX "SecuritySession_userId_lastActivityAt_idx" ON "SecuritySession"("userId","lastActivityAt");
+ALTER TABLE "SecuritySession" ADD CONSTRAINT "SecuritySession_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+CREATE TABLE "TwoFactorAuth" ("id" SERIAL NOT NULL,"userId" INTEGER NOT NULL,"secretEncrypted" TEXT NOT NULL,"enabled" BOOLEAN NOT NULL DEFAULT false,"verifiedAt" TIMESTAMP(3),"createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,"updatedAt" TIMESTAMP(3) NOT NULL,CONSTRAINT "TwoFactorAuth_pkey" PRIMARY KEY ("id"));
+CREATE UNIQUE INDEX "TwoFactorAuth_userId_key" ON "TwoFactorAuth"("userId");
+ALTER TABLE "TwoFactorAuth" ADD CONSTRAINT "TwoFactorAuth_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+CREATE TABLE "TwoFactorRecoveryCode" ("id" SERIAL NOT NULL,"userId" INTEGER NOT NULL,"codeHash" TEXT NOT NULL,"usedAt" TIMESTAMP(3),"createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,CONSTRAINT "TwoFactorRecoveryCode_pkey" PRIMARY KEY ("id"));
+CREATE UNIQUE INDEX "TwoFactorRecoveryCode_codeHash_key" ON "TwoFactorRecoveryCode"("codeHash");
+CREATE INDEX "TwoFactorRecoveryCode_userId_usedAt_idx" ON "TwoFactorRecoveryCode"("userId","usedAt");
+ALTER TABLE "TwoFactorRecoveryCode" ADD CONSTRAINT "TwoFactorRecoveryCode_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+CREATE TABLE "SecurityEvent" ("id" SERIAL NOT NULL,"userId" INTEGER NOT NULL,"sessionId" INTEGER,"type" TEXT NOT NULL,"status" TEXT NOT NULL,"ipAddress" TEXT,"userAgent" TEXT,"metadata" JSONB NOT NULL DEFAULT '{}',"createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,CONSTRAINT "SecurityEvent_pkey" PRIMARY KEY ("id"));
+CREATE INDEX "SecurityEvent_userId_createdAt_idx" ON "SecurityEvent"("userId","createdAt");
+CREATE INDEX "SecurityEvent_type_createdAt_idx" ON "SecurityEvent"("type","createdAt");
+ALTER TABLE "SecurityEvent" ADD CONSTRAINT "SecurityEvent_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "SecurityEvent" ADD CONSTRAINT "SecurityEvent_sessionId_fkey" FOREIGN KEY ("sessionId") REFERENCES "SecuritySession"("id") ON DELETE SET NULL ON UPDATE CASCADE;
