@@ -15,6 +15,7 @@ import {
   Package,
   Plus,
   Search,
+  Settings,
   ShoppingBag,
   Truck,
   Users,
@@ -92,6 +93,7 @@ const menuItems = [
   [Users, "Clientes", "/admin/clients"],
   [Building2, "Fornecedores", "/admin/suppliers"],
   [Users, "Utilizadores", "/admin/users"],
+  [Settings, "Configurações", "/admin/settings"],
 ] as const;
 
 function formatMoney(value: string | number, currency: string) {

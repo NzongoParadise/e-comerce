@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   Package,
   ShieldCheck,
+  Settings,
   ShoppingBag,
   Truck,
   Users,
@@ -55,6 +56,7 @@ export default function FinanceLayout({ children }: { children: React.ReactNode 
           <Link href="/admin/finance/refunds" className={`flex items-center gap-3 px-3 py-2.5 ${pathname.startsWith("/admin/finance/refunds") ? "bg-white/15 font-bold text-white" : "text-blue-100 hover:bg-white/10"}`}><Wallet size={15} />Reembolsos</Link>
           <Link href="/admin/finance/reconciliation" className={`flex items-center gap-3 px-3 py-2.5 ${pathname.startsWith("/admin/finance/reconciliation") ? "bg-white/15 font-bold text-white" : "text-blue-100 hover:bg-white/10"}`}><ShieldCheck size={15} />Conciliação</Link>
           <Link href="/admin/finance/reports" className={`flex items-center gap-3 px-3 py-2.5 ${pathname.startsWith("/admin/finance/reports") ? "bg-white/15 font-bold text-white" : "text-blue-100 hover:bg-white/10"}`}><BarChart3 size={15} />Relatórios</Link>
+          <Link href="/admin/settings" className="flex items-center gap-3 px-3 py-2.5 text-blue-100 hover:bg-white/10"><Settings size={15} />Configurações</Link>
         </nav>
       </aside>
       <main className="min-w-0 flex-1 px-4 py-5 sm:px-6 lg:px-8">{children}</main>

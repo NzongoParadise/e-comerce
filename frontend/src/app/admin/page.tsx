@@ -17,6 +17,7 @@ import {
   LoaderCircle,
   Package,
   Search,
+  Settings,
   ShoppingBag,
   Truck,
   UserRound,
@@ -81,6 +82,7 @@ const menuItems: MenuItem[] = [
   { label: "Marketing", href: "/admin/marketing", Icon: BarChart3 },
   { label: "Logs do sistema", href: "/admin/logs", Icon: ClipboardList },
   { label: "Utilizadores", href: "/admin/users", Icon: Users },
+  { label: "Configurações", href: "/admin/settings", Icon: Settings },
 ];
 const statusLabels: Record<string, string> = {
   AWAITING_PAYMENT: "Aguardando pagamento",

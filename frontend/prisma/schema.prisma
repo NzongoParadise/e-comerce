@@ -258,6 +258,16 @@ model Order {
   discountTotalKZ  Decimal @default(0) @db.Decimal(12,2)
 }
 
+model SystemSetting {
+  id             String   @id @default("global")
+  vatEnabled     Boolean  @default(false)
+  vatRate        Decimal? @db.Decimal(5,2)
+  vatIncluded    Boolean  @default(true)
+  vatConfiguredAt DateTime?
+  vatConfiguredBy String?
+  updatedAt      DateTime @updatedAt
+}
+
 model OrderItem {
   id        Int      @id @default(autoincrement())
   orderId   Int

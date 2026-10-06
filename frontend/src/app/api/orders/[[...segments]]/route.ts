@@ -373,15 +373,17 @@ export async function POST(request: Request) {
           totalKZ,
           discountTotalEUR: parsed.data.country === "PT" ? promoDiscount : 0,
           discountTotalKZ: parsed.data.country === "AO" ? promoDiscount : 0,
-          items: { create: calculatedItems.map(({ item, product, eurPrice }) => ({
+          items: { create: calculatedItems.map(({ item, product, eurPrice, aoPrice }) => {
+            const unitPrice = parsed.data.country === 'PT' ? eurPrice : aoPrice;
+            return {
             productId: product.id,
             name: product.name,
             slug: product.slug,
             imageUrl: product.imageUrl,
-            unitPrice: eurPrice,
+            unitPrice,
             quantity: item.quantity,
-            subtotal: eurPrice * item.quantity,
-          })) },
+            subtotal: unitPrice * item.quantity,
+          }; }) },
           payment: { create: {
             userId: user.id,
             provider: isStripePayment ? 'stripe' : parsed.data.paymentMethod,
@@ -510,5 +512,12 @@ export async function GET(request: Request) {
     include: { items: true, payment: true, trackingEvents: { orderBy: { occurredAt: 'desc' } } },
   });
   if (!order) return errorResponse('Order not found', 404);
-  return Response.json({ data: order });
+  const taxSettings = await prisma.systemSetting.findUnique({
+    where: { id: 'global' },
+    select: { vatEnabled: true, vatRate: true, vatIncluded: true },
+  });
+  return Response.json({ data: {
+    ...order,
+    taxSettings: taxSettings || { vatEnabled: false, vatRate: null, vatIncluded: true },
+  } });
 }
