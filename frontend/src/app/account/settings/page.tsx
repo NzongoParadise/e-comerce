@@ -41,7 +41,6 @@ const tabs: { id: Tab; label: string; icon: typeof UserRound }[] = [
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<Tab>("profile");
-  const isBusinessAccount = profile?.accountType === "B2B";
   const [profile, setProfile] = useState<Profile | null>(null);
   const [company, setCompany] = useState<CompanyDetails>(emptyCompany);
   const [logo, setLogo] = useState("");
@@ -55,6 +54,7 @@ export default function SettingsPage() {
   const [launches, setLaunches] = useState(() => typeof window !== "undefined" && localStorage.getItem("tg_launches") === "true");
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
+  const isBusinessAccount = profile?.accountType === "B2B";
 
   useEffect(() => {
     fetchWithAuth("/api/auth/me").then((response) => {
