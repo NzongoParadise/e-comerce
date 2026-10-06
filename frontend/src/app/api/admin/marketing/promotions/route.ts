@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/server/prisma";
 import { authenticate, errorResponse, isAdmin, readJson } from "@/lib/server/api";
 import { z } from "zod";
+import { createNotificationsForChannel } from "@/lib/server/notifications";
 
 export const runtime = "nodejs";
 
@@ -98,6 +99,17 @@ export async function POST(request: Request) {
       },
       include: { rules: true, actions: true },
     });
+    if (promotion.status === "ACTIVE" && promotion.active) {
+      await createNotificationsForChannel({
+        channel: "promotions",
+        type: "PROMOTION",
+        title: promotion.name,
+        message: promotion.description || "Há uma nova promoção disponível na nossa loja.",
+        link: promotion.code ? `/promocoes?code=${encodeURIComponent(promotion.code)}` : "/promocoes",
+      }).catch((notificationError) => {
+        console.error("Failed to create promotion notifications:", notificationError);
+      });
+    }
     return Response.json({ data: promotion }, { status: 201 });
   } catch (error) {
     console.error("Error creating promotion:", error);
