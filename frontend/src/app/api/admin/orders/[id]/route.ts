@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { prisma } from '@/lib/server/prisma';
 import { authenticate, errorResponse, isAdmin, readJson, userSubject } from '@/lib/server/api';
 import { canCancelAdminOrder, canEditAdminOrderDelivery, canTransitionAdminOrder } from '@/lib/server/orders/adminOrderRules';
+import { createNotificationIfAllowed } from '@/lib/server/notifications';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -152,7 +153,7 @@ export async function PATCH(request: Request) {
           },
         });
       }
-      return { kind: 'UPDATED' as const, order: updated };
+      return { kind: 'UPDATED' as const, previousStatus: current.status, order: updated };
     });
 
     if (result.kind === 'NOT_FOUND') return errorResponse('Order not found', 404);
@@ -161,6 +162,32 @@ export async function PATCH(request: Request) {
     if (result.kind === 'PAYMENT_MISSING') return errorResponse('A encomenda não tem registo de pagamento.', 409);
     if (result.kind === 'PAYMENT_REQUIRED') return errorResponse('Confirme o pagamento antes de expedir a encomenda.', 409);
     if (result.kind === 'DELIVERY_LOCKED') return errorResponse('Os dados de entrega ficam bloqueados após o pagamento ou início da expedição.', 409);
+    if (result.kind === 'UPDATED' && parsed.data.status && parsed.data.status !== result.previousStatus) {
+      const lifecycle = {
+        PAYMENT_CONFIRMED: {
+          type: 'ORDER_PAYMENT_CONFIRMED', title: 'Pagamento confirmado',
+          message: `O pagamento da encomenda ${result.order.orderNumber} foi confirmado.`,
+        },
+        SHIPPED: {
+          type: 'ORDER_SHIPPED', title: 'Encomenda enviada',
+          message: `A encomenda ${result.order.orderNumber} foi enviada.`,
+        },
+        DELIVERED: {
+          type: 'ORDER_DELIVERED', title: 'Encomenda entregue',
+          message: `A encomenda ${result.order.orderNumber} foi marcada como entregue.`,
+        },
+      } as const;
+      const event = lifecycle[parsed.data.status as keyof typeof lifecycle];
+      if (event) {
+        await createNotificationIfAllowed({
+          userId: result.order.user.id,
+          channel: 'orderUpdates',
+          ...event,
+          link: `/account/orders/${result.order.id}`,
+          dedupeKey: `order:${result.order.id}:status:${parsed.data.status}`,
+        }).catch((error) => console.error('Unable to create order lifecycle notification:', error));
+      }
+    }
     return Response.json({ data: result.order });
   } catch (error) {
     console.error('Unable to update admin order:', error);
@@ -206,12 +233,23 @@ export async function DELETE(request: Request) {
           description: `Venda cancelada por ${userSubject(auth.user) || 'Admin'}. O stock reservado foi reposto.`,
         },
       });
-      return 'CANCELLED' as const;
+      return { kind: 'CANCELLED' as const, userId: order.userId, orderNumber: order.orderNumber };
     });
 
     if (result === 'NOT_FOUND') return errorResponse('Order not found', 404);
     if (result === 'NOT_CANCELLABLE') return errorResponse('Só é possível cancelar encomendas não pagas em processamento.', 409);
-    return Response.json({ data: { id, status: result } });
+    if (result.kind === 'CANCELLED') {
+      await createNotificationIfAllowed({
+        userId: result.userId,
+        channel: 'orderUpdates',
+        type: 'ORDER_CANCELLED',
+        title: 'Encomenda cancelada',
+        message: `A encomenda ${result.orderNumber} foi cancelada.`,
+        link: `/account/orders/${id}`,
+        dedupeKey: `order:${id}:status:CANCELLED`,
+      }).catch((error) => console.error('Unable to create cancellation notification:', error));
+    }
+    return Response.json({ data: { id, status: 'CANCELLED' } });
   } catch (error) {
     if (error instanceof Error && error.message === 'PAYMENT_ALREADY_PAID') return errorResponse('A encomenda já foi paga e não pode ser cancelada por esta operação.', 409);
     console.error('Unable to cancel admin order:', error);
