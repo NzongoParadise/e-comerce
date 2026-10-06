@@ -1,5 +1,6 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from "node:crypto";
 import jwt from "jsonwebtoken";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/server/prisma";
 
 function key() {
@@ -100,7 +101,7 @@ export function deviceName(agent: string) {
   return "Dispositivo";
 }
 
-export async function securityEvent(userId: number, type: string, request: Request, metadata: unknown = {}) {
+export async function securityEvent(userId: number, type: string, request: Request, metadata: Prisma.InputJsonValue = {}) {
   return prisma.securityEvent.create({
     data: {
       userId,
@@ -108,7 +109,7 @@ export async function securityEvent(userId: number, type: string, request: Reque
       status: "SUCCESS",
       ipAddress: requestIp(request),
       userAgent: userAgent(request),
-      metadata: metadata as object,
+      metadata,
     },
   });
 }
