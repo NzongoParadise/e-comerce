@@ -12,7 +12,7 @@
     "db:migrate": "node scripts/prisma-with-env.mjs migrate deploy --schema prisma/schema.prisma"
   },
   "dependencies": {
-    "@prisma/client": "^5.22.0",
+    "@prisma/client": "^5.19.1",
     "bcryptjs": "^3.0.3",
     "jsonwebtoken": "^9.0.3",
     "jwks-rsa": "^4.1.0",
