@@ -60,8 +60,8 @@ export default function AdminSettingsPage() {
     } finally { setSaving(false); }
   }
 
-  return <div className="min-h-screen bg-[#f7f9fc] text-gray-900">
-    <header className="border-b border-gray-200 bg-white"><div className="mx-auto flex h-16 max-w-5xl items-center gap-3 px-4"><Link href="/admin" aria-label="Voltar ao painel" className="flex h-9 w-9 items-center justify-center border border-gray-200 text-gray-600 hover:bg-gray-50"><ArrowLeft size={16} /></Link><span className="flex h-9 w-9 items-center justify-center bg-[#1555d8] text-white"><Settings2 size={18} /></span><div><strong className="block text-sm font-black">RUBRICA DILIGENTE (SU), LDA</strong><span className="text-[9px] font-bold uppercase tracking-widest text-[#1555d8]">Configuração do sistema</span></div></div></header>
+  return <div className="min-h-full bg-transparent text-slate-950">
+    
     <main className="mx-auto w-full max-w-5xl px-4 py-8">
       <nav className="mb-5 text-xs text-gray-500"><Link href="/admin" className="hover:text-blue-700">Administração</Link><span className="mx-2">/</span><span className="font-semibold text-gray-700">Configurações</span></nav>
       <div className="mb-6"><p className="text-[10px] font-black uppercase tracking-[0.16em] text-blue-700">Faturação</p><h1 className="mt-1 text-2xl font-black">Configuração global de IVA</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-gray-600">Configure a taxa uma única vez. Depois de ativa, será aplicada automaticamente à ficha de todas as encomendas.</p></div>
