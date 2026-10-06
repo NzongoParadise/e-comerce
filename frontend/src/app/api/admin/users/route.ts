@@ -100,8 +100,10 @@ export async function PATCH(request: Request) {
     });
     if (!current) return errorResponse('User not found', 404);
 
-    const actorId = Number((auth.user as { id?: unknown }).id);
-    const changingSelf = Number.isSafeInteger(actorId) && actorId === id;
+    const actorProfile = auth.user?.sub
+      ? await prisma.user.findUnique({ where: { externalId: auth.user.sub }, select: { id: true } })
+      : null;
+    const changingSelf = actorProfile?.id === id;
 
     if (changingSelf && changes.status === 'INACTIVE') {
       return errorResponse('Não pode desativar a sua própria conta administrativa.', 409);
