@@ -22,6 +22,11 @@ const registerSchema = credentialsSchema.extend({
 });
 const profileSchema = z.object({ name: z.string().trim().min(2).max(120) });
 const passwordSchema = z.object({ currentPassword: z.string().min(1).max(128), newPassword: z.string().min(8).max(128) });
+const communicationPreferenceSchema = z.object({
+  promotions: z.boolean(),
+  newProducts: z.boolean(),
+  orderUpdates: z.boolean(),
+});
 const forgotPasswordSchema = z.object({ email: z.string().trim().email().transform((value) => value.toLowerCase()) });
 const resetPasswordSchema = z.object({ token: z.string().min(32).max(256), password: z.string().min(8).max(128) });
 
@@ -141,12 +146,14 @@ export async function PATCH(request: Request) {
   const action = routeName(request);
   if (action === 'password') return updatePassword(request);
   if (action === 'profile') return updateProfile(request);
+  if (action === 'notifications') return updateCommunicationPreferences(request);
   return errorResponse('Not found', 404);
 }
 
 export async function GET(request: Request) {
   const action = routeName(request);
   if (action === "security") return securityGet(request);
+  if (action === "notifications") return communicationPreferencesGet(request);
   if (action !== "me") return errorResponse("Not found", 404);
   const user = await authenticate(request);
   const subject = userSubject(user);
@@ -160,6 +167,55 @@ export async function GET(request: Request) {
     console.error('Error syncing authenticated user:', error);
     return errorResponse('Unable to load user profile', 500);
   }
+}
+
+async function communicationPreferencesGet(request: Request) {
+  const user = await authenticate(request);
+  const subject = userSubject(user);
+  if (!user || !subject) return errorResponse("Authentication required", 401);
+
+  const profile = await prisma.user.findUnique({ where: { externalId: subject }, select: { id: true } });
+  if (!profile) return errorResponse("User profile not found", 404);
+
+  const preferences = await prisma.communicationPreference.upsert({
+    where: { userId: profile.id },
+    create: { userId: profile.id },
+    update: {},
+  });
+
+  return Response.json({
+    data: {
+      promotions: preferences.promotions,
+      newProducts: preferences.newProducts,
+      orderUpdates: preferences.orderUpdates,
+    },
+  });
+}
+
+async function updateCommunicationPreferences(request: Request) {
+  const user = await authenticate(request);
+  const subject = userSubject(user);
+  if (!user || !subject) return errorResponse("Authentication required", 401);
+
+  const parsed = communicationPreferenceSchema.safeParse(await readJson(request));
+  if (!parsed.success) return errorResponse("Preferências de comunicação inválidas.", 400);
+
+  const profile = await prisma.user.findUnique({ where: { externalId: subject }, select: { id: true } });
+  if (!profile) return errorResponse("User profile not found", 404);
+
+  const preferences = await prisma.communicationPreference.upsert({
+    where: { userId: profile.id },
+    create: { userId: profile.id, ...parsed.data },
+    update: parsed.data,
+  });
+
+  return Response.json({
+    data: {
+      promotions: preferences.promotions,
+      newProducts: preferences.newProducts,
+      orderUpdates: preferences.orderUpdates,
+    },
+  });
 }
 
 async function securityGet(request: Request) {
