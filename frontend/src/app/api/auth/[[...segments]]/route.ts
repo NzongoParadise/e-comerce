@@ -7,7 +7,8 @@ import jwt from 'jsonwebtoken';
 import { canRequestB2BAccount, getUserRoles } from '@/lib/auth';
 import { prisma } from '@/lib/server/prisma';
 import { authenticate, errorResponse, isAdmin, prismaErrorCode, readJson, rateLimit, userSubject } from '@/lib/server/api';
-import { z } from 'zod';
+import { z } from "zod";
+import { base32Encode, createSecuritySession, decryptSecret, encryptSecret, generateRecoveryCodes, hashToken, securityEvent, verifyTotp } from "@/lib/server/security";
 
 export const runtime = 'nodejs';
 
@@ -30,12 +31,12 @@ function routeName(request: Request) {
   return new URL(request.url).pathname.split('/').filter(Boolean)[2] || '';
 }
 
-function issueLocalToken(user: { externalId: string; email: string | null; name: string | null; accessRole?: string }) {
+function issueLocalToken(user: { externalId: string; email: string | null; name: string | null; accessRole?: string }, purpose?: "2fa") {
   const secret = process.env.JWT_SECRET;
   if (!secret) throw new Error('JWT_SECRET is not configured');
   const accessRole = (user.accessRole || 'CUSTOMER').toUpperCase();
   const roles = accessRole === 'ADMIN' ? ['admin'] : ['customer'];
-  return jwt.sign({ sub: user.externalId, email: user.email, name: user.name, provider: 'local', accessRole, roles }, secret, { algorithm: 'HS256', expiresIn: '7d' });
+  return jwt.sign({ sub: user.externalId, email: user.email, name: user.name, provider: "local", accessRole, roles, ...(purpose ? { purpose } : {}) }, secret, { algorithm: "HS256", expiresIn: purpose ? "5m" : "7d", jwtid: randomUUID() });
 }
 
 async function readProfileBody(request: Request) {
@@ -100,8 +101,9 @@ export async function POST(request: Request) {
     if (!parsed.success) return errorResponse('Invalid registration data', 400);
     try {
       const passwordHash = await bcrypt.hash(parsed.data.password, 12);
-      const user = await prisma.user.create({ data: { externalId: `local:${randomUUID()}`, email: parsed.data.email, name: parsed.data.name, provider: 'local', passwordHash, accountType: 'B2C', accountName: 'Conta Retalhista' } });
-      return Response.json({ token: issueLocalToken(user) }, { status: 201 });
+      const user = await prisma.user.create({ data: { externalId: `local:${randomUUID()}`, email: parsed.data.email, name: parsed.data.name, provider: "local", passwordHash, accountType: "B2C", accountName: "Conta Retalhista" } });
+      const token = issueLocalToken(user); await createSecuritySession(user.id, token, request, new Date(Date.now() + 7 * 86400000)); await securityEvent(user.id, "REGISTER", request);
+      return Response.json({ token }, { status: 201 });
     } catch (error) {
       if (prismaErrorCode(error) === 'P2002') return errorResponse('Email already registered', 409);
       console.error('Error creating user:', error);
@@ -116,7 +118,10 @@ export async function POST(request: Request) {
       const user = await prisma.user.findUnique({ where: { email: parsed.data.email } });
       if (!user?.passwordHash || !(await bcrypt.compare(parsed.data.password, user.passwordHash))) return errorResponse('Invalid email or password', 401);
       await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
-      return Response.json({ token: issueLocalToken(user) });
+      const twoFactor = await prisma.twoFactorAuth.findUnique({ where: { userId: user.id } });
+      if (twoFactor?.enabled) return Response.json({ twoFactorRequired: true, challengeToken: issueLocalToken(user, "2fa") });
+      const token = issueLocalToken(user); await createSecuritySession(user.id, token, request, new Date(Date.now() + 7 * 86400000)); await securityEvent(user.id, "LOGIN_SUCCESS", request);
+      return Response.json({ token });
     } catch (error) {
       console.error('Error authenticating user:', error);
       return errorResponse('Database unavailable. Try again shortly.', 503);
@@ -125,7 +130,9 @@ export async function POST(request: Request) {
 
   if (action === 'b2b-request') return submitB2BRequest(request);
   if (action === 'forgot-password') return forgotPassword(request);
-  if (action === 'reset-password') return resetPassword(request);
+  if (action === "reset-password") return resetPassword(request);
+  if (action === "security") return securityPost(request);
+  if (action === "login-2fa") return loginTwoFactor(request);
   return errorResponse('Not found', 404);
 }
 
@@ -137,7 +144,9 @@ export async function PATCH(request: Request) {
 }
 
 export async function GET(request: Request) {
-  if (routeName(request) !== 'me') return errorResponse('Not found', 404);
+  const action = routeName(request);
+  if (action === "security") return securityGet(request);
+  if (action !== "me") return errorResponse("Not found", 404);
   const user = await authenticate(request);
   const subject = userSubject(user);
   if (!user || !subject) return errorResponse('Authentication required', 401);
@@ -152,6 +161,52 @@ export async function GET(request: Request) {
   }
 }
 
+async function securityGet(request: Request) {
+  const user = await authenticate(request); const subject = userSubject(user);
+  if (!user || !subject) return errorResponse("Authentication required", 401);
+  const profile = await prisma.user.findUnique({ where: { externalId: subject } }); if (!profile) return errorResponse("User profile not found", 404);
+  const twoFactor = await prisma.twoFactorAuth.findUnique({ where: { userId: profile.id } });
+  const sessions = await prisma.securitySession.findMany({ where: { userId: profile.id, revokedAt: null, expiresAt: { gt: new Date() } }, orderBy: { lastActivityAt: "desc" }, take: 20 });
+  const events = await prisma.securityEvent.findMany({ where: { userId: profile.id }, orderBy: { createdAt: "desc" }, take: 12 });
+  return Response.json({ data: { twoFactorEnabled: Boolean(twoFactor?.enabled), sessions, events } });
+}
+
+async function securityPost(request: Request) {
+  const user = await authenticate(request); const subject = userSubject(user); if (!user || !subject) return errorResponse("Authentication required", 401);
+  const profile = await prisma.user.findUnique({ where: { externalId: subject } }); if (!profile) return errorResponse("User profile not found", 404);
+  const body = await readJson(request) as { action?: string; code?: string; sessionId?: number } | undefined;
+  if (body?.action === "begin-2fa") {
+    const secret = base32Encode(randomBytes(20)); const encrypted = encryptSecret(secret);
+    await prisma.twoFactorAuth.upsert({ where: { userId: profile.id }, create: { userId: profile.id, secretEncrypted: encrypted }, update: { secretEncrypted: encrypted, enabled: false, verifiedAt: null } });
+    const issuer = encodeURIComponent("RUBRICA DILIGENTE"); const account = encodeURIComponent(profile.email || String(profile.id));
+    return Response.json({ data: { secret, otpauth: "otpauth://totp/" + issuer + ":" + account + "?secret=" + secret + "&issuer=" + issuer + "&algorithm=SHA1&digits=6&period=30" } });
+  }
+  if (body?.action === "verify-2fa") {
+    if (!body.code) return errorResponse("Código obrigatório.", 400); const config = await prisma.twoFactorAuth.findUnique({ where: { userId: profile.id } });
+    if (!config || !verifyTotp(decryptSecret(config.secretEncrypted), body.code)) return errorResponse("Código inválido.", 401);
+    const codes = generateRecoveryCodes(); await prisma.$transaction([prisma.twoFactorAuth.update({ where: { userId: profile.id }, data: { enabled: true, verifiedAt: new Date() } }), prisma.twoFactorRecoveryCode.deleteMany({ where: { userId: profile.id } }), prisma.twoFactorRecoveryCode.createMany({ data: codes.map(code => ({ userId: profile.id, codeHash: hashToken(code) })) })]);
+    await securityEvent(profile.id, "TWO_FACTOR_ENABLED", request); return Response.json({ data: { enabled: true, recoveryCodes: codes } });
+  }
+  if (body?.action === "disable-2fa") {
+    const config = await prisma.twoFactorAuth.findUnique({ where: { userId: profile.id } }); if (!config?.enabled || !body.code) return errorResponse("Código obrigatório.", 400);
+    if (!verifyTotp(decryptSecret(config.secretEncrypted), body.code)) return errorResponse("Código inválido.", 401);
+    await prisma.$transaction([prisma.twoFactorAuth.update({ where: { userId: profile.id }, data: { enabled: false } }), prisma.twoFactorRecoveryCode.deleteMany({ where: { userId: profile.id } })]);
+    await securityEvent(profile.id, "TWO_FACTOR_DISABLED", request); return Response.json({ data: { enabled: false } });
+  }
+  if (body?.action === "revoke-session" && body.sessionId) { await prisma.securitySession.updateMany({ where: { id: body.sessionId, userId: profile.id }, data: { revokedAt: new Date() } }); await securityEvent(profile.id, "SESSION_REVOKED", request, { sessionId: body.sessionId }); return Response.json({ data: { success: true } }); }
+  if (body?.action === "revoke-all") { await prisma.securitySession.updateMany({ where: { userId: profile.id, revokedAt: null }, data: { revokedAt: new Date() } }); await securityEvent(profile.id, "ALL_SESSIONS_REVOKED", request); return Response.json({ data: { success: true } }); }
+  return errorResponse("Unknown security action", 400);
+}
+
+async function loginTwoFactor(request: Request) {
+  const body = await readJson(request) as { challengeToken?: string; code?: string } | undefined; if (!body?.challengeToken || !body.code) return errorResponse("Código obrigatório.", 400);
+  const secret = process.env.JWT_SECRET; if (!secret) return errorResponse("JWT_SECRET is not configured", 500);
+  try { const challenge = jwt.verify(body.challengeToken, secret, { algorithms: ["HS256"] }) as jwt.JwtPayload; if (challenge.purpose !== "2fa" || typeof challenge.sub !== "string") return errorResponse("Desafio inválido.", 401);
+    const user = await prisma.user.findUnique({ where: { externalId: challenge.sub } }); if (!user) return errorResponse("Conta não encontrada.", 401); const config = await prisma.twoFactorAuth.findUnique({ where: { userId: user.id } });
+    if (!config?.enabled || !verifyTotp(decryptSecret(config.secretEncrypted), body.code)) return errorResponse("Código inválido.", 401);
+    const token = issueLocalToken(user); await createSecuritySession(user.id, token, request, new Date(Date.now() + 7 * 86400000)); await securityEvent(user.id, "LOGIN_SUCCESS_2FA", request); return Response.json({ token });
+  } catch { return errorResponse("Desafio expirado ou inválido.", 401); }
+}
 async function updatePassword(request: Request) {
   const user = await authenticate(request); const subject = userSubject(user);
   if (!user || !subject) return errorResponse('Authentication required', 401);
