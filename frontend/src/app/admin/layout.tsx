@@ -10,9 +10,9 @@ import { fetchWithAuth } from "@/lib/api";
 const groups = [
   { label: "Operação", items: [["Visão geral","/admin",LayoutDashboard],["Vendas","/admin/orders",ShoppingBag],["Produtos","/admin/products",Package],["Stock","/admin/stock",Boxes],["Fornecedores","/admin/suppliers",Truck]] },
   { label: "Clientes", items: [["Clientes","/admin/clients",Users],["Utilizadores","/admin/users",Users]] },
-  { label: "Financeiro", items: [["Visão financeira","/admin/finance",Wallet],["Pagamentos","/admin/finance/payments",Wallet],["Revisão de pagamentos","/admin/orders/payment-review",ShieldCheck],["Relatórios","/admin/finance/reports",BarChart3]] },
+  { label: "Financeiro", items: [["Visão financeira","/admin/finance",Wallet],["Pagamentos","/admin/finance/payments",Wallet],["Revisão de pagamentos","/admin/orders/payment-review",ShieldCheck]] },
   { label: "Marketing", items: [["Marketing","/admin/marketing",Megaphone],["Promoções","/admin/marketing/promotions",Megaphone]] },
-  { label: "Sistema", items: [["Logs","/admin/logs",ClipboardList],["Configurações","/admin/settings",Settings2]] },
+  { label: "Sistema", items: [["Logs","/admin/logs",ClipboardList]] },
 ] as const;
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
