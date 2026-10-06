@@ -92,8 +92,9 @@ async function removeDocuments(files: { path: string }[]) {
 export async function POST(request: Request) {
   const action = routeName(request);
   const limit = action === 'login' ? rateLimit(request, 'auth:login', 10, 60_000)
-    : action === 'forgot-password' ? rateLimit(request, 'auth:forgot', 5, 15 * 60_000)
-      : action === 'register' ? rateLimit(request, 'auth:register', 5, 15 * 60_000) : null;
+    : action === 'login-2fa' ? rateLimit(request, 'auth:login-2fa', 8, 5 * 60_000)
+      : action === 'forgot-password' ? rateLimit(request, 'auth:forgot', 5, 15 * 60_000)
+        : action === 'register' ? rateLimit(request, 'auth:register', 5, 15 * 60_000) : null;
   if (limit) return limit;
 
   if (action === 'register') {
@@ -168,7 +169,20 @@ async function securityGet(request: Request) {
   const twoFactor = await prisma.twoFactorAuth.findUnique({ where: { userId: profile.id } });
   const sessions = await prisma.securitySession.findMany({ where: { userId: profile.id, revokedAt: null, expiresAt: { gt: new Date() } }, orderBy: { lastActivityAt: "desc" }, take: 20 });
   const events = await prisma.securityEvent.findMany({ where: { userId: profile.id }, orderBy: { createdAt: "desc" }, take: 12 });
-  return Response.json({ data: { twoFactorEnabled: Boolean(twoFactor?.enabled), sessions, events } });
+  const currentJti = typeof user?.jti === "string" ? user.jti : null;
+  const currentSession = currentJti
+    ? sessions.find((session) => session.tokenHash === hashToken(currentJti))
+    : null;
+  const recoveryCodes = twoFactor?.enabled
+    ? await prisma.twoFactorRecoveryCode.count({ where: { userId: profile.id, usedAt: null } })
+    : 0;
+  return Response.json({ data: {
+    twoFactorEnabled: Boolean(twoFactor?.enabled),
+    recoveryCodesRemaining: recoveryCodes,
+    currentSessionId: currentSession?.id ?? null,
+    sessions,
+    events,
+  } });
 }
 
 async function securityPost(request: Request) {
@@ -203,8 +217,43 @@ async function loginTwoFactor(request: Request) {
   const secret = process.env.JWT_SECRET; if (!secret) return errorResponse("JWT_SECRET is not configured", 500);
   try { const challenge = jwt.verify(body.challengeToken, secret, { algorithms: ["HS256"] }) as jwt.JwtPayload; if (challenge.purpose !== "2fa" || typeof challenge.sub !== "string") return errorResponse("Desafio inválido.", 401);
     const user = await prisma.user.findUnique({ where: { externalId: challenge.sub } }); if (!user) return errorResponse("Conta não encontrada.", 401); const config = await prisma.twoFactorAuth.findUnique({ where: { userId: user.id } });
-    if (!config?.enabled || !verifyTotp(decryptSecret(config.secretEncrypted), body.code)) return errorResponse("Código inválido.", 401);
-    const token = issueLocalToken(user); await createSecuritySession(user.id, token, request, new Date(Date.now() + 7 * 86400000)); await securityEvent(user.id, "LOGIN_SUCCESS_2FA", request); return Response.json({ token });
+    if (!config?.enabled) return errorResponse("Autenticação de dois factores não está ativa.", 401);
+
+    const normalizedCode = body.code.trim().toUpperCase();
+    let verified = false;
+    let usedRecoveryCodeId: number | null = null;
+
+    if (/^\\d{6}$/.test(normalizedCode)) {
+      verified = verifyTotp(decryptSecret(config.secretEncrypted), normalizedCode);
+    } else {
+      const candidates = await prisma.twoFactorRecoveryCode.findMany({
+        where: { userId: user.id, usedAt: null },
+        select: { id: true, codeHash: true },
+      });
+      const hash = hashToken(normalizedCode);
+      const match = candidates.find((candidate) => candidate.codeHash === hash);
+      if (match) {
+        verified = true;
+        usedRecoveryCodeId = match.id;
+      }
+    }
+
+    if (!verified) {
+      await securityEvent(user.id, "TWO_FACTOR_FAILED", request, { method: /^\\d{6}$/.test(normalizedCode) ? "totp" : "recovery_code" });
+      return errorResponse("Código inválido ou já utilizado.", 401);
+    }
+
+    if (usedRecoveryCodeId) {
+      await prisma.twoFactorRecoveryCode.updateMany({
+        where: { id: usedRecoveryCodeId, userId: user.id, usedAt: null },
+        data: { usedAt: new Date() },
+      });
+    }
+
+    const token = issueLocalToken(user);
+    await createSecuritySession(user.id, token, request, new Date(Date.now() + 7 * 86400000));
+    await securityEvent(user.id, "LOGIN_SUCCESS_2FA", request, { method: usedRecoveryCodeId ? "recovery_code" : "totp" });
+    return Response.json({ token });
   } catch { return errorResponse("Desafio expirado ou inválido.", 401); }
 }
 async function updatePassword(request: Request) {
