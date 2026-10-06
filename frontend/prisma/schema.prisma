@@ -571,6 +571,7 @@ model SecurityEvent {
   session SecuritySession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
   @@index([userId, createdAt])
   @@index([type, createdAt])
+  @@unique([userId, dedupeKey])
 }
 
 model CommunicationPreference {
@@ -592,6 +593,7 @@ model Notification {
   title     String
   message   String
   link      String?
+  dedupeKey String?
   readAt    DateTime?
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
