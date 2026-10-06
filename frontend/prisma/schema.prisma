@@ -129,6 +129,7 @@ model User {
   securityEvents SecurityEvent[]
   communicationPreference CommunicationPreference?
   notifications Notification[]
+  refunds Refund[]
 }
 
 model Address {
@@ -250,6 +251,7 @@ model Order {
   payment        Payment?
   trackingEvents TrackingEvent[]
   returnRequests ReturnRequest[]
+  refunds Refund[]
   discounts      OrderDiscount[]
   promotionUsages PromotionUsage[]
   discountTotalEUR Decimal @default(0) @db.Decimal(10,2)
@@ -293,6 +295,7 @@ model Payment {
   user      User     @relation(fields: [userId], references: [id])
   attempts  PaymentAttempt[]
   events    PaymentEvent[]
+  refunds   Refund[]
 }
 
 model PaymentAttempt {
@@ -602,4 +605,29 @@ model Notification {
   @@index([userId, createdAt])
   @@index([userId, readAt])
   @@index([type, createdAt])
+}
+
+model Refund {
+  id               Int      @id @default(autoincrement())
+  orderId          Int
+  paymentId        Int
+  userId           Int
+  amountEUR        Decimal  @db.Decimal(10,2)
+  amountKZ         Decimal  @db.Decimal(12,2)
+  currency         String
+  reason           String
+  status           String   @default("REQUESTED")
+  providerRefundId String?  @unique
+  provider         String
+  requestedBy      String?
+  processedBy      String?
+  failureReason    String?
+  createdAt        DateTime @default(now())
+  processedAt      DateTime?
+  order            Order   @relation(fields: [orderId], references: [id])
+  payment          Payment @relation(fields: [paymentId], references: [id])
+  user             User    @relation(fields: [userId], references: [id])
+  @@index([orderId, createdAt])
+  @@index([paymentId, status])
+  @@index([userId, createdAt])
 }
