@@ -1,5 +1,4 @@
-.env
-.env.*
+# Keep local environment files and secrets out of the deployment upload.
 **/.env
 **/.env.*
 backend/

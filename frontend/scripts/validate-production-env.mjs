@@ -4,10 +4,11 @@ const required = [
   'DATABASE_URL',
   'JWT_SECRET',
   'FRONTEND_URL',
-  'JWKS_URI',
-  'AUTH_ISSUER',
-  'AUTH_AUDIENCE',
 ];
+
+// The app's own login issues HS256 tokens with JWT_SECRET. These settings are
+// only needed when accepting externally-issued RS256 tokens.
+const externalAuth = ['JWKS_URI', 'AUTH_ISSUER', 'AUTH_AUDIENCE'];
 
 const isProduction = process.env.NODE_ENV === 'production'
   || process.env.VERCEL_ENV === 'production'
@@ -23,6 +24,13 @@ if (missing.length > 0) {
   console.error('Missing required production env vars:', missing.join(', '));
   console.error('Copy frontend/.env.production.example to frontend/.env.production and fill in the real values before deployment.');
   process.exit(1);
+}
+
+const configuredExternalAuth = externalAuth.filter((key) => process.env[key]?.trim());
+if (configuredExternalAuth.length > 0 && configuredExternalAuth.length < externalAuth.length) {
+  const missingExternalAuth = externalAuth.filter((key) => !process.env[key]?.trim());
+  console.warn('External RS256 authentication is only partially configured. Missing:', missingExternalAuth.join(', '));
+  console.warn('This does not affect the app’s local HS256 login. Complete all three settings only if external RS256 tokens are used.');
 }
 
 const envFile = '.env.production';

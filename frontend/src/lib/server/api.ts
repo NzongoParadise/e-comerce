@@ -89,7 +89,9 @@ export async function authenticate(request: Request): Promise<ApiUser | null> {
     catch { return null; }
   } else {
     const jwksUri = process.env.JWKS_URI;
-    if (!jwksUri || decoded.header.alg !== 'RS256') return null;
+    const issuer = process.env.AUTH_ISSUER;
+    const audience = process.env.AUTH_AUDIENCE;
+    if (!jwksUri || !issuer || !audience || decoded.header.alg !== 'RS256') return null;
     const client = getJwksClient(jwksUri);
     verifiedUser = await new Promise((resolve) => {
       jwt.verify(token, (header, callback) => {
@@ -100,8 +102,8 @@ export async function authenticate(request: Request): Promise<ApiUser | null> {
         });
       }, {
         algorithms: ['RS256'],
-        issuer: process.env.AUTH_ISSUER,
-        audience: process.env.AUTH_AUDIENCE,
+        issuer,
+        audience,
       }, (error, user) => resolve(error || typeof user === 'string' || !user ? null : user as ApiUser));
     });
   }

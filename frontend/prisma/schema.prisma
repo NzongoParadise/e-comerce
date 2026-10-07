@@ -111,6 +111,7 @@ model Company {
   status String @default("PENDING")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  users User[]
   members CompanyMember[]
   quotes Quote[]
   orders Order[]
