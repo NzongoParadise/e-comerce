@@ -189,7 +189,7 @@ export default function Header() {
           ) : <Link href="/login" aria-label="Entrar na conta" className="flex items-center gap-2 rounded-xl p-1.5 hover:bg-white/10 sm:p-2"><UserRound size={20} /><span className="hidden text-[10px] font-semibold xl:block">Entrar<br />Conta</span></Link>}
         </div>
         <div className="relative">
-          {profile && <><button type="button" onClick={() => { setNotificationMenuOpen((open) => !open); setAccountMenuOpen(false); }} aria-expanded={notificationMenuOpen} aria-label="Notificações" className="relative rounded-xl p-1.5 hover:bg-white/10 sm:p-2">
+          {profile && <button type="button" onClick={() => { setNotificationMenuOpen((open) => !open); setAccountMenuOpen(false); }} aria-expanded={notificationMenuOpen} aria-label="Notificações" className="relative rounded-xl p-1.5 hover:bg-white/10 sm:p-2">
             <Bell size={20} />
             {notifications.some((item) => !item.readAt) && <span className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#f6b73c] px-1 text-[9px] font-black text-[#132238]">{notifications.filter((item) => !item.readAt).length > 99 ? "99+" : notifications.filter((item) => !item.readAt).length}</span>}
           </button>}

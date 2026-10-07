@@ -335,7 +335,7 @@ async function handleStripeWebhook(request: Request) {
   const sessionId = session.id;
   const payment = await prisma.payment.findFirst({
     where: { orderId, provider: 'stripe' },
-    include: { order: { select: { items: { select: { productId: true, quantity: true } } } } },
+    include: { order: { select: { userId: true, orderNumber: true, items: { select: { productId: true, quantity: true } } } } },
   });
   if (!payment) return errorResponse('Payment not found', 404);
   if (!isStripeCurrencySupported(payment.currency)) return errorResponse('Stripe payment currency is not supported', 422);
