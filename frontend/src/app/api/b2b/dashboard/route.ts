@@ -17,7 +17,7 @@ export async function GET(request: Request) {
   });
   if (!membership) return Response.json({ data: null });
 
-  const [quotes, orders, purchaseOrders, rules] = await Promise.all([
+  const [quotes, orders, purchaseOrders, priceRules] = await Promise.all([
     prisma.quote.findMany({
       where: { companyId: membership.companyId },
       select: { id: true, quoteNumber: true, status: true, createdAt: true },
