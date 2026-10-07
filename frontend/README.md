@@ -39,3 +39,15 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Recuperação de palavra-passe
+
+A recuperação usa tokens aleatórios armazenados apenas como SHA-256 na base de dados. Cada token expira em 1 hora, só pode ser usado uma vez e, depois de uma redefinição bem-sucedida, as sessões de segurança ativas do utilizador são revogadas.
+
+Em produção, configure no ambiente da Vercel:
+
+- `RESEND_API_KEY`: chave privada do Resend.
+- `EMAIL_FROM`: remetente verificado no Resend, por exemplo `RUBRICA DILIGENTE <no-reply@seudominio.ao>`.
+- `FRONTEND_URL` ou `APP_URL`: URL pública da loja, por exemplo `https://e-comerce-sepia.vercel.app`.
+
+O domínio/remetente usado no Resend deve estar verificado antes do envio para clientes reais.
