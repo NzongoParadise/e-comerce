@@ -25,6 +25,18 @@ async function stripeRequest(path: string, body: URLSearchParams, idempotencyKey
   return data;
 }
 
+async function stripeSessionUrl(sessionId: string) {
+  const secret = process.env.STRIPE_SECRET_KEY;
+  if (!secret) throw new Error("STRIPE_NOT_CONFIGURED");
+  const response = await fetch(`https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(sessionId)}`, {
+    headers: { Authorization: `Bearer ${secret}` },
+    cache: "no-store",
+  });
+  const data = await response.json() as Record<string, unknown>;
+  if (!response.ok) return null;
+  return typeof data.url === "string" ? data.url : null;
+}
+
 export async function POST(request: Request) {
   const subject = userSubject(await authenticate(request));
   if (!subject) return errorResponse("Authentication required", 401);
@@ -50,7 +62,11 @@ export async function POST(request: Request) {
 
   const existingAttempt = await prisma.paymentAttempt.findUnique({ where: { idempotencyKey: parsed.data.idempotencyKey }, include: { payment: true } });
   if (existingAttempt) {
-    return Response.json({ data: { payment: existingAttempt.payment, checkoutUrl: existingAttempt.payment.reference && existingAttempt.payment.status === "AWAITING_PAYMENT" ? existingAttempt.payment.reference : null, idempotent: true } });
+    const reference = existingAttempt.payment.reference;
+    const checkoutUrl = reference && existingAttempt.payment.status === "AWAITING_PAYMENT"
+      ? (reference.startsWith("cs_") ? await stripeSessionUrl(reference) : reference)
+      : null;
+    return Response.json({ data: { payment: existingAttempt.payment, checkoutUrl, idempotent: true } });
   }
 
   const amount = Number(po.order.totalEUR);
@@ -101,7 +117,7 @@ export async function POST(request: Request) {
 
     const updated = await prisma.payment.update({
       where: { id: payment.id },
-      data: { status: "AWAITING_PAYMENT", providerPaymentId: sessionId, reference: sessionUrl },
+      data: { status: "AWAITING_PAYMENT", providerPaymentId: sessionId, reference: sessionId },
     });
     await prisma.paymentAttempt.update({ where: { id: attempt.id }, data: { providerPaymentId: sessionId, status: "CREATED" } });
     await prisma.order.update({ where: { id: po.order.id }, data: { status: "AWAITING_PAYMENT", paymentMethod: "STRIPE_CHECKOUT" } });
