@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, RefreshCw, XCircle } from "lucide-react";
+import Link from "next/link";
+import { CheckCircle2, RefreshCw, XCircle, Building2 } from "lucide-react";
 import { fetchWithAuth } from "@/lib/api";
 
 type Quote = {
@@ -112,7 +113,7 @@ export default function AdminB2BPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-blue-600">Admin · B2B</p><h1 className="mt-1 text-2xl font-black">Operação empresarial</h1><p className="mt-1 text-sm text-slate-500">Aprovação de empresas, cotações e preços comerciais por volume.</p></div>
-        <button onClick={() => void load()} disabled={loading} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold hover:bg-slate-50"><RefreshCw size={14} className={loading ? "animate-spin" : ""}/>Atualizar</button>
+        <Link href="/admin/b2b/empresas" className="inline-flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700"><Building2 size={14}/>Empresas</Link><button onClick={() => void load()} disabled={loading} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold hover:bg-slate-50"><RefreshCw size={14} className={loading ? "animate-spin" : ""}/>Atualizar</button>
       </div>
       {message && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{message}</div>}
       {error && <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{error}</div>}
