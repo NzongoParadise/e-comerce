@@ -76,11 +76,6 @@ export default function AccountLayout({ children }: { children: React.ReactNode 
         
         {/* Sidebar */}
         <aside className="w-full lg:w-72 flex-shrink-0">
-          <div className="card p-6 mb-6">
-            <div className="flex items-center gap-4">
-              <div className="h-12 w-12 rounded-full bg-gray-900 text-white flex items-center justify-center text-lg font-bold">
-                {initials}
-              </div>
               <div>
                 <div className="font-bold text-gray-900">{profile?.name || profile?.email}</div>
                 <div className="text-[10px] font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded uppercase inline-block mt-1">
