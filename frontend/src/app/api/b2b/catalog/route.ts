@@ -9,8 +9,11 @@ export async function GET(request: Request) {
   if (user.accountType !== "B2B") return errorResponse("B2B account required", 403);
 
   try {
+    if (!user.sub) return errorResponse("User identity unavailable", 401);
+    const profile = await prisma.user.findUnique({ where: { externalId: user.sub }, select: { id: true } });
+    if (!profile) return errorResponse("User profile not found", 404);
     const membership = await prisma.companyMember.findFirst({
-      where: { userId: user.id, status: "ACTIVE", company: { status: "ACTIVE" } },
+      where: { userId: profile.id, status: "ACTIVE", company: { status: "ACTIVE" } },
       select: { companyId: true },
     });
     if (!membership) return Response.json({ data: [], company: null, message: "A empresa ainda aguarda aprovação." });
