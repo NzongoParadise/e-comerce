@@ -30,19 +30,23 @@ export async function GET(request: Request) {
   const productId = params.get("productId");
 
   try {
-    const rules = await prisma.b2BPriceRule.findMany({
-      where: {
-        ...(companyId ? { companyId: Number(companyId) } : {}),
-        ...(productId ? { productId: Number(productId) } : {}),
-      },
-      include: {
-        company: { select: { id: true, legalName: true, tradeName: true, nif: true, status: true } },
-        product: { select: { id: true, name: true, slug: true, basePrice: true } },
-      },
-      orderBy: [{ companyId: "asc" }, { productId: "asc" }, { minQuantity: "asc" }],
-      take: 500,
-    });
-    return Response.json({ data: rules });
+    const [rules, companies, products] = await prisma.$transaction([
+      prisma.b2BPriceRule.findMany({
+        where: {
+          ...(companyId ? { companyId: Number(companyId) } : {}),
+          ...(productId ? { productId: Number(productId) } : {}),
+        },
+        include: {
+          company: { select: { id: true, legalName: true, tradeName: true, nif: true, status: true } },
+          product: { select: { id: true, name: true, slug: true, basePrice: true } },
+        },
+        orderBy: [{ companyId: "asc" }, { productId: "asc" }, { minQuantity: "asc" }],
+        take: 500,
+      }),
+      prisma.company.findMany({ select: { id: true, legalName: true, tradeName: true, nif: true, status: true }, orderBy: { legalName: "asc" }, take: 200 }),
+      prisma.product.findMany({ select: { id: true, name: true, basePrice: true }, orderBy: { name: "asc" }, take: 500 }),
+    ]);
+    return Response.json({ data: rules, companies, products });
   } catch (error) {
     console.error("Unable to load B2B price rules:", error);
     return errorResponse("Unable to load B2B price rules", 503);
