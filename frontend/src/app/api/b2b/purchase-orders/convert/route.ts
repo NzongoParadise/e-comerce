@@ -48,7 +48,7 @@ export async function POST(request: Request) {
           phone: quote.phone,
           totalEUR,
           totalKZ: 0,
-          items: { create: quote.items.map((item) => ({ productId: item.productId, name: item.name, quantity: item.quantity, unitPriceEUR: item.unitPrice, subtotalEUR: item.subtotal })) },
+          items: { create: quote.items.map((item) => ({ productId: item.productId, name: item.name, slug: `b2b-${item.productId}`, quantity: item.quantity, unitPrice: item.unitPrice, subtotal: item.subtotal })) },
         },
         include: { items: true },
       });
