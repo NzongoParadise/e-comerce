@@ -74,6 +74,7 @@ model Product {
   quoteItems  QuoteItem[]
   attributes  ProductAttribute[]
   promotionProducts PromotionProduct[]
+  b2bPriceRules B2BPriceRule[]
 }
 
 model ProductAttribute {
@@ -177,6 +178,7 @@ model User {
   status       String   @default("ACTIVE")
   stripeCustomerId String? @unique
   b2bRequestStatus String @default("NONE")
+  companyId Int?
   companyDocumentPath String?
   personalDocumentPath String?
   passwordHash String?
@@ -199,6 +201,8 @@ model User {
   communicationPreference CommunicationPreference?
   notifications Notification[]
   refunds Refund[]
+  company Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  companyMemberships CompanyMember[]
 }
 
 model Address {
@@ -429,7 +433,10 @@ model Quote {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   user        User     @relation(fields: [userId], references: [id])
+  companyId   Int?
+  company     Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
   items       QuoteItem[]
+  purchaseOrders PurchaseOrder[]
 }
 
 model QuoteItem {
