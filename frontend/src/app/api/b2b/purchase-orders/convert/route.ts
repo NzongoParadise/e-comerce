@@ -39,7 +39,7 @@ export async function POST(request: Request) {
           deliveryMode: "DELIVERY",
           shippingMethod: "STANDARD",
           paymentMethod: "STRIPE",
-          country: "ANGOLA",
+          country: "AO",
           currency: "EUR",
           billingName: quote.companyName,
           billingEmail: quote.email,

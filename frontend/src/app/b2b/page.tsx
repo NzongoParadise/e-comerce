@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { LucideIcon } from "lucide-react";
 import { ArrowRight, Building2, CheckCircle2, FileText, Package, ShoppingBag, Users, WalletCards } from "lucide-react";
 import { useEffect, useState } from "react";
 import { fetchWithAuth } from "@/lib/api";
@@ -30,6 +31,12 @@ export default function B2BPage() {
 
   const active = data.company.status === "ACTIVE";
   const statusLabel = { ACTIVE: "Empresa ativa", PENDING: "Em homologação", REJECTED: "Homologação recusada", SUSPENDED: "Conta suspensa" }[data.company.status] || data.company.status;
+  const cards: { label: string; value: number | string; Icon: LucideIcon; href: string }[] = [
+    { label: "Cotações pendentes", value: data.metrics.quotesPending, Icon: FileText, href: "/b2b/cotacoes" },
+    { label: "Encomendas abertas", value: data.metrics.openOrders, Icon: ShoppingBag, href: "/b2b/encomendas" },
+    { label: "POs por processar", value: data.metrics.purchaseOrdersPending, Icon: WalletCards, href: "/b2b/encomendas" },
+    { label: "Volume comprado", value: `€ ${data.metrics.totalEUR.toFixed(2)}`, Icon: Package, href: "/b2b/encomendas" },
+  ];
 
   return (
     <main className="container mx-auto px-4 py-8">
@@ -48,14 +55,9 @@ export default function B2BPage() {
       </header>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {[
-          ["Cotações pendentes", data.metrics.quotesPending, FileText, "/b2b/cotacoes"],
-          ["Encomendas abertas", data.metrics.openOrders, ShoppingBag, "/b2b/encomendas"],
-          ["POs por processar", data.metrics.purchaseOrdersPending, WalletCards, "/b2b/encomendas"],
-          ["Volume comprado", `€ ${data.metrics.totalEUR.toFixed(2)}`, Package, "/b2b/encomendas"],
-        ].map(([label,value,Icon,href]) => (
-          <Link key={String(label)} href={String(href)} className="rounded-2xl border border-gray-200 bg-white p-5 transition hover:-translate-y-0.5 hover:shadow-sm">
-            <div className="flex items-center justify-between"><span className="text-xs font-bold text-gray-500">{String(label)}</span><Icon size={18} className="text-[#1d6ac4]"/></div>
+        {cards.map(({ label, value, Icon, href }) => (
+          <Link key={label} href={href} className="rounded-2xl border border-gray-200 bg-white p-5 transition hover:-translate-y-0.5 hover:shadow-sm">
+            <div className="flex items-center justify-between"><span className="text-xs font-bold text-gray-500">{label}</span><Icon size={18} className="text-[#1d6ac4]"/></div>
             <p className="mt-3 text-2xl font-black text-[#0c1b2a]">{String(value)}</p>
           </Link>
         ))}
