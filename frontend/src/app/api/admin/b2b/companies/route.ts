@@ -20,8 +20,5 @@ export async function PATCH(request: Request) {
   const body = await request.json().catch(() => null) as { companyId?: number; status?: string } | null;
   if (!body?.companyId || !["ACTIVE", "REJECTED", "SUSPENDED"].includes(body.status || "")) return errorResponse("Dados de homologação inválidos.", 400);
   const company = await prisma.company.update({ where: { id: body.companyId }, data: { status: body.status } });
-  if (body.status === "ACTIVE") {
-    await prisma.companyMember.updateMany({ where: { companyId: company.id, status: "ACTIVE" }, data: { role: "OWNER" } });
-  }
   return Response.json({ data: company });
 }
