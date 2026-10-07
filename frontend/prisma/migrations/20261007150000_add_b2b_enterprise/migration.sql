@@ -1,0 +1,25 @@
+-- B2B enterprise domain
+CREATE TABLE "Company" ("id" SERIAL NOT NULL,"legalName" TEXT NOT NULL,"tradeName" TEXT,"nif" TEXT NOT NULL,"email" TEXT,"phone" TEXT,"country" TEXT NOT NULL DEFAULT 'Angola',"province" TEXT,"city" TEXT,"address" TEXT,"status" TEXT NOT NULL DEFAULT 'PENDING',"createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,"updatedAt" TIMESTAMP(3) NOT NULL,CONSTRAINT "Company_pkey" PRIMARY KEY ("id"));
+CREATE UNIQUE INDEX "Company_nif_key" ON "Company"("nif");
+CREATE TABLE "CompanyMember" ("id" SERIAL NOT NULL,"companyId" INTEGER NOT NULL,"userId" INTEGER NOT NULL,"role" TEXT NOT NULL DEFAULT 'BUYER',"status" TEXT NOT NULL DEFAULT 'ACTIVE',"createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,CONSTRAINT "CompanyMember_pkey" PRIMARY KEY ("id"));
+CREATE UNIQUE INDEX "CompanyMember_companyId_userId_key" ON "CompanyMember"("companyId","userId");
+CREATE INDEX "CompanyMember_userId_status_idx" ON "CompanyMember"("userId","status");
+CREATE TABLE "B2BPriceRule" ("id" SERIAL NOT NULL,"companyId" INTEGER NOT NULL,"productId" INTEGER NOT NULL,"minQuantity" INTEGER NOT NULL DEFAULT 1,"unitPrice" DECIMAL(12,2) NOT NULL,"currency" TEXT NOT NULL,"active" BOOLEAN NOT NULL DEFAULT true,"createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,"updatedAt" TIMESTAMP(3) NOT NULL,CONSTRAINT "B2BPriceRule_pkey" PRIMARY KEY ("id"));
+CREATE UNIQUE INDEX "B2BPriceRule_companyId_productId_minQuantity_key" ON "B2BPriceRule"("companyId","productId","minQuantity");
+CREATE INDEX "B2BPriceRule_companyId_productId_active_idx" ON "B2BPriceRule"("companyId","productId","active");
+CREATE TABLE "PurchaseOrder" ("id" SERIAL NOT NULL,"companyId" INTEGER NOT NULL,"quoteId" INTEGER,"orderId" INTEGER,"poNumber" TEXT NOT NULL,"status" TEXT NOT NULL DEFAULT 'DRAFT',"approvedBy" INTEGER,"approvedAt" TIMESTAMP(3),"notes" TEXT,"createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,"updatedAt" TIMESTAMP(3) NOT NULL,CONSTRAINT "PurchaseOrder_pkey" PRIMARY KEY ("id"));
+CREATE UNIQUE INDEX "PurchaseOrder_poNumber_key" ON "PurchaseOrder"("poNumber");
+CREATE INDEX "PurchaseOrder_companyId_status_idx" ON "PurchaseOrder"("companyId","status");
+ALTER TABLE "User" ADD COLUMN "companyId" INTEGER;
+ALTER TABLE "Order" ADD COLUMN "companyId" INTEGER;
+ALTER TABLE "Quote" ADD COLUMN "companyId" INTEGER;
+ALTER TABLE "CompanyMember" ADD CONSTRAINT "CompanyMember_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "Company"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "CompanyMember" ADD CONSTRAINT "CompanyMember_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "B2BPriceRule" ADD CONSTRAINT "B2BPriceRule_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "Company"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "B2BPriceRule" ADD CONSTRAINT "B2BPriceRule_productId_fkey" FOREIGN KEY ("productId") REFERENCES "Product"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "PurchaseOrder" ADD CONSTRAINT "PurchaseOrder_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "Company"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "PurchaseOrder" ADD CONSTRAINT "PurchaseOrder_quoteId_fkey" FOREIGN KEY ("quoteId") REFERENCES "Quote"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "PurchaseOrder" ADD CONSTRAINT "PurchaseOrder_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "Order"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "User" ADD CONSTRAINT "User_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "Company"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "Order" ADD CONSTRAINT "Order_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "Company"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "Quote" ADD CONSTRAINT "Quote_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "Company"("id") ON DELETE SET NULL ON UPDATE CASCADE;
