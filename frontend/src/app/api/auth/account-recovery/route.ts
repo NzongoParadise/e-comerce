@@ -63,7 +63,7 @@ export async function POST(request: Request) {
         data: { usedAt: new Date() },
       });
       console.error("Unable to deliver account recovery email:", error);
-      return errorResponse("Não foi possível enviar o e-mail de recuperação. Tente novamente mais tarde.", 503);
+      return Response.json({ data: { message: genericMessage } });
     }
 
     return Response.json({ data: { message: genericMessage } });
