@@ -1,18 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Search } from "lucide-react";
+import { ArrowRight, Search, Tag } from "lucide-react";
 import { useEffect, useState } from "react";
 import { fetchWithAuth } from "@/lib/api";
 import { ProductTile, type Product } from "@/components/features/home/ProductTile";
 
+type B2BProduct = Product & { b2bPriceRules?: Array<{ id: number; minQuantity: number; unitPrice: number; currency: string }> };
+
 export default function B2BCatalogPage() {
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<B2BProduct[]>([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchWithAuth("/api/products?page=1&pageSize=24")
+    fetchWithAuth("/api/b2b/catalog")
       .then((result) => setProducts(result.data ?? []))
       .finally(() => setLoading(false));
   }, []);
@@ -38,7 +40,7 @@ export default function B2BCatalogPage() {
       {loading ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">{Array.from({ length: 12 }, (_, i) => <div key={i} className="h-80 animate-pulse bg-white" />)}</div>
       ) : visible.length ? (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">{visible.map((product) => <ProductTile key={product.id} product={product} />)}</div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">{visible.map((product) => <div key={product.id} className="min-w-0"><ProductTile product={product} /><div className="mt-1 border border-t-0 border-gray-200 bg-white px-3 py-2">{product.b2bPriceRules?.length ? <div className="space-y-1">{product.b2bPriceRules.map((rule) => <div key={rule.id} className="flex items-center justify-between gap-2 text-[10px]"><span className="inline-flex items-center gap-1 font-semibold text-gray-500"><Tag size={11} />{rule.minQuantity}+ un.</span><strong className="text-[#0c1b2a]">{rule.currency === "EUR" ? "€" : "Kz"} {rule.unitPrice.toLocaleString(rule.currency === "EUR" ? "pt-PT" : "pt-AO", { minimumFractionDigits: rule.currency === "EUR" ? 2 : 0, maximumFractionDigits: 2 })}</strong></div>)}</div> : <p className="text-[10px] text-gray-400">Preço empresarial sob consulta</p>}</div></div>)}</div>
       ) : (
         <div className="border border-gray-200 bg-white p-10 text-center text-sm text-gray-500">Nenhum produto encontrado.</div>
       )}
