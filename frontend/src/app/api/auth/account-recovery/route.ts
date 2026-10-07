@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "@/lib/server/prisma";
 import { errorResponse, rateLimit, readJson } from "@/lib/server/api";
+import { securityEvent } from "@/lib/server/security";
 import { passwordResetEmailConfigured, sendPasswordResetEmail } from "@/lib/server/passwordResetEmail";
 
 export const runtime = "nodejs";
@@ -109,6 +110,7 @@ export async function POST(request: Request) {
       });
 
       if (!userId) return errorResponse("O link de recuperação é inválido ou expirou.", 400);
+      await securityEvent(userId, "PASSWORD_RESET", request);
       return Response.json({ message: "Palavra-passe atualizada com sucesso." });
     } catch (error) {
       console.error("Account recovery update failed:", error);
