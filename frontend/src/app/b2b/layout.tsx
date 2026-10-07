@@ -1,11 +1,12 @@
 import Link from "next/link";
-import { Building2, FileText, LayoutDashboard, Package, Settings, ShoppingBag, Users } from "lucide-react";
+import { Building2, FileText, LayoutDashboard, Package, Settings, ShoppingBag, Users, WalletCards } from "lucide-react";
 
 const nav = [
   { href: "/b2b", label: "Visão geral", icon: LayoutDashboard },
   { href: "/b2b/catalogo", label: "Catálogo", icon: Package },
   { href: "/b2b/cotacoes", label: "Cotações", icon: FileText },
   { href: "/b2b/encomendas", label: "Encomendas", icon: ShoppingBag },
+  { href: "/b2b/financeiro", label: "Financeiro", icon: WalletCards },
   { href: "/b2b/empresa", label: "Empresa", icon: Building2 },
   { href: "/b2b/utilizadores", label: "Utilizadores", icon: Users },
   { href: "/b2b/conta", label: "Definições", icon: Settings },
