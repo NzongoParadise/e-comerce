@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
   BookOpen,
@@ -16,6 +16,9 @@ import {
   Package,
   Phone,
   Search,
+  Send,
+  Loader2,
+  UserRoundCheck,
   ShieldCheck,
   Truck,
   UserRound,
@@ -118,6 +121,43 @@ export default function SupportPage() {
   const [query, setQuery] = useState("");
   const [faqOpen, setFaqOpen] = useState<number | null>(0);
   const [showAllArticles, setShowAllArticles] = useState(false);
+  const [chat, setChat] = useState<any>(null);
+  const [chatLoading, setChatLoading] = useState(true);
+  const [chatSending, setChatSending] = useState(false);
+  const [chatDraft, setChatDraft] = useState("");
+  const [chatError, setChatError] = useState("");
+
+  const loadChat = async () => {
+    try {
+      const response = await fetch("/api/support/chat", { cache: "no-store" });
+      if (!response.ok) { setChat(null); return; }
+      const payload = await response.json();
+      setChat(payload.data);
+      setChatError("");
+    } catch { setChatError("Não foi possível ligar ao serviço de chat."); }
+    finally { setChatLoading(false); }
+  };
+
+  useEffect(() => {
+    loadChat();
+    const timer = window.setInterval(loadChat, 4000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const sendChatMessage = async (event: FormEvent) => {
+    event.preventDefault();
+    const content = chatDraft.trim();
+    if (!content || chatSending) return;
+    setChatSending(true); setChatError("");
+    try {
+      const response = await fetch("/api/support/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content }) });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || "Não foi possível enviar a mensagem.");
+      setChatDraft("");
+      await loadChat();
+    } catch (error) { setChatError(error instanceof Error ? error.message : "Não foi possível enviar a mensagem."); }
+    finally { setChatSending(false); }
+  };
 
   const normalizedQuery = query.trim().toLowerCase();
 
@@ -174,6 +214,73 @@ export default function SupportPage() {
               </button>
             ))}
           </div>
+        </div>
+      </section>
+
+      <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-3 border-b border-gray-100 bg-gray-50 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-[#1d6ac4]"><MessageCircle size={21} /></div>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#1d6ac4]">Atendimento em tempo real</p>
+              <h2 className="text-lg font-black text-gray-950">Chat com o suporte</h2>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 text-xs font-semibold text-gray-500"><span className="h-2 w-2 rounded-full bg-emerald-500" /> Atendimento online durante o horário indicado</div>
+        </div>
+        <div className="grid lg:grid-cols-[1fr_280px]">
+          <div className="flex min-h-[420px] flex-col">
+            <div className="flex-1 space-y-3 overflow-y-auto p-4 sm:p-6">
+              {chatLoading ? (
+                <div className="flex min-h-[300px] items-center justify-center gap-2 text-sm text-gray-500"><Loader2 className="animate-spin" size={18} /> A ligar ao suporte...</div>
+              ) : chat ? (
+                <>
+                  <div className="mb-4 rounded-xl bg-blue-50 p-3 text-xs leading-5 text-gray-600">
+                    <span className="font-bold text-gray-900">{chat.agent?.name ? `Atendido por ${chat.agent.name}` : "Equipa de suporte"}</span>
+                    <br />As mensagens ficam guardadas na sua conta para poder continuar a conversa.
+                  </div>
+                  {chat.messages?.map((message: any) => {
+                    const mine = message.senderRole === "CUSTOMER";
+                    return <div key={message.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+                      <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm ${mine ? "rounded-br-md bg-[#1d6ac4] text-white" : "rounded-bl-md bg-gray-100 text-gray-800"}`}>
+                        <p className="whitespace-pre-wrap leading-6">{message.content}</p>
+                        <p className={`mt-1 text-[10px] ${mine ? "text-blue-100" : "text-gray-400"}`}>{new Date(message.createdAt).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })}</p>
+                      </div>
+                    </div>;
+                  })}
+                </>
+              ) : (
+                <div className="flex min-h-[300px] flex-col items-center justify-center text-center">
+                  <UserRoundCheck className="text-gray-300" size={34} />
+                  <h3 className="mt-3 text-sm font-black text-gray-900">Inicie sessão para falar com o suporte</h3>
+                  <p className="mt-1 max-w-sm text-xs leading-5 text-gray-500">O chat é privado e fica associado à sua conta e ao seu histórico de suporte.</p>
+                  <Link href="/login?next=/account/support" className="mt-4 rounded-lg bg-[#1d6ac4] px-4 py-2.5 text-xs font-black text-white">Entrar na conta</Link>
+                </div>
+              )}
+              {chatError && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-600">{chatError}</p>}
+            </div>
+            {chat && <form onSubmit={sendChatMessage} className="border-t border-gray-100 p-4">
+              <div className="flex items-end gap-2 rounded-xl border border-gray-200 bg-white p-2 focus-within:border-[#1d6ac4] focus-within:ring-4 focus-within:ring-blue-50">
+                <textarea value={chatDraft} onChange={(e) => setChatDraft(e.target.value)} maxLength={4000} rows={2} placeholder="Escreva a sua mensagem..." className="min-h-[44px] flex-1 resize-none bg-transparent px-2 py-2 text-sm text-gray-900 outline-none" aria-label="Mensagem para o suporte" />
+                <button type="submit" disabled={!chatDraft.trim() || chatSending} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#1d6ac4] text-white transition hover:bg-[#155099] disabled:cursor-not-allowed disabled:opacity-40" aria-label="Enviar mensagem">
+                  {chatSending ? <Loader2 className="animate-spin" size={17} /> : <Send size={17} />}
+                </button>
+              </div>
+              <p className="mt-2 text-[10px] text-gray-400">Nunca partilhe palavras-passe, códigos de autenticação ou dados de cartão.</p>
+            </form>}
+          </div>
+          <aside className="border-t border-gray-100 bg-gray-50 p-5 lg:border-l lg:border-t-0">
+            <h3 className="text-sm font-black text-gray-900">Como funciona</h3>
+            <div className="mt-4 space-y-4 text-xs leading-5 text-gray-500">
+              <p><span className="font-bold text-gray-900">1. Envie a mensagem.</span><br />Explique o problema e, se necessário, indique o número da encomenda.</p>
+              <p><span className="font-bold text-gray-900">2. A equipa responde.</span><br />O chat atualiza automaticamente enquanto a conversa estiver aberta.</p>
+              <p><span className="font-bold text-gray-900">3. Continue quando quiser.</span><br />O histórico fica associado à sua conta.</p>
+            </div>
+            <div className="mt-6 rounded-xl border border-gray-200 bg-white p-4">
+              <p className="text-[10px] font-black uppercase tracking-wider text-gray-400">Segurança</p>
+              <p className="mt-2 text-xs leading-5 text-gray-600">Nunca pediremos a sua palavra-passe nem o código completo do cartão pelo chat.</p>
+            </div>
+          </aside>
         </div>
       </section>
 
