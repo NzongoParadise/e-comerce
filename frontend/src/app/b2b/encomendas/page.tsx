@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CheckCircle2, Loader2, ShoppingBag } from "lucide-react";
+import { CheckCircle2, ExternalLink, Loader2, ShoppingBag } from "lucide-react";
 import { useEffect, useState } from "react";
 import { fetchWithAuth } from "@/lib/api";
 
@@ -18,6 +18,7 @@ export default function B2BOrdersPage() {
   const [role, setRole] = useState("");
   const [busy, setBusy] = useState<number | null>(null);
   const [message, setMessage] = useState("");
+  const [paying, setPaying] = useState<number | null>(null);
   const [error, setError] = useState("");
 
   async function load() {
@@ -41,6 +42,20 @@ export default function B2BOrdersPage() {
       await load();
     } catch (e) { setError(e instanceof Error ? e.message : "Não foi possível converter o Purchase Order."); }
     finally { setBusy(null); }
+  }
+
+  async function pay(poId: number) {
+    setPaying(poId); setError(""); setMessage("");
+    try {
+      const result = await fetchWithAuth("/api/b2b/payments/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ poId, idempotencyKey: crypto.randomUUID() }),
+      });
+      if (result.data?.checkoutUrl) window.location.assign(result.data.checkoutUrl);
+      else setMessage("Checkout criado, mas o link de pagamento não foi devolvido.");
+    } catch (e) { setError(e instanceof Error ? e.message : "Não foi possível iniciar o pagamento."); }
+    finally { setPaying(null); }
   }
 
   return (
@@ -68,7 +83,7 @@ export default function B2BOrdersPage() {
             return <article key={po.id} className="p-5">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div><div className="flex flex-wrap items-center gap-2"><span className="font-black">{po.poNumber}</span><span className="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-black">{po.status}</span></div><p className="mt-1 text-xs text-gray-500">Cotação {po.quote?.quoteNumber || "—"} · {new Date(po.createdAt).toLocaleDateString("pt-PT")}</p></div>
-                {po.orderId ? <span className="inline-flex items-center gap-2 text-xs font-black text-emerald-700"><CheckCircle2 size={16}/> Convertido em {po.order?.orderNumber || `#${po.orderId}`}</span> :
+                {po.orderId && po.order?.status === "AWAITING_PAYMENT" && canConvert ? <button disabled={paying === po.id} onClick={() => void pay(po.id)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#1d6ac4] px-4 py-3 text-xs font-black text-white disabled:opacity-50">{paying === po.id && <Loader2 size={14} className="animate-spin" />} Pagar com Stripe <ExternalLink size={14}/></button> : po.orderId ? <span className="inline-flex items-center gap-2 text-xs font-black text-emerald-700"><CheckCircle2 size={16}/> Convertido em {po.order?.orderNumber || `#${po.orderId}`}</span> :
                   po.status === "APPROVED" && canConvert ? <button disabled={busy === po.id} onClick={() => void convert(po.id)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#1d6ac4] px-4 py-3 text-xs font-black text-white disabled:opacity-50">{busy === po.id && <Loader2 size={14} className="animate-spin" />} Converter em encomenda</button> :
                   <span className="text-xs font-bold text-gray-500">{po.status === "APPROVED" ? "Aguardando responsável da empresa" : "Aguardando aprovação comercial"}</span>}
               </div>
