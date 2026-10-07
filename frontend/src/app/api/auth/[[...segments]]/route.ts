@@ -9,6 +9,7 @@ import { prisma } from '@/lib/server/prisma';
 import { authenticate, errorResponse, isAdmin, prismaErrorCode, readJson, rateLimit, userSubject } from '@/lib/server/api';
 import { z } from "zod";
 import { base32Encode, createSecuritySession, decryptSecret, encryptSecret, generateRecoveryCodes, hashToken, securityEvent, verifyTotp } from "@/lib/server/security";
+import { passwordResetEmailConfigured, sendPasswordResetEmail } from "@/lib/server/passwordResetEmail";
 
 export const runtime = 'nodejs';
 
