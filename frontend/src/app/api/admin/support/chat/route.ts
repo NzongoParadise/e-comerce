@@ -12,6 +12,12 @@ async function getAdmin(request: Request) {
 }
 export async function GET(request: Request) {
  const admin=await getAdmin(request); if(!admin) return errorResponse("Sem permissão.",403);
+ const url=new URL(request.url); const conversationId=Number(url.searchParams.get("conversationId")||0);
+ if(conversationId){
+  const conversation=await prisma.supportConversation.findUnique({where:{id:conversationId},include:{customer:{select:{id:true,name:true,email:true}},agent:{select:{id:true,name:true,email:true}},messages:{orderBy:{createdAt:"asc"},include:{sender:{select:{id:true,name:true}}}}}});
+  if(!conversation)return errorResponse("Conversa não encontrada.",404);
+  return Response.json({data:{id:conversation.id,status:conversation.status,subject:conversation.subject,customer:conversation.customer,agent:conversation.agent,messages:conversation.messages}});
+ }
  const conversations=await prisma.supportConversation.findMany({orderBy:{updatedAt:"desc"},take:100,include:{customer:{select:{id:true,name:true,email:true}},agent:{select:{id:true,name:true,email:true}},messages:{orderBy:{createdAt:"desc"},take:1}}});
  return Response.json({data:conversations.map(c=>({id:c.id,status:c.status,subject:c.subject,updatedAt:c.updatedAt,lastMessage:c.messages[0]||null,customer:c.customer,agent:c.agent}))});
 }
