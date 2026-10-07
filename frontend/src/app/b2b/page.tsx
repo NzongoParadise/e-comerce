@@ -1,68 +1,93 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Building2, FileText, HandCoins, Package, ShieldCheck, Users, WalletCards } from "lucide-react";
+import { ArrowRight, Building2, CheckCircle2, FileText, Package, ShoppingBag, Users, WalletCards } from "lucide-react";
+import { useEffect, useState } from "react";
+import { fetchWithAuth } from "@/lib/api";
 
-const capabilities = [
-  { icon: Package, title: "Catálogo empresarial", text: "Consulte produtos, disponibilidade e condições comerciais num espaço próprio." },
-  { icon: HandCoins, title: "Preços e volume", text: "Prepare compras em quantidade e solicite condições comerciais." },
-  { icon: FileText, title: "Cotações", text: "Envie pedidos de cotação e acompanhe o estado de cada negociação." },
-  { icon: WalletCards, title: "Encomendas e faturação", text: "Centralize encomendas, documentos e histórico financeiro da empresa." },
-];
+type Dashboard = {
+  company: { legalName: string; tradeName?: string | null; nif: string; status: string };
+  role: string;
+  metrics: { quotesPending: number; openOrders: number; purchaseOrdersPending: number; totalOrders: number; totalEUR: number; priceRules: number };
+  quotes: Array<{ id: number; quoteNumber: string; status: string; createdAt: string }>;
+  orders: Array<{ id: number; orderNumber: string; status: string; totalEUR: number | string; createdAt: string }>;
+  purchaseOrders: Array<{ id: number; poNumber: string; status: string; orderId?: number | null; createdAt: string }>;
+};
 
 export default function B2BPage() {
+  const [data, setData] = useState<Dashboard | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    fetchWithAuth("/api/b2b/dashboard")
+      .then((r) => setData(r.data ?? null))
+      .catch((e) => setError(e instanceof Error ? e.message : "Não foi possível carregar a área empresarial."));
+  }, []);
+
+  if (error) return <main className="container mx-auto px-4 py-12"><div className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-sm font-bold text-rose-700">{error}</div></main>;
+
+  if (!data) return <main className="container mx-auto px-4 py-12"><div className="grid gap-4 md:grid-cols-4">{[1,2,3,4].map((i)=><div key={i} className="h-28 animate-pulse rounded-2xl bg-gray-200" />)}</div></main>;
+
+  const active = data.company.status === "ACTIVE";
+  const statusLabel = { ACTIVE: "Empresa ativa", PENDING: "Em homologação", REJECTED: "Homologação recusada", SUSPENDED: "Conta suspensa" }[data.company.status] || data.company.status;
+
   return (
-    <main className="min-h-screen bg-[#f5f7fa]">
-      <section className="bg-[#0c1b2a] text-white">
-        <div className="container mx-auto grid gap-10 px-4 py-16 lg:grid-cols-[1.1fr_.9fr] lg:items-center lg:py-24">
+    <main className="container mx-auto px-4 py-8">
+      <header className="mb-8 rounded-3xl bg-[#0c1b2a] p-7 text-white shadow-sm">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="mb-4 text-xs font-black uppercase tracking-[0.2em] text-[#f6b73c]">RUBRICA DILIGENTE · B2B</p>
-            <h1 className="max-w-2xl text-4xl font-black leading-tight sm:text-5xl lg:text-6xl">Tecnologia para empresas, com uma experiência de compra profissional.</h1>
-            <p className="mt-6 max-w-xl text-base leading-7 text-blue-100">Um espaço dedicado a empresas que precisam de comprar tecnologia com organização, acompanhamento comercial e condições adequadas ao volume.</p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Link href="/register?accountType=B2B" className="inline-flex items-center gap-2 rounded-xl bg-[#f6b73c] px-5 py-3.5 text-sm font-black text-[#0c1b2a]">Criar conta empresarial <ArrowRight size={17} /></Link>
-              <Link href="/products" className="inline-flex items-center gap-2 rounded-xl border border-white/20 px-5 py-3.5 text-sm font-bold text-white hover:bg-white/10">Consultar catálogo</Link>
-            </div>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#f6b73c]">RUBRICA DILIGENTE · B2B</p>
+            <h1 className="mt-2 text-3xl font-black">{data.company.tradeName || data.company.legalName}</h1>
+            <p className="mt-2 text-sm text-blue-100">NIF {data.company.nif} · Perfil {data.role}</p>
           </div>
-          <div className="rounded-[28px] border border-white/10 bg-white/[0.06] p-6 backdrop-blur">
-            <div className="flex items-center gap-3 border-b border-white/10 pb-5">
-              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#f6b73c] text-[#0c1b2a]"><Building2 size={24} /></span>
-              <div><p className="text-xs text-blue-200">Conta empresarial</p><p className="font-black">Gestão centralizada</p></div>
-            </div>
-            <div className="grid gap-3 pt-5 sm:grid-cols-2">
-              {["Dados da empresa", "Utilizadores", "Pedidos de cotação", "Encomendas", "Documentos", "Condições comerciais"].map((item) => (
-                <div key={item} className="rounded-xl bg-white/[0.05] px-4 py-3 text-sm font-semibold text-blue-50">{item}</div>
-              ))}
-            </div>
+          <span className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-black ${active ? "bg-emerald-400/15 text-emerald-200" : "bg-amber-400/15 text-amber-200"}`}>
+            {active ? <CheckCircle2 size={15}/> : <Building2 size={15}/>} {statusLabel}
+          </span>
+        </div>
+        {!active && <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-blue-100">A conta pode preparar os dados, mas as compras empresariais ficam disponíveis depois da homologação administrativa.</div>}
+      </header>
+
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {[
+          ["Cotações pendentes", data.metrics.quotesPending, FileText, "/b2b/cotacoes"],
+          ["Encomendas abertas", data.metrics.openOrders, ShoppingBag, "/b2b/encomendas"],
+          ["POs por processar", data.metrics.purchaseOrdersPending, WalletCards, "/b2b/encomendas"],
+          ["Volume comprado", `€ ${data.metrics.totalEUR.toFixed(2)}`, Package, "/b2b/encomendas"],
+        ].map(([label,value,Icon,href]) => (
+          <Link key={String(label)} href={String(href)} className="rounded-2xl border border-gray-200 bg-white p-5 transition hover:-translate-y-0.5 hover:shadow-sm">
+            <div className="flex items-center justify-between"><span className="text-xs font-bold text-gray-500">{String(label)}</span><Icon size={18} className="text-[#1d6ac4]"/></div>
+            <p className="mt-3 text-2xl font-black text-[#0c1b2a]">{String(value)}</p>
+          </Link>
+        ))}
+      </section>
+
+      <section className="mt-8 grid gap-6 lg:grid-cols-[1.2fr_.8fr]">
+        <div className="rounded-2xl border border-gray-200 bg-white p-6">
+          <div className="flex items-center justify-between"><div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#1d6ac4]">Atividade</p><h2 className="mt-1 text-lg font-black">Últimas operações</h2></div><Link href="/b2b/encomendas" className="text-xs font-black text-[#1d6ac4]">Ver tudo</Link></div>
+          <div className="mt-5 divide-y">
+            {data.orders.map((o) => <div key={o.id} className="flex items-center justify-between gap-4 py-4"><div><p className="text-sm font-black">{o.orderNumber}</p><p className="text-xs text-gray-500">{new Date(o.createdAt).toLocaleDateString("pt-PT")}</p></div><div className="text-right"><p className="text-sm font-black">€ {Number(o.totalEUR).toFixed(2)}</p><p className="text-[11px] font-bold text-gray-500">{o.status}</p></div></div>)}
+            {!data.orders.length && <p className="py-8 text-center text-sm text-gray-500">Ainda não existem encomendas.</p>}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-gray-200 bg-white p-6">
+          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#1d6ac4]">Conta empresarial</p>
+          <h2 className="mt-1 text-lg font-black">Capacidade de compra</h2>
+          <div className="mt-5 space-y-3 text-sm">
+            <div className="flex justify-between rounded-xl bg-gray-50 p-3"><span>Preços empresariais</span><strong>{data.metrics.priceRules}</strong></div>
+            <div className="flex justify-between rounded-xl bg-gray-50 p-3"><span>Total de encomendas</span><strong>{data.metrics.totalOrders}</strong></div>
+          </div>
+          <div className="mt-5 grid gap-2">
+            <Link href="/b2b/catalogo" className="inline-flex items-center justify-between rounded-xl bg-[#0c1b2a] px-4 py-3 text-xs font-black text-white">Abrir catálogo <ArrowRight size={15}/></Link>
+            <Link href="/b2b/empresa" className="inline-flex items-center justify-between rounded-xl border px-4 py-3 text-xs font-black">Gerir empresa <Users size={15}/></Link>
           </div>
         </div>
       </section>
 
-      <section className="container mx-auto px-4 py-14">
-        <div className="mb-8 max-w-2xl">
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-[#1d6ac4]">Experiência B2B</p>
-          <h2 className="mt-2 text-3xl font-black text-[#0c1b2a]">Tudo o que a sua empresa precisa para comprar melhor.</h2>
-        </div>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {capabilities.map(({ icon: Icon, title, text }) => (
-            <article key={title} className="border border-gray-200 bg-white p-5">
-              <Icon size={23} className="text-[#1d6ac4]" />
-              <h3 className="mt-5 text-base font-black text-gray-900">{title}</h3>
-              <p className="mt-2 text-sm leading-6 text-gray-500">{text}</p>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section className="border-y border-gray-200 bg-white">
-        <div className="container mx-auto grid gap-8 px-4 py-12 md:grid-cols-[1fr_auto] md:items-center">
-          <div>
-            <p className="text-xs font-black uppercase tracking-[0.16em] text-[#1d6ac4]">Segurança e controlo</p>
-            <h2 className="mt-2 text-2xl font-black text-gray-900">Uma conta empresarial, vários utilizadores e histórico centralizado.</h2>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-500">A experiência B2B é separada da compra de consumidor final, mas utiliza o mesmo catálogo, operação e núcleo financeiro da plataforma.</p>
-          </div>
-          <div className="flex items-center gap-3 text-sm font-bold text-gray-700"><ShieldCheck className="text-[#1d6ac4]" size={22} /> <Users size={22} className="text-[#1d6ac4]" /> Gestão empresarial</div>
-        </div>
+      <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6">
+        <div className="flex items-center justify-between"><div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#1d6ac4]">Pedidos de cotação</p><h2 className="mt-1 text-lg font-black">Acompanhamento comercial</h2></div><Link href="/b2b/cotacoes" className="text-xs font-black text-[#1d6ac4]">Abrir cotações</Link></div>
+        <div className="mt-4 flex flex-wrap gap-2">{data.quotes.map(q=><span key={q.id} className="rounded-xl border px-3 py-2 text-xs font-bold">{q.quoteNumber} · {q.status}</span>)}</div>
+        {!data.quotes.length && <p className="mt-4 text-sm text-gray-500">Nenhuma cotação registada.</p>}
       </section>
     </main>
   );
