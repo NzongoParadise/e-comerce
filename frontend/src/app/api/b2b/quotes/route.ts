@@ -1,8 +1,154 @@
-import { authenticate,errorResponse,readJson,userSubject } from "@/lib/server/api"; import { prisma } from "@/lib/server/prisma"; import { z } from "zod";
-export const runtime="nodejs";
-async function ctx(request:Request){const a=await authenticate(request);const s=userSubject(a);if(!s)return null;const u=await prisma.user.findUnique({where:{externalId:s},select:{id:true,accountType:true}});if(!u)return null;const m=await prisma.companyMember.findFirst({where:{userId:u.id,status:"ACTIVE"}});return {u,m};}
-const schema=z.object({items:z.array(z.object({productId:z.number().int().positive(),quantity:z.number().int().positive().max(100000)})).min(1),notes:z.string().max(2000).optional()});
-export async function GET(request:Request){const c=await ctx(request);if(!c?.m)return errorResponse("Conta empresarial não configurada.",403);const quotes=await prisma.quote.findMany({where:{companyId:c.m.companyId},include:{items:true},orderBy:{createdAt:"desc"}});return Response.json({data:quotes});}
-export async function POST(request:Request){const c=await ctx(request);if(!c?.m)return errorResponse("Conta empresarial não configurada.",403);if(!["OWNER","BUYER"].includes(c.m.role))return errorResponse("Sem permissão para criar cotações.",403);const p=schema.safeParse(await readJson(request));if(!p.success)return errorResponse("Itens da cotação inválidos.",400);const products=await prisma.product.findMany({where:{id:{in:p.data.items.map(i=>i.productId)}}});const map=new Map(products.map(x=>[x.id,x]));
-const rules=await prisma.b2BPriceRule.findMany({where:{companyId:c.m.companyId,productId:{in:p.data.items.map(i=>i.productId)},active:true},orderBy:{minQuantity:"asc"}});
-const ruleMap=new Map<number, typeof rules>(); for(const rule of rules){const current=ruleMap.get(rule.productId) ?? []; current.push(rule); ruleMap.set(rule.productId,current);}if(products.length!==p.data.items.length)return errorResponse("Um ou mais produtos não existem.",400);const company=await prisma.company.findUnique({where:{id:c.m.companyId}});if(!company)return errorResponse("Empresa não encontrada.",404);const number=`COT-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;const quote=await prisma.quote.create({data:{quoteNumber:number,userId:c.u.id,companyId:company.id,status:"SUBMITTED",companyName:company.legalName,companyNif:company.nif,phone:company.phone||"",email:company.email||"",address:company.address,notes:p.data.notes,items:{create:p.data.items.map(i=>{const x=map.get(i.productId)!;const matching=(ruleMap.get(x.id) ?? []).filter(r=>r.minQuantity<=i.quantity).sort((a,b)=>b.minQuantity-a.minQuantity)[0];const unitPrice=matching?.unitPrice ?? x.basePrice;return {productId:x.id,name:x.name,unitPrice,quantity:i.quantity,subtotal:unitPrice.mul(i.quantity)}})}}});return Response.json({data:quote},{status:201});}
+import { z } from "zod";
+import { authenticate, errorResponse, readJson, userSubject } from "@/lib/server/api";
+import { prisma } from "@/lib/server/prisma";
+
+export const runtime = "nodejs";
+
+const schema = z.object({
+  items: z
+    .array(
+      z.object({
+        productId: z.number().int().positive(),
+        quantity: z.number().int().positive().max(100000),
+      })
+    )
+    .min(1),
+  notes: z.string().trim().max(2000).optional(),
+});
+
+async function getContext(request: Request) {
+  const auth = await authenticate(request);
+  const subject = userSubject(auth);
+  if (!subject) return null;
+
+  const user = await prisma.user.findUnique({
+    where: { externalId: subject },
+    select: { id: true, accountType: true },
+  });
+  if (!user || user.accountType !== "B2B") return null;
+
+  const membership = await prisma.companyMember.findFirst({
+    where: { userId: user.id, status: "ACTIVE", company: { status: "ACTIVE" } },
+    select: {
+      companyId: true,
+      role: true,
+      company: {
+        select: {
+          id: true,
+          legalName: true,
+          nif: true,
+          phone: true,
+          email: true,
+          address: true,
+          country: true,
+        },
+      },
+    },
+  });
+
+  return { user, membership };
+}
+
+function companyMarket(country: string): "AO" | "PT" {
+  return /^(pt|portugal)$/i.test(country.trim()) ? "PT" : "AO";
+}
+
+export async function GET(request: Request) {
+  const context = await getContext(request);
+  if (!context?.membership) return errorResponse("Conta empresarial não configurada.", 403);
+
+  const quotes = await prisma.quote.findMany({
+    where: { companyId: context.membership.companyId },
+    include: { items: true },
+    orderBy: { createdAt: "desc" },
+  });
+
+  return Response.json({ data: quotes });
+}
+
+export async function POST(request: Request) {
+  const context = await getContext(request);
+  if (!context?.membership?.company) return errorResponse("Conta empresarial não configurada.", 403);
+  if (!["OWNER", "BUYER"].includes(context.membership.role)) {
+    return errorResponse("Sem permissão para criar cotações.", 403);
+  }
+
+  const parsed = schema.safeParse(await readJson(request));
+  if (!parsed.success) return errorResponse("Itens da cotação inválidos.", 400);
+
+  const productIds = [...new Set(parsed.data.items.map((item) => item.productId))];
+  const products = await prisma.product.findMany({
+    where: { id: { in: productIds } },
+    include: { prices: true },
+  });
+  if (products.length !== productIds.length) return errorResponse("Um ou mais produtos não existem.", 400);
+
+  const productMap = new Map(products.map((product) => [product.id, product]));
+  const market = companyMarket(context.membership.company.country);
+  const currency = market === "PT" ? "EUR" : "AOA";
+
+  const rules = await prisma.b2BPriceRule.findMany({
+    where: {
+      companyId: context.membership.companyId,
+      productId: { in: productIds },
+      active: true,
+      currency,
+    },
+    orderBy: { minQuantity: "asc" },
+  });
+
+  const ruleMap = new Map<number, typeof rules>();
+  for (const rule of rules) {
+    const current = ruleMap.get(rule.productId) ?? [];
+    current.push(rule);
+    ruleMap.set(rule.productId, current);
+  }
+
+  const calculatedItems = [];
+  for (const requested of parsed.data.items) {
+    const product = productMap.get(requested.productId);
+    if (!product) return errorResponse("Um ou mais produtos não existem.", 400);
+    if (requested.quantity > product.stock) {
+      return errorResponse(`Stock insuficiente para ${product.name}. Disponível: ${product.stock}.`, 409);
+    }
+
+    const matchingRule = (ruleMap.get(product.id) ?? [])
+      .filter((rule) => rule.minQuantity <= requested.quantity)
+      .sort((a, b) => b.minQuantity - a.minQuantity)[0];
+
+    const marketPrice = product.prices.find((price) => price.market === market && price.currency === currency)?.amount;
+    const unitPrice = matchingRule?.unitPrice ?? marketPrice ?? product.basePrice;
+
+    if (currency === "AOA" && !matchingRule && !marketPrice) {
+      return errorResponse(`Preço empresarial não configurado para ${product.name}.`, 422);
+    }
+
+    calculatedItems.push({
+      productId: product.id,
+      name: product.name,
+      unitPrice,
+      quantity: requested.quantity,
+      subtotal: unitPrice.mul(requested.quantity),
+    });
+  }
+
+  const number = `COT-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
+  const quote = await prisma.quote.create({
+    data: {
+      quoteNumber: number,
+      userId: context.user.id,
+      companyId: context.membership.company.id,
+      status: "SUBMITTED",
+      companyName: context.membership.company.legalName,
+      companyNif: context.membership.company.nif,
+      phone: context.membership.company.phone || "",
+      email: context.membership.company.email || "",
+      address: context.membership.company.address,
+      notes: parsed.data.notes || undefined,
+      items: { create: calculatedItems },
+    },
+    include: { items: true },
+  });
+
+  return Response.json({ data: quote, market, currency }, { status: 201 });
+}
