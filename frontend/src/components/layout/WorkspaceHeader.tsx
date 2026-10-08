@@ -150,7 +150,7 @@ export default function WorkspaceHeader({
       </div>
 
       <div className="border-t border-slate-100 bg-white">
-        <div className="mx-auto flex min-h-11 max-w-[1680px] items-center gap-1 overflow-x-auto px-3 sm:px-5 lg:px-7">
+        <div className="mx-auto flex min-h-10 max-w-[1680px] items-center gap-1 overflow-x-auto px-3 sm:px-5 lg:px-7">
           <span className="mr-2 shrink-0 text-[9px] font-black uppercase tracking-[0.16em] text-slate-400">{meta.markText}</span>
           {meta.links.map(([label, href]) => {
             const active = pathname === href || (href !== "/products" && pathname.startsWith(href + "/"));
