@@ -9,6 +9,7 @@ import { useFavorites } from "@/context/FavoritesContext";
 import { getPromotionalUnitPrice } from "@/lib/promotions/pricing";
 import { usePublicPromotions } from "@/lib/promotions/usePublicPromotions";
 import Link from "next/link";
+import { RecommendationRail } from "@/components/features/catalog/RecommendationRail";
 import { ShoppingCart, Heart, Package, Truck, ShieldCheck, Zap, CreditCard, Maximize2, MapPin } from "lucide-react";
 
 type ProductDetails = {
@@ -308,6 +309,13 @@ export default function ProductDetailsPage() {
           ))}
         </div>
       </section>
+    <RecommendationRail
+      title="Também pode gostar"
+      description="Sugestões calculadas a partir das características deste produto e do catálogo disponível."
+      sourceProductId={product.id}
+      limit={6}
+    />
+
     </div>
   );
 }
