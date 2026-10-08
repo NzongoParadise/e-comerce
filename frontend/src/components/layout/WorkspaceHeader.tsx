@@ -36,7 +36,7 @@ const config = {
     ["Comprar", "/products"], ["Encomendas", "/account/orders"], ["Favoritos", "/favorites"], ["Cupões", "/account/coupons"], ["Suporte", "/account/support"],
   ] as [string, string][] },
   b2b: { mark: Building2, markText: "B2B", title: "RUBRICA DILIGENTE", tone: "Conta empresarial", links: [
-    ["Catálogo", "/b2b/catalogo"], ["Cotações", "/b2b/cotacoes"], ["Encomendas", "/b2b/encomendas"], ["Financeiro", "/b2b/financeiro"], ["Empresa", "/b2b/empresa"],
+    ["Catálogo", "/b2b/catalogo"], ["Carrinho", "/b2b/carrinho"], ["Cotações", "/b2b/cotacoes"], ["Encomendas", "/b2b/encomendas"], ["Financeiro", "/b2b/financeiro"], ["Empresa", "/b2b/empresa"],
   ] as [string, string][] },
 } as const;
 
