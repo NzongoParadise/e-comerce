@@ -10,7 +10,7 @@ import { getPromotionalUnitPrice } from "@/lib/promotions/pricing";
 import { usePublicPromotions } from "@/lib/promotions/usePublicPromotions";
 import Link from "next/link";
 import { RecommendationRail } from "@/components/features/catalog/RecommendationRail";
-import { ShoppingCart, Heart, Package, Truck, ShieldCheck, Zap, CreditCard, Maximize2, MapPin } from "lucide-react";
+import { ShoppingCart, Heart, Package, Truck, ShieldCheck, Zap, CreditCard, Maximize2, MapPin, CheckCircle2 } from "lucide-react";
 
 type ProductDetails = {
   id: number;
@@ -37,6 +37,7 @@ export default function ProductDetailsPage() {
   const [product, setProduct] = useState<ProductDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
+  const [cartMessage, setCartMessage] = useState("");
 
   // The API currently does not expose product variants; do not invent selectable options in the storefront.
   const [purchaseMode, setPurchaseMode] = useState<"retail" | "wholesale">("retail");
@@ -106,7 +107,7 @@ export default function ProductDetailsPage() {
       imageUrl: product.imageUrl,
 
     });
-    alert("Produto adicionado ao carrinho com sucesso!");
+    setCartMessage(`${product.name} foi adicionado ao carrinho.`);
   };
 
   const favorite = isFavorite(product.id);
@@ -253,6 +254,8 @@ export default function ProductDetailsPage() {
                    Adicionar ao carrinho
                  </button>
                </div>
+               {cartMessage && <div role="status" aria-live="polite" className="mb-3 flex items-start gap-2 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2.5 text-xs font-semibold text-emerald-800"><CheckCircle2 size={15} className="mt-0.5 shrink-0" />{cartMessage}</div>}
+
                <button onClick={handleBuyNow} className="mb-3 w-full btn-secondary py-3 text-sm border-gray-300 text-gray-700 hover:bg-gray-50 gap-2">
                  <Zap size={16} strokeWidth={2} aria-hidden="true" />
                  Comprar agora
