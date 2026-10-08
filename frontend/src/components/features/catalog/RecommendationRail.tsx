@@ -29,7 +29,7 @@ export function RecommendationRail({
     let active = true;
     setLoading(true);
 
-    fetchWithAuth(\`/api/recommendations?\${query.toString()}\`)
+    fetchWithAuth(`/api/recommendations?${query.toString()}`)
       .then((response) => {
         if (active) setProducts(response.data as CatalogProduct[]);
       })
