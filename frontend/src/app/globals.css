@@ -486,3 +486,210 @@ a, button, input, textarea {
   font-size: 0.875rem;
   font-weight: 700;
 }
+
+
+/* Public storefront: AliExpress-inspired commerce UX, without marketplace semantics. */
+.storefront-public {
+  --storefront-navy: #132238;
+  --storefront-blue: #1d6ac4;
+  --storefront-yellow: #f6b73c;
+  --storefront-red: #e63946;
+  --storefront-surface: #ffffff;
+}
+
+.storefront-public main {
+  background: #f7f8f8;
+}
+
+.storefront-public .container {
+  max-width: 1440px;
+}
+
+.storefront-public .card,
+.storefront-public .soft-card {
+  border-radius: 12px;
+  border-color: #e2e8f0;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.045);
+}
+
+.storefront-public .card-hover:hover,
+.storefront-public .storefront-product-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(29, 106, 196, 0.35);
+  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.10);
+}
+
+.storefront-public .storefront-product-card {
+  min-width: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.storefront-public .storefront-product-media {
+  position: relative;
+  display: flex;
+  min-height: 190px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: #f8fafc;
+}
+
+.storefront-public .storefront-product-card .storefront-product-media img {
+  transition: transform 220ms ease;
+}
+
+.storefront-public .storefront-product-card:hover .storefront-product-media img {
+  transform: scale(1.035);
+}
+
+.storefront-public .storefront-price {
+  color: #df1f2d;
+  letter-spacing: -0.02em;
+}
+
+.storefront-public .storefront-old-price {
+  color: #94a3b8;
+  text-decoration-thickness: 1px;
+}
+
+.storefront-public .storefront-discount {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 4px;
+  background: #ffe7ea;
+  color: #c1121f;
+  padding: 3px 6px;
+  font-size: 9px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.storefront-public .storefront-cta {
+  min-height: 38px;
+  border-radius: 6px;
+  background: var(--storefront-yellow);
+  color: var(--storefront-navy);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.storefront-public .storefront-cta:hover {
+  background: #ffd166;
+}
+
+.storefront-public .storefront-section {
+  border-top: 1px solid #e2e8f0;
+  background: #fff;
+}
+
+.storefront-public .storefront-section + .storefront-section {
+  margin-top: 1px;
+}
+
+.storefront-public .storefront-section-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.storefront-public .storefront-chip-row {
+  display: flex;
+  min-width: 0;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.storefront-public .storefront-chip-row::-webkit-scrollbar {
+  display: none;
+}
+
+.storefront-public .storefront-chip {
+  flex: 0 0 auto;
+  border: 1px solid #dbe2ea;
+  border-radius: 999px;
+  background: #fff;
+  padding: 7px 12px;
+  color: #475569;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.storefront-public .storefront-chip[data-active="true"] {
+  border-color: var(--storefront-blue);
+  background: var(--storefront-blue);
+  color: #fff;
+}
+
+.storefront-public .storefront-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  padding: 10px 12px;
+}
+
+.storefront-public .storefront-filter-panel {
+  position: sticky;
+  top: 132px;
+}
+
+.storefront-public input.storefront-search,
+.storefront-public select.storefront-select {
+  min-height: 40px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  color: #0f172a;
+  font-size: 12px;
+  outline: none;
+}
+
+.storefront-public input.storefront-search {
+  width: 100%;
+  padding: 0 12px;
+}
+
+.storefront-public select.storefront-select {
+  padding: 0 34px 0 10px;
+}
+
+.storefront-public input.storefront-search:focus,
+.storefront-public select.storefront-select:focus {
+  border-color: var(--storefront-blue);
+  box-shadow: 0 0 0 3px rgba(29, 106, 196, 0.10);
+}
+
+.storefront-public .storefront-mobile-nav {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+@media (max-width: 1023px) {
+  .storefront-public {
+    padding-bottom: 80px;
+  }
+
+  .storefront-public .storefront-filter-panel {
+    position: static;
+  }
+}
+
+@media (max-width: 639px) {
+  .storefront-public .storefront-product-media {
+    min-height: 158px;
+  }
+
+  .storefront-public .storefront-section-header {
+    align-items: flex-start;
+  }
+}
