@@ -69,7 +69,6 @@ export default function ProductDetailsPage() {
     }
   }, [product]);
 
- [slug]);
 
   if (loading) {
     return (
