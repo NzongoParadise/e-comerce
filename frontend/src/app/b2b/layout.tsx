@@ -65,7 +65,7 @@ export default function B2BLayout({ children }: { children: React.ReactNode }) {
   if (!authenticated) return <><Header /><main className="flex-1">{children}</main><Footer /></>;
 
   return (
-    <div className="workspace-main min-h-screen text-slate-950">
+    <div className="marketplace-workspace workspace-main min-h-screen text-slate-950">
       <WorkspaceHeader
         kind="b2b"
         title="RUBRICA DILIGENTE"
