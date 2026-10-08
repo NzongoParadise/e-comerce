@@ -43,7 +43,12 @@ export default function B2BLayout({ children }: { children: React.ReactNode }) {
       return () => { active = false; };
     }
     fetchWithAuth("/api/auth/me")
-      .then(() => { if (active) setAuthenticated(true); })
+      .then((response) => {
+        if (!active) return;
+        const accountType = String(response.data?.accountType || "").toUpperCase();
+        if (accountType === "B2B") setAuthenticated(true);
+        else window.location.replace("/account");
+      })
       .catch(() => { if (active) setAuthenticated(false); })
       .finally(() => { if (active) setAuthResolved(true); });
     return () => { active = false; };
