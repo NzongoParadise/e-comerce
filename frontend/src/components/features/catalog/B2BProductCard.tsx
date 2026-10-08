@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Heart, ShoppingCart, Truck } from "lucide-react";
-import { useCart } from "@/context/CartContext";
+import { useB2BCart } from "@/context/B2BCartContext";
 import { useFavorites } from "@/context/FavoritesContext";
 import { useMarket } from "@/context/MarketContext";
 
@@ -29,7 +29,7 @@ export type B2BProductCardProduct = {
 
 export function B2BProductCard({ product }: { product: B2BProductCardProduct }) {
   const { market, formatPrice, eurToKz } = useMarket();
-  const { addToCart } = useCart();
+  const { addToCart } = useB2BCart();
   const { isFavorite, toggleFavorite } = useFavorites();
 
   const euroPrice = Number(product.prices?.find((price) => price.market === "PT")?.amount ?? product.basePrice);
@@ -50,6 +50,8 @@ export function B2BProductCard({ product }: { product: B2BProductCardProduct }) 
       priceKZ: kwanzaPrice,
       quantity: 1,
       imageUrl: product.imageUrl || undefined,
+      stock: product.stock,
+      b2bPriceRules: rules,
     });
   }
 
