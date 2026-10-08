@@ -296,6 +296,7 @@ export default function PromotionsPage() {
                       <p className={`mb-2 text-[10px] font-semibold ${product.stock > 0 ? "text-green-600" : "text-red-600"}`}>{product.stock > 0 ? `● ${product.stock} em stock` : "● Indisponível"}</p>
                       <button type="button" disabled={product.stock === 0} onClick={() => addProduct(product)} className="storefront-cta flex w-full items-center justify-center gap-2 px-3"><ShoppingCart size={14} />Adicionar</button>
                     </div>
+                  </div>
                   </article>;
                 })}
               </div>
