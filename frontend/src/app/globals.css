@@ -171,6 +171,50 @@ a, button, input, textarea {
   border-radius: 12px;
 }
 
+.marketplace-workspace .workspace-page > main,
+.marketplace-workspace .workspace-page > div {
+  width: 100%;
+  max-width: 1480px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.marketplace-workspace .workspace-page > main.container,
+.marketplace-workspace .workspace-page > div.container {
+  max-width: 1480px;
+}
+
+.marketplace-workspace .workspace-page h2 {
+  letter-spacing: -.02em;
+}
+
+.marketplace-workspace .workspace-page [class*="border-gray-200"],
+.marketplace-workspace .workspace-page [class*="border-slate-200"] {
+  border-color: #e4e9f1;
+}
+
+.marketplace-workspace .workspace-page [class*="bg-gray-50"] {
+  background-color: #f7f9fc;
+}
+
+.marketplace-workspace .workspace-page .divide-y > * {
+  transition: background 160ms ease;
+}
+
+.marketplace-workspace .workspace-page .divide-y > a:hover,
+.marketplace-workspace .workspace-page .divide-y > article:hover {
+  background: #f8fbff;
+}
+
+.marketplace-workspace .workspace-page button:not(.workspace-icon-button):focus-visible,
+.marketplace-workspace .workspace-page a:focus-visible,
+.marketplace-workspace .workspace-page input:focus-visible,
+.marketplace-workspace .workspace-page select:focus-visible,
+.marketplace-workspace .workspace-page textarea:focus-visible {
+  outline: 3px solid rgba(29,106,196,.16);
+  outline-offset: 2px;
+}
+
 @media (max-width: 1023px) {
   .marketplace-workspace .workspace-page {
     padding-bottom: 90px;
