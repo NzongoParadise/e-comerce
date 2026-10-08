@@ -4,30 +4,21 @@ import { useCart } from "@/context/CartContext";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Gift, Heart, ShoppingCart, ArrowLeft, Tag, Trash2, X } from "lucide-react";
+import { Heart, ShoppingCart, ArrowLeft, Trash2, X, ShieldCheck, Truck } from "lucide-react";
 import { useMarket } from "@/context/MarketContext";
 import { calculatePortugalShipping, estimateCartWeightKg } from "@/lib/shipping";
+import { RecommendationRail } from "@/components/features/catalog/RecommendationRail";
 
-const FREE_SHIPPING_THRESHOLD_EUR = 200;
-const recommendations = [
-  { id: 9001, name: "AirPods Pro 2", priceEUR: 349, imageUrl: "/Apple.jpg" },
-  { id: 9002, name: "iPad Air M2", priceEUR: 980, imageUrl: "/Samsung.jpg" },
-  { id: 9003, name: "Teclado Mecânico RGB", priceEUR: 85, imageUrl: "/ASUS.jpg" },
-  { id: 9004, name: "Cadeira Gaming Pro", priceEUR: 320, imageUrl: "/Dell.jpg" },
-];
 
 export default function CartPage() {
-  const { items, updateQuantity, removeFromCart, addToCart, clearCart, cartTotalEUR } = useCart();
+  const { items, updateQuantity, removeFromCart, clearCart, cartTotalEUR } = useCart();
   const { market, formatPrice, eurToKz } = useMarket();
   const router = useRouter();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [promo, setPromo] = useState("");
-  const [promoMessage, setPromoMessage] = useState("");
 
   const estimatedWeightKg = estimateCartWeightKg(items);
   const standardShippingEUR = market === "PT" ? calculatePortugalShipping(estimatedWeightKg, false) : 0;
   const expressShippingEUR = market === "PT" ? calculatePortugalShipping(estimatedWeightKg, true) : 0;
-  const amountToFreeShipping = Math.max(0, FREE_SHIPPING_THRESHOLD_EUR - cartTotalEUR);
   const allSelected = items.length > 0 && items.every((item) => selectedIds.includes(item.id));
 
   function toggleSelected(id: string) {
@@ -43,13 +34,7 @@ export default function CartPage() {
     setSelectedIds([]);
   }
 
-  function applyPromo() {
-    setPromoMessage(promo.trim().toUpperCase() === "TECH10" ? "Código aplicado: 10% de desconto" : "Código promocional inválido");
-  }
 
-  function addRecommendation(product: typeof recommendations[number]) {
-    addToCart({ id: `recommendation-${product.id}`, productId: product.id, name: product.name, slug: product.name.toLowerCase().replaceAll(" ", "-"), priceEUR: product.priceEUR, priceKZ: eurToKz(product.priceEUR), quantity: 1, imageUrl: product.imageUrl });
-  }
 
   if (items.length === 0) {
     return (
@@ -74,13 +59,25 @@ export default function CartPage() {
         <Link href="/products" className="inline-flex items-center gap-1 text-xs font-bold text-primary hover:underline"><ArrowLeft size={14} /> Continuar a comprar</Link>
       </div>
 
-      <div className="mb-6 rounded-xl border border-blue-100 bg-blue-50/60 p-4">
-        <div className="flex items-center gap-3">
-          <Gift size={22} className="text-primary" aria-hidden="true" />
-          <p className="text-sm font-semibold text-gray-800">{amountToFreeShipping > 0 ? `Falta ${formatPrice(amountToFreeShipping)} para obter envio grátis.` : "Já beneficia de envio grátis."}</p>
+      <div className="mb-6 grid gap-3 sm:grid-cols-2">
+        <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 p-4">
+          <div className="flex items-start gap-3">
+            <Truck size={19} className="mt-0.5 shrink-0 text-emerald-700" />
+            <div>
+              <p className="text-xs font-black text-emerald-900">{market === "AO" ? "Entrega padrão em Angola" : "Entrega em Portugal"}</p>
+              <p className="mt-1 text-[11px] leading-5 text-emerald-800">{market === "AO" ? "O método padrão é gratuito. A entrega expressa é calculada no checkout." : "O custo é calculado automaticamente pelo peso e pelo método escolhido."}</p>
+            </div>
+          </div>
         </div>
-        <div className="mt-3 h-2 overflow-hidden rounded-full bg-blue-100"><div className="h-full rounded-full bg-primary transition-all" style={{ width: `${Math.min(100, (cartTotalEUR / FREE_SHIPPING_THRESHOLD_EUR) * 100)}%` }} /></div>
-        <p className="mt-2 text-right text-[11px] font-semibold text-gray-500">Meta: {formatPrice(FREE_SHIPPING_THRESHOLD_EUR)}</p>
+        <div className="rounded-xl border border-blue-100 bg-blue-50/70 p-4">
+          <div className="flex items-start gap-3">
+            <ShieldCheck size={19} className="mt-0.5 shrink-0 text-[#1d6ac4]" />
+            <div>
+              <p className="text-xs font-black text-blue-950">Preço e promoções</p>
+              <p className="mt-1 text-[11px] leading-5 text-blue-800">As condições elegíveis são recalculadas no checkout antes da confirmação.</p>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Stepper (Visual only for now) */}
@@ -234,42 +231,20 @@ export default function CartPage() {
               Avançar para o checkout →
             </button>
 
-            <div>
-              <label className="text-xs font-bold text-gray-900 mb-2 flex items-center gap-1.5">
-                <Tag size={14} strokeWidth={2} aria-hidden="true" /> Tem um código de desconto?
-              </label>
-              <div className="flex min-w-0">
-                <input type="text" value={promo} onChange={(event) => setPromo(event.target.value)} placeholder="Inserir código" className="min-w-0 flex-1 border border-gray-300 rounded-l-lg px-3 py-2 text-sm focus:outline-none focus:border-primary" />
-                <button onClick={applyPromo} className="shrink-0 border border-primary bg-white text-primary font-semibold text-sm px-3 py-2 rounded-r-lg hover:bg-blue-50 transition-colors sm:px-4">
-                  Aplicar
-                </button>
-              </div>
-              {promoMessage && <p className="mt-2 text-xs font-semibold text-gray-500">{promoMessage}</p>}
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">Promoções</p>
+              <p className="mt-1 text-xs leading-5 text-slate-600">As campanhas e condições elegíveis são aplicadas e validadas no processo de checkout.</p>
+            </div>
             </div>
           </div>
         </div>
       </div>
 
-      <section className="mt-8">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-gray-900">Também pode gostar</h2>
-          <Link href="/products" className="text-xs font-bold text-primary hover:underline">Ver todos →</Link>
-        </div>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {recommendations.map((product) => (
-            <div key={product.id} className="card p-3">
-              <div className="relative flex h-28 items-center justify-center rounded-lg bg-gray-50">
-                <img src={product.imageUrl} alt="" className="h-full w-full rounded-lg object-contain" />
-                <button type="button" className="absolute right-2 top-2 text-gray-400 hover:text-red-500" aria-label={`Adicionar ${product.name} aos favoritos`}><Heart size={14} /></button>
-              </div>
-              <h3 className="mt-3 line-clamp-1 text-xs font-bold text-gray-900">{product.name}</h3>
-              <p className="mt-1 text-sm font-black text-gray-900">{formatPrice(product.priceEUR)}</p>
-              <p className="mb-2 text-[10px] font-semibold text-green-600">● Em stock</p>
-              <button type="button" onClick={() => addRecommendation(product)} className="w-full rounded-lg border border-primary px-2 py-2 text-[10px] font-bold text-primary hover:bg-blue-50">Adicionar ao carrinho</button>
-            </div>
-          ))}
-        </div>
-      </section>
+      <RecommendationRail
+        title="Pode complementar a sua compra"
+        description="Sugestões reais do catálogo disponíveis neste momento."
+        limit={4}
+      />
     </div>
   );
 }
