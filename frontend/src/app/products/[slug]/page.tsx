@@ -49,6 +49,28 @@ export default function ProductDetailsPage() {
       .finally(() => setLoading(false));
   }, [slug]);
 
+  useEffect(() => {
+    if (!product) return;
+    try {
+      const key = "rd_recently_viewed";
+      const stored = JSON.parse(localStorage.getItem(key) || "[]") as Array<{
+        id: number;
+        name: string;
+        slug: string;
+        imageUrl?: string | null;
+      }>;
+      const next = [
+        { id: product.id, name: product.name, slug: product.slug, imageUrl: product.imageUrl },
+        ...stored.filter((item) => item.id !== product.id),
+      ].slice(0, 12);
+      localStorage.setItem(key, JSON.stringify(next));
+    } catch {
+      // local browsing history is a progressive enhancement only.
+    }
+  }, [product]);
+
+ [slug]);
+
   if (loading) {
     return (
       <div className="flex h-[50vh] items-center justify-center">
@@ -105,8 +127,32 @@ export default function ProductDetailsPage() {
     router.push("/cart");
   };
 
+  const activeMarketPrice = market === "AO" ? Number(aoPrice) : Number(ptPrice);
+  const activeMarketOffer = market === "AO" ? kwanzaOffer : euroOffer;
+  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://e-comerce-sepia.vercel.app").replace(/\/$/, "");
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    "@id": siteUrl + "/products/" + product.slug,
+    name: product.name,
+    description: product.description || product.name,
+    image: product.imageUrl ? [product.imageUrl.startsWith("http") ? product.imageUrl : siteUrl + product.imageUrl] : undefined,
+    sku: String(product.id),
+    brand: { "@type": "Brand", name: product.brand.name },
+    category: product.category.name,
+    offers: {
+      "@type": "Offer",
+      url: siteUrl + "/products/" + product.slug,
+      priceCurrency: market === "AO" ? "AOA" : "EUR",
+      price: String(activeMarketOffer?.promotionalPrice ?? activeMarketPrice),
+      availability: product.stock > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
+      itemCondition: "https://schema.org/NewCondition",
+    },
+  };
+
   return (
     <div className="container mx-auto animate-fade-in-up px-4 py-5 md:py-7 storefront-product-detail">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }} />
       {/* Breadcrumb */}
       <nav aria-label="Breadcrumb" className="mb-5 flex items-center gap-1.5 overflow-hidden text-xs text-gray-400">
         <Link href="/" className="hover:text-[#1d6ac4]">Início</Link>
