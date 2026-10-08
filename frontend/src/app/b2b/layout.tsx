@@ -52,6 +52,9 @@ export default function B2BLayout({ children }: { children: React.ReactNode }) {
   const activeItem = activeGroup?.items.find((item) => isActive(pathname, item.href));
   const closeMobile = () => setSidebarOpen(false);
 
+  if (!authResolved) return <div className="flex min-h-screen items-center justify-center bg-[#f5f6fa] text-sm text-slate-500">A carregar...</div>;
+  if (!authenticated) return <><Header /><main className="flex-1">{children}</main><Footer /></>;
+
   return (
     <div className="min-h-screen bg-[#f6f8fb] text-slate-950">
       <header className="sticky top-0 z-50 h-16 border-b border-slate-200 bg-white/95 backdrop-blur">
