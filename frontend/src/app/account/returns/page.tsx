@@ -61,6 +61,8 @@ export default function ReturnsPage() {
       setMessage("Solicitação " + response.data.requestNumber + " enviada com sucesso.");
       setReason("");
       setDescription("");
+      const history = await fetchWithAuth("/api/returns");
+      setRequests(history.data || []);
     } catch (requestError) {
       setMessage(requestError instanceof Error ? requestError.message : "Não foi possível enviar a solicitação.");
     } finally {
@@ -146,8 +148,8 @@ export default function ReturnsPage() {
 
             <label className="block text-xs font-bold text-slate-600">
               Descrição detalhada
-              <textarea value={description} onChange={(event) => setDescription(event.target.value)} maxLength={4000} className="settings-input mt-2 min-h-32 resize-y" placeholder="Explique o problema, quando o identificou e qualquer informação útil para a equipa." />
-              <span className="mt-1 block text-right text-[9px] font-normal text-slate-400">{description.length}/4000</span>
+              <textarea value={description} onChange={(event) => setDescription(event.target.value)} maxLength={2000} className="settings-input mt-2 min-h-32 resize-y" placeholder="Explique o problema, quando o identificou e qualquer informação útil para a equipa." />
+              <span className="mt-1 block text-right text-[9px] font-normal text-slate-400">{description.length}/2000</span>
             </label>
 
             {message && <div role="status" className="flex items-start gap-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-3 text-xs font-bold text-blue-800"><CheckCircle2 size={15} className="mt-0.5 shrink-0"/>{message}</div>}
