@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import { fetchWithAuth } from "@/lib/api";
+import { useMarket } from "@/context/MarketContext";
 import WorkspaceHeader from "@/components/layout/WorkspaceHeader";
 
 const groups = [
@@ -37,6 +38,7 @@ export default function B2BLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [authResolved, setAuthResolved] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
+  const { setMarket } = useMarket();
 
   useEffect(() => {
     let active = true;
@@ -48,7 +50,16 @@ export default function B2BLayout({ children }: { children: React.ReactNode }) {
       .then((response) => {
         if (!active) return;
         const accountType = String(response.data?.accountType || "").toUpperCase();
-        if (accountType === "B2B") setAuthenticated(true);
+        if (accountType === "B2B") {
+          setAuthenticated(true);
+          fetchWithAuth("/api/b2b/company")
+            .then((companyResponse) => {
+              const country = String(companyResponse.data?.country || "").toLowerCase();
+              if (country === "portugal" || country === "pt") setMarket("PT");
+              else if (country) setMarket("AO");
+            })
+            .catch(() => undefined);
+        }
         else window.location.replace("/account");
       })
       .catch(() => { if (active) setAuthenticated(false); })
