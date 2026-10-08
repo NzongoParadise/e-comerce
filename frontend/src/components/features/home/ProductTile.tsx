@@ -52,7 +52,7 @@ export function ProductTile({ product }: { product: Product }) {
         }
         aria-label={favorite ? \`Remover \${product.name} dos favoritos\` : \`Adicionar \${product.name} aos favoritos\`}
         className={
-          "absolute right-2 bottom-[148px] z-10 flex h-8 w-8 items-center justify-center rounded-full border bg-white/95 shadow-sm backdrop-blur " +
+          "absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full border bg-white/95 shadow-sm backdrop-blur " +
           (favorite ? "border-red-200 text-red-600" : "border-slate-200 text-slate-500 opacity-100 sm:opacity-0 sm:group-hover:opacity-100")
         }
       >
