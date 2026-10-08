@@ -122,7 +122,7 @@ export default function CategoriesPage() {
                 return (
                   <Link
                     key={cat.id}
-                    href={\`/products?category=\${cat.slug}\`}
+                    href={`/products?category=${cat.slug}`}
                     className="group relative flex min-h-44 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white p-4 transition hover:-translate-y-0.5 hover:border-[#1d6ac4]/40 hover:shadow-lg"
                   >
                     <div className="flex items-center justify-between">
