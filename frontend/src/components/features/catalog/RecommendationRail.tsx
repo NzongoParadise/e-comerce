@@ -67,8 +67,12 @@ export function RecommendationRail({
             A preparar sugestões...
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
-            {products.map((product) => <ProductCard key={product.id} product={product} />)}
+          <div className="storefront-rail flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory">
+            {products.map((product) => (
+              <div key={product.id} className="w-[210px] shrink-0 snap-start sm:w-[230px] lg:w-[240px]">
+                <ProductCard product={product} />
+              </div>
+            ))}
           </div>
         )}
       </div>
