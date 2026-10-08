@@ -74,7 +74,7 @@ export default function ProductDetailsPage() {
 
   const handleAddToCart = () => {
     addToCart({
-      id: `${product.id}-${color}-${storage}-${ram}`, // Unique ID for this variant
+      id: `${product.id}-default`,
       productId: product.id,
       name: product.name,
       slug: product.slug,
@@ -166,6 +166,8 @@ export default function ProductDetailsPage() {
                 </div>
               </div>
             </div>
+          </div>
+
           {/* Buy Panel */}
           <div>
             <div className="card sticky top-28 border-gray-200 p-5 shadow-[0_24px_60px_rgba(15,23,42,0.08)] transition-all duration-300 hover:-translate-y-0.5 sm:p-6">
