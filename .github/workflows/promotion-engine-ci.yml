@@ -5,6 +5,7 @@ on:
     branches: [master]
     paths:
       - "frontend/**"
+      - ".github/workflows/**"
   push:
     branches: [feat/promotion-engine-omnichannel]
 
