@@ -178,7 +178,7 @@ export default function PromotionsPage() {
     finally { setNewsletterLoading(false); }
   }
 
-  return <div className="container mx-auto px-4 py-8">
+  return <main className="min-h-screen bg-[#f7f8f8]"><div className="container mx-auto px-4 py-5 sm:py-8">
     <nav className="mb-6 flex items-center gap-1 text-xs text-gray-400"><Link href="/" className="hover:text-[#1d6ac4]">Início</Link><span>›</span><span className="font-medium text-gray-700">Ofertas</span></nav>
     <div className={`mb-6 grid min-w-0 items-stretch gap-5 ${promotions.length ? "lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.9fr)]" : ""}`}>
     <section aria-labelledby="offers-heading" className="relative min-w-0 overflow-hidden rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 via-white to-blue-50/40 p-5 shadow-sm sm:p-8">
@@ -281,20 +281,20 @@ export default function PromotionsPage() {
                   const activeOffer = market === "AO" ? kwanzaOffer : euroOffer;
                   const regularPrice = market === "AO" ? priceKZ : priceEUR;
                   const favorite = isFavorite(product.id);
-                  return <article key={product.id} className="card card-hover relative flex min-w-0 flex-col p-3">
+                  return <article key={product.id} className="storefront-product-card group relative flex min-w-0 flex-col">
                     <span className={`absolute left-3 top-3 z-10 px-2 py-1 text-[10px] font-black text-white ${activeOffer ? "bg-red-600" : "bg-[#1d6ac4]"}`}>{activeOffer ? "PROMOÇÃO" : "CATÁLOGO"}</span>
                     <button type="button" onClick={() => toggleFavorite({ id: product.id, name: product.name, slug: product.slug, category: product.category.name, specs: product.category.name, priceEUR, imageUrl: product.imageUrl || undefined })} className={`absolute right-3 top-3 z-10 ${favorite ? "text-red-500" : "text-gray-400 hover:text-red-500"}`} aria-label={`${favorite ? "Remover" : "Adicionar"} ${product.name} dos favoritos`}><Heart size={16} fill={favorite ? "currentColor" : "none"} /></button>
-                    <Link href={`/products/${product.slug}`} className="flex h-32 min-w-0 items-center justify-center bg-gray-50"><Image src={product.imageUrl || "/file.svg"} alt={product.name} width={180} height={140} unoptimized={Boolean(product.imageUrl && /^https?:\/\//i.test(product.imageUrl))} className="h-full w-full object-contain" /></Link>
-                    <h2 className="mt-3 line-clamp-2 text-xs font-bold text-gray-900">{product.name}</h2>
+                    <Link href={`/products/${product.slug}`} className="storefront-product-media min-h-[175px]"><Image src={product.imageUrl || "/file.svg"} alt={product.name} width={180} height={140} unoptimized={Boolean(product.imageUrl && /^https?:\/\//i.test(product.imageUrl))} className="h-full w-full object-contain" /></Link>
+                    <div className="flex min-h-0 flex-1 flex-col p-3"><h2 className="line-clamp-2 min-h-9 text-xs font-bold leading-[1.35] text-gray-900">{product.name}</h2>
                     <p className="mt-1 line-clamp-1 text-[10px] text-gray-500">{product.category.name}</p>
                     <div className="mt-auto pt-3">
                       {activeOffer ? <div className="mb-1 flex flex-wrap items-baseline gap-x-2">
                         <del className="text-xs text-gray-500">{formatMarketAmount(regularPrice, market)}</del>
-                        <p className="text-base font-black text-red-700">{formatMarketAmount(activeOffer.promotionalPrice, market)}</p>
-                      </div> : <p className="text-base font-black text-gray-900">{formatMarketAmount(regularPrice, market)}</p>}
+                        <p className="storefront-price text-lg font-black">{formatMarketAmount(activeOffer.promotionalPrice, market)}</p>
+                      </div> : <p className="storefront-price text-lg font-black text-slate-950">{formatMarketAmount(regularPrice, market)}</p>}
                       {activeOffer && <p className="mb-1 text-[10px] font-semibold text-red-700">{activeOffer.promotion.name} · preço promocional</p>}
                       <p className={`mb-2 text-[10px] font-semibold ${product.stock > 0 ? "text-green-600" : "text-red-600"}`}>{product.stock > 0 ? `● ${product.stock} em stock` : "● Indisponível"}</p>
-                      <button type="button" disabled={product.stock === 0} onClick={() => addProduct(product)} className="flex w-full items-center justify-center gap-2 bg-[#1d6ac4] px-3 py-2 text-[10px] font-bold text-white hover:bg-[#1555d8] disabled:cursor-not-allowed disabled:bg-gray-300"><ShoppingCart size={14} />Adicionar</button>
+                      <button type="button" disabled={product.stock === 0} onClick={() => addProduct(product)} className="storefront-cta flex w-full items-center justify-center gap-2 px-3"><ShoppingCart size={14} />Adicionar</button>
                     </div>
                   </article>;
                 })}
@@ -303,7 +303,7 @@ export default function PromotionsPage() {
       </main>
       <aside className="space-y-4"><div className="card space-y-4 p-5"><Benefit icon={Truck} title="Entrega rápida" text="Em Luanda e nas principais províncias." /><Benefit icon={ShieldCheck} title="Pagamentos seguros" text="Multicaixa, MB WAY, cartão e transferência." /><Benefit icon={Package} title="Produtos originais" text="Garantia oficial das melhores marcas." /><Benefit icon={Headphones} title="Apoio especializado" text="Estamos aqui para o ajudar." /></div><section className="relative isolate overflow-hidden rounded-2xl bg-[#172554] p-5 text-white shadow-sm"><div className="absolute -right-8 -top-8 h-28 w-28 rounded-full border-[18px] border-cyan-300/20" /><div className="relative"><div className="flex items-center justify-between"><span className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.18em] text-cyan-200"><Zap size={13} fill="currentColor" />Seleção em destaque</span><span className="rounded-full border border-cyan-200/30 px-2 py-1 text-[9px] font-bold text-cyan-100">AO · PT</span></div><h2 className="mt-6 max-w-[12rem] text-2xl font-black leading-[1.05]">Tecnologia para o seu próximo passo.</h2><p className="mt-3 max-w-[15rem] text-xs leading-5 text-blue-100">Produtos atuais, stock confirmado e preços sincronizados com o catálogo.</p><Link href="#offers" className="mt-5 inline-flex items-center gap-2 bg-white px-4 py-2.5 text-xs font-black text-[#172554] transition hover:bg-cyan-100">Explorar seleção <span aria-hidden="true">→</span></Link><div className="mt-5 flex items-center gap-2 border-t border-white/15 pt-3 text-[10px] text-blue-100"><span className="h-2 w-2 animate-pulse rounded-full bg-emerald-300" />Catálogo atualizado em tempo real</div></div></section><form onSubmit={subscribe} className="card p-5"><Bell size={20} className="text-[#1d6ac4]" /><h2 className="mt-2 font-bold text-gray-900">Receba novidades</h2><p className="mt-1 text-xs text-gray-500">Seja o primeiro a conhecer novos produtos e campanhas.</p><input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="O seu email" className="settings-input mt-4" /><button type="submit" disabled={newsletterLoading} className="btn-primary mt-3 flex w-full items-center justify-center gap-2 disabled:opacity-50">{newsletterLoading && <LoaderCircle size={14} className="animate-spin" />}Subscrever</button></form></aside>
     </div>
-  </div>;
+  </div></main>;
 }
 
 function Benefit({ icon: Icon, title, text }: { icon: typeof Truck; title: string; text: string }) { return <div className="flex gap-3"><Icon className="shrink-0 text-[#1d6ac4]" size={22} /><div><p className="text-xs font-bold text-gray-900">{title}</p><p className="text-[10px] leading-4 text-gray-500">{text}</p></div></div>; }
