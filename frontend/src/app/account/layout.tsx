@@ -27,7 +27,7 @@ const groups: NavGroup[] = [
   { label: "Suporte", items: [
     { name: "Ajuda e suporte", href: "/account/support", Icon: Headphones },
   ]},
-  { label: "Administração", items: [
+  { label: "Mais", items: [
     { name: "Gestão de utilizadores", href: "/account/users", Icon: Users },
     { name: "Gestão de stock", href: "/admin/stock", Icon: Boxes },
     { name: "Definições", href: "/account/settings", Icon: Settings },
@@ -90,7 +90,7 @@ export default function AccountLayout({ children }: { children: React.ReactNode 
   const closeMobile = () => setSidebarOpen(false);
 
   return (
-    <div className="workspace-main min-h-screen text-slate-950">
+    <div className="marketplace-workspace workspace-main min-h-screen text-slate-950">
       <WorkspaceHeader
         kind="account"
         title="RUBRICA DILIGENTE"
