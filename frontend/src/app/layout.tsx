@@ -9,9 +9,35 @@ import { FavoritesProvider } from "@/context/FavoritesContext";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://e-comerce-sepia.vercel.app";
+
 export const metadata: Metadata = {
-  title: "RUBRICA DILIGENTE (SU), LDA – Tecnologia Sem Fronteiras",
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: "RUBRICA DILIGENTE (SU), LDA – Tecnologia Sem Fronteiras",
+    template: "%s | RUBRICA DILIGENTE",
+  },
   description: "Computadores, iPhones e soluções tecnológicas para Angola e Portugal. Compre online com entrega rápida e segura.",
+  alternates: {
+    canonical: "/",
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
+  openGraph: {
+    type: "website",
+    locale: "pt_PT",
+    url: siteUrl,
+    siteName: "RUBRICA DILIGENTE (SU), LDA",
+    title: "RUBRICA DILIGENTE – Tecnologia Sem Fronteiras",
+    description: "Tecnologia, equipamentos e soluções para Angola e Portugal.",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "RUBRICA DILIGENTE – Tecnologia Sem Fronteiras",
+    description: "Tecnologia, equipamentos e soluções para Angola e Portugal.",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
