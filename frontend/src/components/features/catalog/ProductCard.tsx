@@ -107,7 +107,7 @@ export function ProductCard({ product }: { product: CatalogProduct }) {
             alt={product.name}
             width={240}
             height={210}
-            unoptimized={Boolean(product.imageUrl && /^https?:\\/\\//i.test(product.imageUrl))}
+            unoptimized={Boolean(product.imageUrl && /^https?:\/\//i.test(product.imageUrl))}
             className="h-full w-full object-contain p-4"
           />
         </Link>
