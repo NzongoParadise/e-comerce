@@ -37,7 +37,6 @@ export function B2BProductCard({ product }: { product: B2BProductCardProduct }) 
   const favorite = isFavorite(product.id);
   const rules = [...(product.b2bPriceRules || [])].sort((a, b) => a.minQuantity - b.minQuantity);
   const bestRule = rules.length ? rules[rules.length - 1] : null;
-  const currency = market === "PT" ? "EUR" : "AOA";
   const retailPrice = market === "PT" ? euroPrice : kwanzaPrice;
 
   function add() {
