@@ -73,8 +73,17 @@ export default function B2BQuotesPage() {
 
   const visible = useMemo(() => quotes.filter((quote) => {
     const matchesSearch = `${quote.quoteNumber} ${quote.status}`.toLowerCase().includes(query.toLowerCase().trim());
-    return matchesSearch && (filter === "ALL" || quote.status === filter);
+    const matchesFilter = filter === "ALL" || (filter === "PENDING" && (quote.status === "PENDING" || quote.status === "REVIEW")) || quote.status === filter;
+    return matchesSearch && matchesFilter;
   }), [quotes, query, filter]);
+
+  const counts = {
+    ALL: quotes.length,
+    PENDING: quotes.filter((quote) => quote.status === "PENDING" || quote.status === "REVIEW").length,
+    APPROVED: quotes.filter((quote) => quote.status === "APPROVED").length,
+    CONVERTED: quotes.filter((quote) => quote.status === "CONVERTED").length,
+    REJECTED: quotes.filter((quote) => quote.status === "REJECTED").length,
+  };
 
   const tabs = [
     { id: "ALL", label: "Todas" },
@@ -127,7 +136,7 @@ export default function B2BQuotesPage() {
       <section className="card overflow-hidden">
         <div className="flex flex-col gap-4 border-b border-slate-100 p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex gap-1 overflow-x-auto">
-            {tabs.map((tab) => <button key={tab.id} type="button" onClick={() => setFilter(tab.id)} className={filter === tab.id ? "border-b-2 border-[#1d6ac4] px-3 py-2 text-[10px] font-black text-[#1555d8]" : "border-b-2 border-transparent px-3 py-2 text-[10px] font-bold text-slate-500 hover:text-slate-900"}>{tab.label}</button>)}
+            {tabs.map((tab) => <button key={tab.id} type="button" onClick={() => setFilter(tab.id)} className={filter === tab.id ? "border-b-2 border-[#1d6ac4] px-3 py-2.5 text-[10px] font-black text-[#1555d8]" : "border-b-2 border-transparent px-3 py-2.5 text-[10px] font-bold text-slate-500 hover:text-slate-900"}>{tab.label}<span className="ml-1 opacity-60">{counts[tab.id as keyof typeof counts]}</span></button>)}
           </div>
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Pesquisar referência..." className="settings-input lg:max-w-xs" />
         </div>
