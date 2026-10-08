@@ -31,9 +31,13 @@ type WorkspaceHeaderProps = {
 };
 
 const config = {
-  admin: { mark: ShieldCheck, markText: "Admin", title: "RUBRICA DILIGENTE", tone: "Operação e controlo" },
-  account: { mark: ShoppingBag, markText: "Conta", title: "RUBRICA DILIGENTE", tone: "Conta do cliente" },
-  b2b: { mark: Building2, markText: "B2B", title: "RUBRICA DILIGENTE", tone: "Conta empresarial" },
+  admin: { mark: ShieldCheck, markText: "Admin", title: "RUBRICA DILIGENTE", tone: "Operação e controlo", links: [] as [string, string][] },
+  account: { mark: ShoppingBag, markText: "Conta", title: "RUBRICA DILIGENTE", tone: "Conta do cliente", links: [
+    ["Comprar", "/products"], ["Encomendas", "/account/orders"], ["Favoritos", "/favorites"], ["Cupões", "/account/coupons"], ["Suporte", "/account/support"],
+  ] as [string, string][] },
+  b2b: { mark: Building2, markText: "B2B", title: "RUBRICA DILIGENTE", tone: "Conta empresarial", links: [
+    ["Catálogo", "/b2b/catalogo"], ["Cotações", "/b2b/cotacoes"], ["Encomendas", "/b2b/encomendas"], ["Financeiro", "/b2b/financeiro"], ["Empresa", "/b2b/empresa"],
+  ] as [string, string][] },
 } as const;
 
 export default function WorkspaceHeader({
@@ -145,11 +149,14 @@ export default function WorkspaceHeader({
         </label>
       </div>
 
-      <div className="hidden border-t border-slate-100 bg-slate-50/75 lg:block">
-        <div className="mx-auto flex min-h-9 max-w-[1680px] items-center gap-2 overflow-x-auto px-5 lg:px-7">
-          <span className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400">{meta.markText}</span>
-          <ChevronRight size={11} className="text-slate-300" />
-          <span className="truncate text-[10px] font-bold text-slate-500">{pathname === "/" ? meta.tone : subtitle}</span>
+      <div className="border-t border-slate-100 bg-white">
+        <div className="mx-auto flex min-h-11 max-w-[1680px] items-center gap-1 overflow-x-auto px-3 sm:px-5 lg:px-7">
+          <span className="mr-2 shrink-0 text-[9px] font-black uppercase tracking-[0.16em] text-slate-400">{meta.markText}</span>
+          {meta.links.map(([label, href]) => {
+            const active = pathname === href || (href !== "/products" && pathname.startsWith(href + "/"));
+            return <Link key={href} href={href} className={active ? "workspace-shortcut is-active" : "workspace-shortcut"}>{label}</Link>;
+          })}
+          <span className="ml-auto hidden shrink-0 items-center gap-1 pl-3 text-[9px] font-bold text-slate-400 xl:inline-flex"><ChevronRight size={11} /> {pathname === "/" ? meta.tone : subtitle}</span>
         </div>
       </div>
     </header>
