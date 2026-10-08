@@ -4,6 +4,7 @@ import {
   BookOpen,
   Building2,
   CreditCard,
+  Cookie,
   FileText,
   Headphones,
   LockKeyhole,
@@ -25,6 +26,7 @@ const guides = [
   { title: "Conteúdos e guias", description: "Explore o catálogo e compare produtos antes de escolher.", href: "/info/blog", icon: BookOpen, group: "Empresa" },
   { title: "Termos e condições", description: "Consulte informação geral sobre a experiência de compra.", href: "/info/terms", icon: FileText, group: "Documentos" },
   { title: "Privacidade", description: "Saiba como a informação apoia a conta, a compra e o suporte.", href: "/info/privacy", icon: LockKeyhole, group: "Documentos" },
+  { title: "Política de cookies", description: "Saiba que cookies e dados do navegador são usados pela loja.", href: "/info/cookies", icon: Cookie, group: "Documentos" },
   { title: "As minhas encomendas", description: "Consulte os pedidos e o estado das suas compras.", href: "/account/orders", icon: PackageCheck, group: "Acesso rápido" },
 ];
 

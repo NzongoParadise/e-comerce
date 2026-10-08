@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { Lock, Mail, MapPin, Phone } from "lucide-react";
 import { BrandLogo } from "@/components/ui/BrandLogo";
+import { CookieSettingsButton } from "@/components/layout/CookieConsent";
 
 const groups = [
   { title: "Empresa", links: [["Sobre nós", "/info/about"], ["Contactos", "/info/contact"], ["Blog", "/info/blog"]] },
   { title: "Compras", links: [["Como comprar", "/info/how-to-buy"], ["Pagamentos", "/info/payments"], ["Entregas", "/info/shipping"], ["Trocas e devoluções", "/info/returns"], ["Garantia", "/info/warranty"]] },
   { title: "Serviços", links: [["Área empresarial B2B", "/b2b"], ["Cotações", "/b2b/cotacoes"], ["Suporte técnico", "/info/support"], ["Assistência pós-venda", "/info/support"]] },
-  { title: "Ajuda", links: [["Centro de ajuda", "/info/support"], ["Seguimento de encomendas", "/login"], ["Termos e condições", "/info/terms"], ["Política de privacidade", "/info/privacy"]] },
+  { title: "Ajuda", links: [["Centro de ajuda", "/info/support"], ["Seguimento de encomendas", "/login"], ["Termos e condições", "/info/terms"], ["Política de privacidade", "/info/privacy"], ["Política de cookies", "/info/cookies"]] },
 ];
 
 export default function Footer() {
@@ -32,7 +33,7 @@ export default function Footer() {
         </div>
         <div className="mt-10 flex flex-col gap-4 border-t border-white/10 pt-6 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-gray-500">© 2026 RUBRICA DILIGENTE (SU), LDA. Todos os direitos reservados.</p>
-          <div className="flex flex-wrap items-center gap-2">{["Multicaixa","MB WAY","VISA","Mastercard"].map((p) => <span key={p} className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-bold text-gray-300">{p}</span>)}<span className="ml-1 text-xs text-gray-400">Angola · Portugal</span></div>
+          <div className="flex flex-wrap items-center gap-3">{["Multicaixa","MB WAY","VISA","Mastercard"].map((p) => <span key={p} className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-bold text-gray-300">{p}</span>)}<span className="ml-1 text-xs text-gray-400">Angola · Portugal</span><CookieSettingsButton /></div>
         </div>
       </div>
     </footer>

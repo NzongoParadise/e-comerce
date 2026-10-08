@@ -41,8 +41,8 @@ export function ProductCard({ product }: { product: CatalogProduct }) {
 
   const formatMarketPrice = (amount: number) =>
     market === "AO"
-      ? \`Kz \${amount.toLocaleString("pt-AO", { maximumFractionDigits: 2 })}\`
-      : \`€ \${amount.toLocaleString("pt-PT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\`;
+      ? `Kz ${amount.toLocaleString("pt-AO", { maximumFractionDigits: 2 })}`
+      : `€ ${amount.toLocaleString("pt-PT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   const discountPercent = marketOffer && marketPrice > 0
     ? Math.max(0, Math.round((1 - marketOffer.promotionalPrice / marketPrice) * 100))
@@ -50,7 +50,7 @@ export function ProductCard({ product }: { product: CatalogProduct }) {
 
   function addProduct() {
     addToCart({
-      id: \`\${product.id}-default\`,
+      id: `${product.id}-default`,
       productId: product.id,
       name: product.name,
       slug: product.slug,
@@ -77,7 +77,7 @@ export function ProductCard({ product }: { product: CatalogProduct }) {
         )}
         <button
           type="button"
-          aria-label={favorite ? \`Remover \${product.name} dos favoritos\` : \`Adicionar \${product.name} aos favoritos\`}
+          aria-label={favorite ? `Remover ${product.name} dos favoritos` : `Adicionar ${product.name} aos favoritos`}
           onClick={() =>
             toggleFavorite({
               id: product.id,
@@ -98,8 +98,8 @@ export function ProductCard({ product }: { product: CatalogProduct }) {
         </button>
 
         <Link
-          href={\`/products/\${product.slug}\`}
-          aria-label={\`Ver \${product.name}\`}
+          href={`/products/${product.slug}`}
+          aria-label={`Ver ${product.name}`}
           className="storefront-product-media"
         >
           <Image
@@ -107,7 +107,7 @@ export function ProductCard({ product }: { product: CatalogProduct }) {
             alt={product.name}
             width={240}
             height={210}
-            unoptimized={Boolean(product.imageUrl && /^https?:\\/\\//i.test(product.imageUrl))}
+            unoptimized={Boolean(product.imageUrl && /^https?:\/\//i.test(product.imageUrl))}
             className="h-full w-full object-contain p-4"
           />
         </Link>
@@ -115,14 +115,14 @@ export function ProductCard({ product }: { product: CatalogProduct }) {
 
       <div className="flex min-h-0 flex-1 flex-col p-3">
         <Link
-          href={\`/products?brand=\${product.brand.slug}\`}
+          href={`/products?brand=${product.brand.slug}`}
           className="mb-1 text-[9px] font-black uppercase tracking-[0.12em] text-[#1d6ac4] hover:text-[#155099]"
         >
           {product.brand.name}
         </Link>
 
         <Link
-          href={\`/products/\${product.slug}\`}
+          href={`/products/${product.slug}`}
           className="line-clamp-2 min-h-9 text-xs font-bold leading-[1.35] text-slate-900 hover:text-[#1d6ac4]"
         >
           {product.name}
@@ -160,7 +160,7 @@ export function ProductCard({ product }: { product: CatalogProduct }) {
 
           <div className="mt-2 flex items-center justify-between gap-2 text-[9px]">
             <span className={product.stock > 0 ? "font-bold text-emerald-600" : "font-bold text-red-600"}>
-              {product.stock > 0 ? \`\${product.stock} em stock\` : "Sem stock"}
+              {product.stock > 0 ? `${product.stock} em stock` : "Sem stock"}
             </span>
             <span className="inline-flex items-center gap-1 text-slate-400">
               <Truck size={11} />
