@@ -201,14 +201,14 @@ export default function CartPage() {
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Desconto</span>
-                <span className="font-semibold text-gray-900">- € 0,00</span>
+                <span className="font-semibold text-emerald-700">{formatPrice(0)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Entrega</span>
                 <span className="text-primary text-xs font-semibold">
                   {market === "PT"
                     ? `${formatPrice(standardShippingEUR)} (padrão)`
-                    : "Calcular no checkout"}
+                    : "Grátis"}
                 </span>
               </div>
             </div>
@@ -234,7 +234,6 @@ export default function CartPage() {
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
               <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">Promoções</p>
               <p className="mt-1 text-xs leading-5 text-slate-600">As campanhas e condições elegíveis são aplicadas e validadas no processo de checkout.</p>
-            </div>
             </div>
           </div>
         </div>
