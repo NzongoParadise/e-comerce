@@ -93,7 +93,7 @@ export default function RegisterPage() {
       </section>
 
       <section className="flex min-h-[760px] items-center justify-center px-5 py-10 sm:px-10 lg:px-16 xl:px-24">
-        <div className="w-full max-w-md animate-fade-in-up rounded-[32px] border border-gray-200 bg-white/90 p-5 shadow-[0_30px_70px_rgba(15,23,42,0.08)] backdrop-blur-sm sm:p-8">
+        <div className="w-full max-w-md animate-fade-in-up rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-8">
           <div className="mb-10 flex items-center justify-between lg:hidden">
             <Link href="/" className="flex items-center gap-2 text-[#1d6ac4]">
               <Monitor size={22} />
@@ -109,7 +109,7 @@ export default function RegisterPage() {
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <button type="button" onClick={() => handleProviderRegister("google")} className="inline-flex items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-white px-3 py-3 text-sm font-bold text-gray-700 shadow-sm transition hover:-translate-y-0.5 hover:border-[#1d6ac4] hover:bg-[#f5f9ff] hover:text-[#1d6ac4]">
+            <button type="button" onClick={() => handleProviderRegister("google")} className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-3 text-sm font-bold text-gray-700 shadow-sm transition hover:-translate-y-0.5 hover:border-[#1d6ac4] hover:bg-[#f5f9ff] hover:text-[#1d6ac4]">
               <Globe2 size={17} />Google
             </button>
             <button type="button" onClick={() => handleProviderRegister("apple")} className="inline-flex items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-white px-3 py-3 text-sm font-bold text-gray-700 shadow-sm transition hover:-translate-y-0.5 hover:border-[#1d6ac4] hover:bg-[#f5f9ff] hover:text-[#1d6ac4]">
@@ -136,7 +136,7 @@ export default function RegisterPage() {
                   placeholder="O seu nome completo"
                   autoComplete="name"
                   required
-                  className="w-full rounded-2xl border border-gray-200 bg-slate-50 py-3.5 pl-10 pr-3 text-sm text-gray-900 outline-none transition focus:border-[#1d6ac4] focus:bg-white focus:ring-4 focus:ring-[#1d6ac4]/10"
+                  className="w-full rounded-lg border border-gray-300 bg-white py-3 pl-10 pr-3 text-sm text-gray-900 outline-none transition focus:border-[#1d6ac4] focus:bg-white focus:ring-2 focus:ring-[#1d6ac4]/15"
                 />
               </div>
             </div>
