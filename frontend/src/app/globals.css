@@ -143,10 +143,10 @@ a, button, input, textarea {
   font-weight: 800;
 }
 
-.marketplace-workspace .settings-input,
-.marketplace-workspace input:not([type="checkbox"]):not([type="radio"]),
-.marketplace-workspace select,
-.marketplace-workspace textarea {
+.marketplace-workspace .workspace-page .settings-input,
+.marketplace-workspace .workspace-page input:not([type="checkbox"]):not([type="radio"]),
+.marketplace-workspace .workspace-page select,
+.marketplace-workspace .workspace-page textarea {
   border-color: #dce3ec;
   border-radius: 11px;
   background: #fff;
