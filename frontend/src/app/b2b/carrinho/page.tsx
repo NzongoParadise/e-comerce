@@ -155,11 +155,6 @@ export default function B2BCartPage() {
         </div>
       )}
 
-      {items.length === 0 && notice && (
-        <section className="card p-10 text-center">
-          <CheckCircle2/>
-        </section>
-      )}
     </div>
   );
 }
