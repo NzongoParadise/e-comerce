@@ -50,7 +50,7 @@ export function ProductTile({ product }: { product: Product }) {
             imageUrl: product.imageUrl || undefined,
           })
         }
-        aria-label={favorite ? \`Remover \${product.name} dos favoritos\` : \`Adicionar \${product.name} aos favoritos\`}
+        aria-label={favorite ? `Remover ${product.name} dos favoritos` : `Adicionar ${product.name} aos favoritos`}
         className={
           "absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full border bg-white/95 shadow-sm backdrop-blur " +
           (favorite ? "border-red-200 text-red-600" : "border-slate-200 text-slate-500 opacity-100 sm:opacity-0 sm:group-hover:opacity-100")
@@ -59,7 +59,7 @@ export function ProductTile({ product }: { product: Product }) {
         <Heart size={15} fill={favorite ? "currentColor" : "none"} />
       </button>
 
-      <Link href={\`/products/\${product.slug}\`} className="storefront-product-media min-h-[185px]">
+      <Link href={`/products/${product.slug}`} className="storefront-product-media min-h-[185px]">
         <Image
           src={product.imageUrl || "/file.svg"}
           alt={product.name}
@@ -71,10 +71,10 @@ export function ProductTile({ product }: { product: Product }) {
       </Link>
 
       <div className="flex min-h-0 flex-1 flex-col p-3">
-        <Link href={\`/products?brand=\${product.brand.slug}\`} className="mb-1 text-[9px] font-black uppercase tracking-[0.12em] text-[#1d6ac4] hover:text-[#155099]">
+        <Link href={`/products?brand=${product.brand.slug}`} className="mb-1 text-[9px] font-black uppercase tracking-[0.12em] text-[#1d6ac4] hover:text-[#155099]">
           {product.brand.name}
         </Link>
-        <Link href={\`/products/\${product.slug}\`} className="line-clamp-2 min-h-9 text-xs font-bold leading-[1.35] text-slate-900 hover:text-[#1d6ac4]">
+        <Link href={`/products/${product.slug}`} className="line-clamp-2 min-h-9 text-xs font-bold leading-[1.35] text-slate-900 hover:text-[#1d6ac4]">
           {product.name}
         </Link>
         <div className="mt-1 flex items-center gap-1.5 text-[9px] text-slate-400">
@@ -87,12 +87,12 @@ export function ProductTile({ product }: { product: Product }) {
           <p className="text-lg font-black tracking-tight text-[#df1f2d]">{formatPrice(euroPrice)}</p>
           <p className="mt-0.5 text-[9px] text-slate-400">
             {market === "PT"
-              ? \`Kz \${kwanzaPrice.toLocaleString("pt-AO")}\`
-              : \`€ \${euroPrice.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}\`}
+              ? `Kz ${kwanzaPrice.toLocaleString("pt-AO")}`
+              : `€ ${euroPrice.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}`}
           </p>
           <div className="mt-2 flex items-center justify-between gap-2 text-[9px]">
             <span className={product.stock > 0 ? "font-bold text-emerald-600" : "font-bold text-red-600"}>
-              {product.stock > 0 ? \`\${product.stock} em stock\` : "Sem stock"}
+              {product.stock > 0 ? `${product.stock} em stock` : "Sem stock"}
             </span>
             <span className="inline-flex items-center gap-1 text-slate-400"><Truck size={11} />AO · PT</span>
           </div>
@@ -101,7 +101,7 @@ export function ProductTile({ product }: { product: Product }) {
             disabled={product.stock <= 0}
             onClick={() =>
               addToCart({
-                id: \`\${product.id}-default\`,
+                id: `${product.id}-default`,
                 productId: product.id,
                 name: product.name,
                 slug: product.slug,
