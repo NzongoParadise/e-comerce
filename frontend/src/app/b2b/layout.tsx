@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2, FileText, LayoutDashboard, Package, Settings, ShoppingBag, Users, WalletCards, X } from "lucide-react";
+import { Building2, FileText, LayoutDashboard, Package, Settings, ShoppingBag, ShoppingCart, Users, WalletCards, X } from "lucide-react";
+import { B2BCartProvider } from "@/context/B2BCartContext";
 import { useEffect, useMemo, useState } from "react";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
@@ -13,6 +14,7 @@ const groups = [
   { label: "Empresa", items: [
     { href: "/b2b", label: "Visão geral", Icon: LayoutDashboard },
     { href: "/b2b/catalogo", label: "Catálogo", Icon: Package },
+    { href: "/b2b/carrinho", label: "Carrinho", Icon: ShoppingCart },
   ]},
   { label: "Compras", items: [
     { href: "/b2b/cotacoes", label: "Cotações", Icon: FileText },
@@ -65,7 +67,8 @@ export default function B2BLayout({ children }: { children: React.ReactNode }) {
   if (!authenticated) return <><Header /><main className="flex-1">{children}</main><Footer /></>;
 
   return (
-    <div className="marketplace-workspace workspace-main min-h-screen text-slate-950">
+    <B2BCartProvider>
+      <div className="marketplace-workspace workspace-main min-h-screen text-slate-950">
       <WorkspaceHeader
         kind="b2b"
         title="RUBRICA DILIGENTE"
@@ -130,6 +133,7 @@ export default function B2BLayout({ children }: { children: React.ReactNode }) {
           <div className="account-admin-fields workspace-page px-3 py-5 sm:px-6 lg:px-8 lg:py-7">{children}</div>
         </main>
       </div>
-    </div>
+      </div>
+    </B2BCartProvider>
   );
 }
