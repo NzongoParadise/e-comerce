@@ -54,7 +54,18 @@ export default function AccountLayout({ children }: { children: React.ReactNode 
   }, []);
 
   useEffect(() => {
-    if (profileResolved && !profile && pathname !== "/account/support") router.replace("/login");
+    if (!profileResolved) return;
+    if (!profile) {
+      if (pathname !== "/account/support") router.replace("/login");
+      return;
+    }
+    if (profile.accountType === "B2B") {
+      router.replace("/b2b");
+      return;
+    }
+    if (profile.isAdmin) {
+      router.replace("/admin");
+    }
   }, [pathname, profile, profileResolved, router]);
 
   if (pathname === "/account/support" && profileResolved && !profile) return <>{children}</>;
