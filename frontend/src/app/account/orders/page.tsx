@@ -7,7 +7,7 @@ import { fetchWithAuth } from "@/lib/api";
 
 type OrderItem = { id: number; name: string; imageUrl?: string; quantity: number };
 type Order = { id: number; orderNumber: string; status: string; totalKZ: string; createdAt: string; items: OrderItem[] };
-const labels: Record<string, string> = { PENDING: "Pendente", PROCESSING: "Em processamento", SHIPPED: "Em trânsito", DELIVERED: "Entregue", CANCELLED: "Cancelada" };
+const labels: Record<string, string> = { PENDING: "Pendente", AWAITING_PAYMENT: "A aguardar pagamento", PROCESSING: "Em processamento", SHIPPED: "Em trânsito", DELIVERED: "Entregue", COMPLETED: "Concluída", CANCELLED: "Cancelada" };
 
 export default function AccountOrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -25,15 +25,15 @@ export default function AccountOrdersPage() {
 
   const counts = useMemo(() => ({
     ALL: orders.length,
-    PENDING: orders.filter((o) => o.status === "PENDING").length,
+    PENDING: orders.filter((o) => o.status === "PENDING" || o.status === "AWAITING_PAYMENT").length,
     PROCESSING: orders.filter((o) => o.status === "PROCESSING").length,
     SHIPPED: orders.filter((o) => o.status === "SHIPPED").length,
-    DELIVERED: orders.filter((o) => o.status === "DELIVERED").length,
+    DELIVERED: orders.filter((o) => o.status === "DELIVERED" || o.status === "COMPLETED").length,
     CANCELLED: orders.filter((o) => o.status === "CANCELLED").length,
   }), [orders]);
 
   const visible = useMemo(() => orders.filter((order) => {
-    const matchesStatus = statusFilter === "ALL" || order.status === statusFilter;
+    const matchesStatus = statusFilter === "ALL" || (statusFilter === "PENDING" ? order.status === "PENDING" || order.status === "AWAITING_PAYMENT" : statusFilter === "DELIVERED" ? order.status === "DELIVERED" || order.status === "COMPLETED" : order.status === statusFilter);
     const haystack = `${order.orderNumber} ${order.items.map((item) => item.name).join(" ")}`.toLowerCase();
     return matchesStatus && haystack.includes(query.trim().toLowerCase());
   }), [orders, query, statusFilter]);
@@ -103,7 +103,7 @@ export default function AccountOrdersPage() {
                   <span className="text-[9px] text-slate-400">·</span>
                   <span className="text-[9px] font-semibold text-slate-500">{new Date(order.createdAt).toLocaleDateString("pt-PT")}</span>
                 </div>
-                <span className={`rounded-full px-2.5 py-1 text-[9px] font-black ${order.status === "DELIVERED" ? "bg-emerald-50 text-emerald-700" : order.status === "CANCELLED" ? "bg-rose-50 text-rose-700" : "bg-blue-50 text-blue-700"}`}>{labels[order.status] || order.status}</span>
+                <span className={`rounded-full px-2.5 py-1 text-[9px] font-black ${order.status === "DELIVERED" || order.status === "COMPLETED" ? "bg-emerald-50 text-emerald-700" : order.status === "CANCELLED" ? "bg-rose-50 text-rose-700" : order.status === "AWAITING_PAYMENT" ? "bg-amber-50 text-amber-700" : "bg-blue-50 text-blue-700"}`}>{labels[order.status] || order.status}</span>
               </div>
               <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:px-5">
                 <div className="flex min-w-0 flex-1 items-center gap-3">
