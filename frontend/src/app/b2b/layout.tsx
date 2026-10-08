@@ -3,7 +3,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Building2, FileText, LayoutDashboard, Package, Settings, ShoppingBag, Users, WalletCards, Menu, X, Search, ChevronRight } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import Header from "@/components/layout/Header";
+import Footer from "@/components/layout/Footer";
+import { fetchWithAuth } from "@/lib/api";
 
 const groups = [
   { label: "Empresa", items: [
@@ -30,6 +33,21 @@ export default function B2BLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [authResolved, setAuthResolved] = useState(false);
+  const [authenticated, setAuthenticated] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    if (!localStorage.getItem("jwt_token")) {
+      setAuthResolved(true);
+      return () => { active = false; };
+    }
+    fetchWithAuth("/api/auth/me")
+      .then(() => { if (active) setAuthenticated(true); })
+      .catch(() => { if (active) setAuthenticated(false); })
+      .finally(() => { if (active) setAuthResolved(true); });
+    return () => { active = false; };
+  }, []);
   const activeGroup = groups.find((group) => group.items.some((item) => isActive(pathname, item.href)));
   const activeItem = activeGroup?.items.find((item) => isActive(pathname, item.href));
   const closeMobile = () => setSidebarOpen(false);
