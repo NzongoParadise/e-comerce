@@ -51,7 +51,7 @@ export default function LoginPage() {
     window.location.assign(url);
   }
 
-  return <main className="min-h-[calc(100vh-170px)] bg-[radial-gradient(circle_at_top,_rgba(29,106,196,0.08),transparent_30%),#f3f5f7] lg:grid lg:grid-cols-[minmax(420px,0.95fr)_1.05fr]">
+  return <main className="store-auth-page min-h-[calc(100vh-170px)] bg-[#f5f6fa] lg:grid lg:grid-cols-[minmax(420px,0.95fr)_1.05fr]">
     <section className="relative hidden min-h-[680px] animate-fade-in-up overflow-hidden bg-[#0c1b2a] lg:flex lg:flex-col lg:justify-between lg:p-12 xl:p-16">
       <Image src="/banner_principal0.jpg" alt="" fill priority className="object-cover opacity-25" />
       <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(7,21,37,0.96),rgba(12,27,42,0.82),rgba(21,80,153,0.8))]" />
@@ -72,7 +72,7 @@ export default function LoginPage() {
       </div>
     </section>
     <section className="flex min-h-[680px] animate-fade-in-up items-center justify-center px-5 py-10 sm:px-10 lg:px-16 xl:px-24">
-      <div className="w-full max-w-md rounded-[32px] border border-gray-200 bg-white/90 p-5 shadow-[0_30px_70px_rgba(15,23,42,0.08)] backdrop-blur-sm sm:p-8">
+      <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-8">
         <div className="mb-10 flex items-center justify-between lg:hidden">
           <Link href="/" className="flex items-center gap-2 text-[#1d6ac4]"><Monitor size={22} /><strong>RUBRICA DILIGENTE (SU), LDA</strong></Link>
           <Link href="/" className="text-xs font-semibold text-gray-500">Voltar à loja</Link>
@@ -83,7 +83,7 @@ export default function LoginPage() {
           <p className="mt-3 text-sm leading-6 text-gray-500">Entre na sua conta para continuar a sua compra.</p>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <button type="button" onClick={() => handleProviderLogin("google")} className="inline-flex items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-white px-3 py-3 text-sm font-bold text-gray-700 shadow-sm transition hover:border-[#1d6ac4] hover:bg-[#f5f9ff] hover:text-[#1d6ac4]"><Globe2 size={17} />Google</button>
+          <button type="button" onClick={() => handleProviderLogin("google")} className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-3 text-sm font-bold text-gray-700 shadow-sm transition hover:border-[#1d6ac4] hover:bg-[#f5f9ff] hover:text-[#1d6ac4]"><Globe2 size={17} />Google</button>
           <button type="button" onClick={() => handleProviderLogin("apple")} className="inline-flex items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-white px-3 py-3 text-sm font-bold text-gray-700 shadow-sm transition hover:border-[#1d6ac4] hover:bg-[#f5f9ff] hover:text-[#1d6ac4]"><span className="text-lg leading-none" aria-hidden="true">&#63743;</span>Apple</button>
         </div>
         <div className="my-7 flex items-center gap-3 text-[11px] font-semibold uppercase tracking-wide text-gray-400"><span className="h-px flex-1 bg-gray-200" />ou email<span className="h-px flex-1 bg-gray-200" /></div>
@@ -92,7 +92,7 @@ export default function LoginPage() {
             <label htmlFor="email" className="mb-2 block text-sm font-bold text-gray-700">Email</label>
             <div className="relative">
               <Mail size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input id="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="nome@exemplo.com" autoComplete="email" required className="w-full rounded-2xl border border-gray-200 bg-slate-50 py-3.5 pl-10 pr-3 text-sm text-gray-900 outline-none transition focus:border-[#1d6ac4] focus:bg-white focus:ring-4 focus:ring-[#1d6ac4]/10" />
+              <input id="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="nome@exemplo.com" autoComplete="email" required className="w-full rounded-lg border border-gray-300 bg-white py-3 pl-10 pr-3 text-sm text-gray-900 outline-none transition focus:border-[#1d6ac4] focus:bg-white focus:ring-2 focus:ring-[#1d6ac4]/15" />
             </div>
           </div>
           <div>
