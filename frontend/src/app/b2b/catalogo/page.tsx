@@ -14,10 +14,12 @@ export default function B2BCatalogPage() {
   const [category, setCategory] = useState("ALL");
   const [sort, setSort] = useState<"RELEVANCE" | "PRICE_ASC" | "PRICE_DESC">("RELEVANCE");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     fetchWithAuth("/api/b2b/catalog")
       .then((result) => setProducts(result.data ?? []))
+      .catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Não foi possível carregar o catálogo empresarial."))
       .finally(() => setLoading(false));
   }, []);
 
@@ -49,6 +51,8 @@ export default function B2BCatalogPage() {
           <Link href="/b2b/encomendas" className="btn-primary"><ShoppingBag size={14} /> Ver encomendas</Link>
         </div>
       </header>
+
+      {error && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-bold text-rose-800">{error}</div>}
 
       <section className="card overflow-hidden p-4 sm:p-5">
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px]">
