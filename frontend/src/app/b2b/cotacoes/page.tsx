@@ -2,7 +2,6 @@
 
 import { FileText, Plus, Send, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import { fetchWithAuth } from "@/lib/api";
 
 type Quote = { id: number; quoteNumber: string; status: string; createdAt: string; items?: Array<unknown> };
@@ -28,7 +27,6 @@ export default function B2BQuotesPage() {
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
-  const searchParams = useSearchParams();
 
   async function load() {
     setLoading(true);
@@ -47,11 +45,11 @@ export default function B2BQuotesPage() {
   useEffect(() => { void load(); }, []);
 
   useEffect(() => {
-    const requestedProduct = searchParams.get("product");
+    const requestedProduct = new URLSearchParams(window.location.search).get("product");
     if (!requestedProduct) return;
     setProductId(requestedProduct);
     setOpen(true);
-  }, [searchParams]);
+  }, []);
 
   async function submit() {
     if (!productId || Number(quantity) < 1) {
