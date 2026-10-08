@@ -35,7 +35,10 @@ export function B2BProductCard({ product }: { product: B2BProductCardProduct }) 
   const euroPrice = Number(product.prices?.find((price) => price.market === "PT")?.amount ?? product.basePrice);
   const kwanzaPrice = Number(product.prices?.find((price) => price.market === "AO")?.amount ?? eurToKz(euroPrice));
   const favorite = isFavorite(product.id);
-  const rules = [...(product.b2bPriceRules || [])].sort((a, b) => a.minQuantity - b.minQuantity);
+  const currency = market === "PT" ? "EUR" : "AOA";
+  const rules = [...(product.b2bPriceRules || [])]
+    .filter((rule) => rule.currency === currency)
+    .sort((a, b) => a.minQuantity - b.minQuantity);
   const bestRule = rules.length ? rules[rules.length - 1] : null;
   const retailPrice = market === "PT" ? euroPrice : kwanzaPrice;
 
