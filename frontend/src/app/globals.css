@@ -435,3 +435,54 @@ a, button, input, textarea {
   #order-detail-print .order-print-table th,
   #order-detail-print .order-print-total { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 }
+
+
+/* Admin-aligned form controls for B2C/B2B account areas */
+.account-admin-fields label {
+  color: #334155;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.account-admin-fields input:not([type="checkbox"]):not([type="radio"]),
+.account-admin-fields select,
+.account-admin-fields textarea {
+  border: 1px solid #cbd5e1;
+  border-radius: 0.375rem;
+  background: #fff;
+  color: #0f172a;
+  font-size: 0.875rem;
+  font-weight: 400;
+  outline: none;
+  box-shadow: none;
+}
+
+.account-admin-fields input:not([type="checkbox"]):not([type="radio"]),
+.account-admin-fields select {
+  min-height: 2.5rem;
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+}
+
+.account-admin-fields textarea {
+  padding: 0.5rem 0.75rem;
+}
+
+.account-admin-fields input:not([type="checkbox"]):not([type="radio"]):focus,
+.account-admin-fields select:focus,
+.account-admin-fields textarea:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px #dbeafe;
+}
+
+.account-admin-fields input::placeholder,
+.account-admin-fields textarea::placeholder {
+  color: #94a3b8;
+}
+
+.account-admin-fields button[type="submit"],
+.account-admin-fields button[data-admin-primary="true"] {
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
