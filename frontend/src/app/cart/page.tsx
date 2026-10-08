@@ -18,7 +18,6 @@ export default function CartPage() {
 
   const estimatedWeightKg = estimateCartWeightKg(items);
   const standardShippingEUR = market === "PT" ? calculatePortugalShipping(estimatedWeightKg, false) : 0;
-  const expressShippingEUR = market === "PT" ? calculatePortugalShipping(estimatedWeightKg, true) : 0;
   const allSelected = items.length > 0 && items.every((item) => selectedIds.includes(item.id));
 
   function toggleSelected(id: string) {
