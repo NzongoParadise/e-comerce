@@ -71,6 +71,127 @@ a, button, input, textarea {
 .text-brand { color: #1d6ac4; }
 .border-brand { border-color: #1d6ac4; }
 
+/* Marketplace workspace — B2C/B2B visual language */
+.marketplace-workspace {
+  background:
+    radial-gradient(circle at 20% 0%, rgba(29,106,196,.055), transparent 24%),
+    linear-gradient(180deg, #f7f9fc 0%, #f2f5f9 100%);
+}
+
+.marketplace-workspace .workspace-breadcrumb {
+  background: rgba(255,255,255,.82);
+}
+
+.marketplace-workspace .workspace-page {
+  max-width: 1680px;
+  margin: 0 auto;
+}
+
+.marketplace-workspace h1 {
+  letter-spacing: -.035em;
+}
+
+.marketplace-workspace .card,
+.marketplace-workspace article.rounded-2xl,
+.marketplace-workspace section.rounded-2xl,
+.marketplace-workspace form.rounded-2xl {
+  border-color: #e5eaf1;
+  border-radius: 18px;
+  box-shadow: 0 8px 26px rgba(15,23,42,.045);
+}
+
+.marketplace-workspace .card-hover:hover,
+.marketplace-workspace .card:hover {
+  border-color: rgba(29,106,196,.22);
+}
+
+.workspace-shortcut {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 12px;
+  border-bottom: 2px solid transparent;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+  transition: all 180ms ease;
+}
+
+.workspace-shortcut:hover {
+  color: #1555d8;
+  background: #f8fafc;
+}
+
+.workspace-shortcut.is-active {
+  color: #1555d8;
+  border-bottom-color: #1d6ac4;
+  background: #f5f9ff;
+}
+
+.marketplace-workspace .btn-primary {
+  min-height: 42px;
+  border-radius: 11px;
+  font-weight: 800;
+  box-shadow: 0 8px 18px rgba(29,106,196,.12);
+}
+
+.marketplace-workspace .btn-secondary {
+  min-height: 42px;
+  border-radius: 11px;
+  background: #fff;
+  font-weight: 800;
+}
+
+.marketplace-workspace .settings-input,
+.marketplace-workspace input:not([type="checkbox"]):not([type="radio"]),
+.marketplace-workspace select,
+.marketplace-workspace textarea {
+  border-color: #dce3ec;
+  border-radius: 11px;
+  background: #fff;
+}
+
+.marketplace-workspace table {
+  border-collapse: separate;
+  border-spacing: 0;
+  overflow: hidden;
+}
+
+.marketplace-workspace th {
+  background: #f7f9fc;
+  color: #64748b;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.marketplace-workspace [role="status"] {
+  border-radius: 12px;
+}
+
+@media (max-width: 1023px) {
+  .marketplace-workspace .workspace-page {
+    padding-bottom: 90px;
+  }
+}
+
+@media (max-width: 639px) {
+  .marketplace-workspace .card,
+  .marketplace-workspace article.rounded-2xl,
+  .marketplace-workspace section.rounded-2xl,
+  .marketplace-workspace form.rounded-2xl {
+    border-radius: 15px;
+  }
+
+  .workspace-shortcut {
+    min-height: 38px;
+    padding: 0 10px;
+    font-size: 9px;
+  }
+}
+
 /* Shared components */
 .btn-primary {
   @apply inline-flex items-center justify-center gap-2 rounded-lg bg-[#1d6ac4] px-5 py-2.5 text-sm font-semibold text-white transition-all hover:bg-[#155099] active:scale-95 cursor-pointer;
