@@ -76,7 +76,7 @@ export default function B2BLayout({ children }: { children: React.ReactNode }) {
 
         <main className="min-w-0 flex-1">
           <div className="border-b border-slate-200 bg-white"><div className="mx-auto flex min-h-11 max-w-[1600px] items-center gap-2 overflow-x-auto px-4 sm:px-6 lg:px-8"><span className="text-[9px] font-black uppercase tracking-wider text-slate-400">{activeGroup?.label || "Empresa"}</span><span className="text-slate-300">/</span><span className="truncate text-[11px] font-semibold text-slate-700">{activeItem?.label || "Painel"}</span></div></div>
-          <div className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8">{children}</div>
+          <div className="account-admin-fields mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8">{children}</div>
         </main>
       </div>
     </div>
