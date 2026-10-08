@@ -4,11 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "npm run db:migrate && npm run prisma:generate && next build",
+    "build": "npm run validate:production-env && npm run db:migrate && npm run prisma:generate && next build",
     "start": "next start",
     "lint": "eslint",
     "test": "tsx --test src/lib/api.test.ts src/lib/promotions/pricing.test.ts src/lib/products/capacityAnalysis.test.ts src/lib/server/logger.test.ts src/lib/server/payments/provider.test.ts src/lib/auth.test.ts src/lib/server/orders/adminOrderRules.test.ts src/lib/server/finance/analytics.test.ts",
     "prisma:generate": "node scripts/prisma-generate.mjs",
+    "validate:production-env": "node scripts/validate-production-env.mjs",
     "db:migrate": "node scripts/prisma-with-env.mjs migrate deploy --schema prisma/schema.prisma"
   },
   "dependencies": {

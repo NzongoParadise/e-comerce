@@ -63,6 +63,6 @@ Deploy the `frontend/` directory as a Next.js project on Vercel. All runtime sou
 1. Create a Neon Free project in a European region and copy its PostgreSQL connection string. Keep the connection string private.
 2. Import the repository into Vercel and set **Root Directory** to `frontend` with the Next.js framework preset.
 3. Add `DATABASE_URL` and `JWT_SECRET` to Vercel Environment Variables. Also set `FRONTEND_URL` to the production URL and configure external authentication/payment variables if those providers are enabled.
-4. Deploy. Prisma Client is generated during the build. The current Neon database already has all migrations; for future schema changes, run `npm run db:migrate` before promoting the deployment.
+4. Deploy. The build validates the required production environment variables, applies Prisma migrations, and generates Prisma Client. The `/health` endpoint checks the live PostgreSQL connection and returns HTTP 503 if the database is unavailable. The current Neon database already has all migrations; for future schema changes, run `npm run db:migrate` before promoting the deployment.
 
 Neon Free suspends idle compute and has a 0.5 GB storage limit. Vercel Functions limit request bodies to 4.5 MB, so the current B2B document upload flow (up to 5 MB per file) needs direct-to-object-storage uploads or a lower size limit before relying on it in production. Password-reset email delivery and durable document storage also need providers before production use.

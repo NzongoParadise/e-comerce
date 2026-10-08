@@ -17,7 +17,6 @@ export default function RegisterPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [accountType, setAccountType] = useState<"B2C" | "B2B">("B2C");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -29,14 +28,14 @@ export default function RegisterPage() {
       const response = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password, accountType }),
+        body: JSON.stringify({ name, email, password, accountType: "B2C" }),
       });
 
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Não foi possível criar a conta.");
 
       localStorage.setItem("jwt_token", data.token);
-      router.push(accountType === "B2B" ? "/account/profile" : "/account");
+      router.push("/account");
     } catch (error) {
       setMessage(
         error instanceof TypeError
@@ -142,29 +141,9 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            <div>
-              <label className="mb-2 block text-sm font-bold text-gray-700">Tipo de conta</label>
-              <div className="grid grid-cols-2 gap-2 rounded-2xl border border-gray-200 bg-slate-50 p-1">
-                {([
-                  { value: "B2C", label: "Retalhista", description: "Compras pessoais" },
-                  { value: "B2B", label: "Grossista", description: "Para empresas" },
-                ] as const).map((option) => (
-                  <button
-                    type="button"
-                    key={option.value}
-                    onClick={() => setAccountType(option.value)}
-                    className={`rounded-xl border px-3 py-3 text-left transition ${
-                      accountType === option.value
-                        ? "border-[#1d6ac4] bg-white shadow-sm ring-1 ring-[#1d6ac4]/15"
-                        : "border-transparent bg-transparent text-gray-600 hover:text-gray-900"
-                    }`}
-                  >
-                    <span className="block text-xs font-black text-gray-800">{option.label}</span>
-                    <span className="mt-1 block text-[10px] text-gray-500">{option.description}</span>
-                  </button>
-                ))}
-              </div>
-              {accountType === "B2B" && <p className="mt-2 text-xs text-gray-500">A conta empresarial requer documentação da empresa e pessoal.</p>}
+            <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
+              <p className="text-sm font-black text-[#0c1b2a]">Vai comprar em nome de uma empresa?</p>
+              <p className="mt-1 text-xs leading-5 text-gray-600">Crie a sua conta de cliente e, depois de entrar, solicite o acesso empresarial em <strong>Dados da conta</strong>. A equipa valida os documentos antes de ativar o perfil B2B.</p>
             </div>
 
             <div>

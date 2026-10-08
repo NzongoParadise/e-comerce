@@ -131,6 +131,9 @@ export async function POST(request: Request) {
       return Response.json({ token });
     } catch (error) {
       console.error('Error authenticating user:', error);
+      if (error instanceof Error && error.message === 'JWT_SECRET is not configured') {
+        return errorResponse('Login service is not configured. Contact support.', 503);
+      }
       return errorResponse('Database unavailable. Try again shortly.', 503);
     }
   }

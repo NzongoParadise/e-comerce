@@ -19,7 +19,7 @@ export async function GET(request: Request) {
   return Response.json({data:{id:conversation.id,status:conversation.status,subject:conversation.subject,customer:conversation.customer,agent:conversation.agent,messages:conversation.messages}});
  }
  const conversations=await prisma.supportConversation.findMany({orderBy:{updatedAt:"desc"},take:100,include:{customer:{select:{id:true,name:true,email:true}},agent:{select:{id:true,name:true,email:true}},messages:{orderBy:{createdAt:"desc"},take:1}}});
- return Response.json({data:conversations.map(c=>({id:c.id,status:c.status,subject:c.subject,updatedAt:c.updatedAt,lastMessage:c.messages[0]||null,customer:c.customer,agent:c.agent}))});
+ return Response.json({data:conversations.map(c=>({id:c.id,status:c.status,subject:c.subject,updatedAt:c.updatedAt,lastMessage:c.messages[0]||null,customer:c.customer,guestName:c.guestName,guestEmail:c.guestEmail,agent:c.agent}))});
 }
 export async function POST(request: Request) {
  const admin=await getAdmin(request); if(!admin) return errorResponse("Sem permissão.",403);
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
  const message=await prisma.$transaction(async tx=>{
   const created=await tx.supportMessage.create({data:{conversationId:conversation.id,senderId:admin.id,senderRole:"AGENT",content:parsed.data.content},include:{sender:{select:{id:true,name:true}}}});
   await tx.supportConversation.update({where:{id:conversation.id},data:{agentId:admin.id,lastMessageAt:created.createdAt,status:parsed.data.status||"WAITING_CUSTOMER"}});
-  await tx.notification.create({data:{userId:conversation.customerId,type:"SUPPORT_CHAT",title:"Nova resposta do suporte",message:"A equipa de suporte respondeu ao seu pedido.",link:"/account/support",dedupeKey:"support-reply-"+conversation.id+"-"+created.id}});
+  if (conversation.customerId) await tx.notification.create({data:{userId:conversation.customerId,type:"SUPPORT_CHAT",title:"Nova resposta do suporte",message:"A equipa de suporte respondeu ao seu pedido.",link:"/account/support",dedupeKey:"support-reply-"+conversation.id+"-"+created.id}});
   return created;
  });
  return Response.json({data:message},{status:201});

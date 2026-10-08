@@ -728,17 +728,21 @@ model Refund {
 
 model SupportConversation {
   id          Int       @id @default(autoincrement())
-  customerId  Int
+  customerId  Int?
+  guestName   String?
+  guestEmail  String?
+  guestSessionHash String?
   agentId     Int?
   status      String    @default("OPEN")
   subject     String?
   lastMessageAt DateTime @default(now())
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
-  customer    User      @relation("SupportCustomer", fields: [customerId], references: [id], onDelete: Cascade)
+  customer    User?     @relation("SupportCustomer", fields: [customerId], references: [id], onDelete: SetNull)
   agent       User?     @relation("SupportAgent", fields: [agentId], references: [id], onDelete: SetNull)
   messages    SupportMessage[]
   @@index([customerId, status, updatedAt])
+  @@index([guestSessionHash, status, updatedAt])
   @@index([agentId, status, updatedAt])
   @@index([status, lastMessageAt])
 }
@@ -746,12 +750,12 @@ model SupportConversation {
 model SupportMessage {
   id             Int      @id @default(autoincrement())
   conversationId Int
-  senderId       Int
+  senderId       Int?
   senderRole     String
   content        String
   createdAt      DateTime @default(now())
   conversation   SupportConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  sender         User @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  sender         User? @relation(fields: [senderId], references: [id], onDelete: SetNull)
   @@index([conversationId, createdAt])
   @@index([senderId, createdAt])
 }

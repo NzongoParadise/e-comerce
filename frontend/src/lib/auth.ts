@@ -53,8 +53,9 @@ export function isAdminUser(profile: AppUserProfile | null | undefined): boolean
   return configuredAdmins.includes(email) || hasAdminRole;
 }
 
-export function getDashboardDestination(profile: AppUserProfile | null | undefined): '/admin' | '/account' {
-  return isAdminUser(profile) ? '/admin' : '/account';
+export function getDashboardDestination(profile: AppUserProfile | null | undefined): '/admin' | '/b2b' | '/account' {
+  if (isAdminUser(profile)) return '/admin';
+  return profile?.accessRole === 'CUSTOMER' && profile.accountType === 'B2B' ? '/b2b' : '/account';
 }
 
 export function isActiveWholesaleCustomer(profile: AppUserProfile | null | undefined): boolean {

@@ -27,10 +27,10 @@ const retailMenuItems = [
   { label: "Os meus endereços", href: "/account/addresses", Icon: MapPin },
 ];
 const wholesaleMenuItems = [
-  { label: "Painel empresarial", href: "/account", Icon: LayoutDashboard },
-  { label: "Encomendas", href: "/account/orders", Icon: ShoppingBag },
-  { label: "Cotações", href: "/account/quotes", Icon: FileText },
-  { label: "Dados da empresa", href: "/account/profile", Icon: UserRound },
+  { label: "Painel empresarial", href: "/b2b", Icon: LayoutDashboard },
+  { label: "Encomendas", href: "/b2b/encomendas", Icon: ShoppingBag },
+  { label: "Cotações", href: "/b2b/cotacoes", Icon: FileText },
+  { label: "Dados da empresa", href: "/b2b/empresa", Icon: UserRound },
 ];
 const internalMenuItems = [
   { label: "O meu perfil", href: "/account/profile", Icon: UserRound },

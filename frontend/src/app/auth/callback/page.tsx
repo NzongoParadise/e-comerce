@@ -34,6 +34,7 @@ export default function AuthCallbackPage() {
         accessRole: profile.data?.accessRole,
         email: profile.data?.email,
         isAdmin: profile.data?.isAdmin,
+        accountType: profile.data?.accountType,
       } : null);
       window.history.replaceState({}, document.title, "/auth/callback");
       setMessage("Sessão iniciada. A abrir a sua conta...");

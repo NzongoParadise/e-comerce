@@ -18,13 +18,13 @@ import {
   Search,
   Send,
   Loader2,
-  UserRoundCheck,
   ShieldCheck,
   Truck,
   UserRound,
   WalletCards,
   X,
 } from "lucide-react";
+import { fetchWithAuth } from "@/lib/api";
 
 type Topic = {
   title: string;
@@ -101,7 +101,7 @@ const faqs = [
   },
   {
     question: "Como posso falar com o suporte?",
-    answer: "Pode contactar a equipa por telefone, WhatsApp ou e-mail. Para assuntos relacionados com uma encomenda, inclua o número da encomenda na mensagem.",
+    answer: "Pode usar o chat nesta página sem criar conta ou contactar a equipa por telefone, WhatsApp ou e-mail. Para assuntos sobre uma encomenda, indique o respetivo número.",
   },
   {
     question: "Como funciona uma devolução?",
@@ -117,6 +117,18 @@ const phone = "+33 7 58 92 00 80";
 const email = "suporte@techglobal.co.ao";
 const whatsapp = "33758920080";
 
+function matchesSupportQuery(value: string, query: string) {
+  if (!query) return true;
+  const searchableWords = value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+  const queryWords = query.split(/[^a-z0-9]+/).filter((word) => word.length > 2);
+  return queryWords.every((word) => searchableWords.some((searchableWord) => searchableWord.startsWith(word)));
+}
+
 export default function SupportPage() {
   const [query, setQuery] = useState("");
   const [faqOpen, setFaqOpen] = useState<number | null>(0);
@@ -126,19 +138,29 @@ export default function SupportPage() {
   const [chatSending, setChatSending] = useState(false);
   const [chatDraft, setChatDraft] = useState("");
   const [chatError, setChatError] = useState("");
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [guestName, setGuestName] = useState("");
+  const [guestEmail, setGuestEmail] = useState("");
 
   const loadChat = async () => {
     try {
-      const response = await fetch("/api/support/chat", { cache: "no-store" });
-      if (!response.ok) { setChat(null); return; }
-      const payload = await response.json();
+      const payload = await fetchWithAuth("/api/support/chat", { cache: "no-store" });
       setChat(payload.data);
+      setIsAuthenticated(Boolean(localStorage.getItem("jwt_token")));
       setChatError("");
-    } catch { setChatError("Não foi possível ligar ao serviço de chat."); }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Não foi possível ligar ao serviço de chat.";
+      if (message.includes("401") || message.includes("Não autenticado")) {
+        setIsAuthenticated(false);
+        setChat(null);
+        setChatError("");
+      } else setChatError(message);
+    }
     finally { setChatLoading(false); }
   };
 
   useEffect(() => {
+    setIsAuthenticated(Boolean(localStorage.getItem("jwt_token")));
     loadChat();
     const timer = window.setInterval(loadChat, 4000);
     return () => window.clearInterval(timer);
@@ -150,32 +172,43 @@ export default function SupportPage() {
     if (!content || chatSending) return;
     setChatSending(true); setChatError("");
     try {
-      const response = await fetch("/api/support/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content }) });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || "Não foi possível enviar a mensagem.");
+      await fetchWithAuth("/api/support/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content, ...(!isAuthenticated && !chat ? { guestName, guestEmail } : {}) }) });
       setChatDraft("");
       await loadChat();
     } catch (error) { setChatError(error instanceof Error ? error.message : "Não foi possível enviar a mensagem."); }
     finally { setChatSending(false); }
   };
 
-  const normalizedQuery = query.trim().toLowerCase();
+  const normalizedQuery = query
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
+  const filteredTopics = useMemo(
+    () => topics.filter((topic) => matchesSupportQuery(`${topic.title} ${topic.description}`, normalizedQuery)),
+    [normalizedQuery],
+  );
 
   const filteredArticles = useMemo(() => {
     if (!normalizedQuery) return articles;
     return articles.filter((article) =>
-      `${article.title} ${article.description} ${article.keywords}`.toLowerCase().includes(normalizedQuery),
+      matchesSupportQuery(`${article.title} ${article.description} ${article.keywords}`, normalizedQuery),
     );
   }, [normalizedQuery]);
 
   const visibleArticles = showAllArticles ? filteredArticles : filteredArticles.slice(0, 5);
+  const supportAgentName = typeof chat?.agent?.name === "string" ? chat.agent.name.trim() : "";
+  const supportAgentInitials = supportAgentName
+    ? supportAgentName.split(/\s+/).slice(0, 2).map((part: string) => part[0]).join("").toUpperCase()
+    : "ST";
 
   const supportMail = `mailto:${email}?subject=Pedido%20de%20suporte%20-%20RUBRICA%20DILIGENTE`;
   const whatsappUrl = `https://wa.me/${whatsapp}?text=Olá,%20preciso%20de%20ajuda%20com%20a%20minha%20conta/encomenda.`;
 
   return (
-    <main className="space-y-8 pb-12">
-      <section className="relative overflow-hidden rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 via-white to-slate-50 p-6 sm:p-8 lg:p-10">
+    <main className="mx-auto max-w-[1440px] space-y-6 pb-10">
+      <section className="relative overflow-hidden rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 via-white to-slate-50 p-6 shadow-sm sm:p-8 lg:p-10">
         <div className="absolute -right-20 -top-20 h-56 w-56 rounded-full bg-blue-100/60 blur-3xl" />
         <div className="relative max-w-3xl">
           <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-blue-100 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-[#1d6ac4]">
@@ -217,7 +250,11 @@ export default function SupportPage() {
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+      <nav aria-label="Navegação do centro de ajuda" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+        {[["Chat com suporte", "#support-chat"], ["Temas", "#support-topics"], ["Artigos", "#support-articles"], ["Contactos", "#support-contacts"], ["Perguntas frequentes", "#support-faq"]].map(([label, href], index) => <a key={href} href={href} className={`shrink-0 rounded-full border px-4 py-2 text-xs font-bold transition ${index === 0 ? "border-blue-700 bg-blue-700 text-white hover:bg-blue-800" : "border-gray-200 bg-white text-gray-600 hover:border-blue-200 hover:text-blue-700"}`}>{label}</a>)}
+      </nav>
+
+      <section id="support-chat" className="scroll-mt-24 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
         <div className="flex flex-col gap-3 border-b border-gray-100 bg-gray-50 p-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-[#1d6ac4]"><MessageCircle size={21} /></div>
@@ -226,7 +263,7 @@ export default function SupportPage() {
               <h2 className="text-lg font-black text-gray-950">Chat com o suporte</h2>
             </div>
           </div>
-          <div className="flex items-center gap-2 text-xs font-semibold text-gray-500"><span className="h-2 w-2 rounded-full bg-emerald-500" /> Atendimento online durante o horário indicado</div>
+          <div className="flex items-center gap-2 text-xs font-semibold text-gray-500"><Clock3 size={14} className="text-[#1d6ac4]" /> Seg–sáb · 08h00–20h00</div>
         </div>
         <div className="grid lg:grid-cols-[1fr_280px]">
           <div className="flex min-h-[420px] flex-col">
@@ -235,31 +272,51 @@ export default function SupportPage() {
                 <div className="flex min-h-[300px] items-center justify-center gap-2 text-sm text-gray-500"><Loader2 className="animate-spin" size={18} /> A ligar ao suporte...</div>
               ) : chat ? (
                 <>
-                  <div className="mb-4 rounded-xl bg-blue-50 p-3 text-xs leading-5 text-gray-600">
-                    <span className="font-bold text-gray-900">{chat.agent?.name ? `Atendido por ${chat.agent.name}` : "Equipa de suporte"}</span>
-                    <br />As mensagens ficam guardadas na sua conta para poder continuar a conversa.
+                  <div className="mb-4 flex items-center gap-3 rounded-xl border border-blue-100 bg-blue-50/70 p-4">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-700 text-sm font-black text-white ring-4 ring-white">
+                      {supportAgentInitials}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[9px] font-black uppercase tracking-[0.14em] text-blue-700">Perfil de atendimento</p>
+                      <p className="mt-0.5 truncate text-sm font-bold text-gray-900">
+                        {supportAgentName || "Equipa de suporte"}
+                      </p>
+                      <p className="mt-0.5 text-[11px] leading-4 text-gray-600">
+                        {supportAgentName ? "Agente responsável pela conversa" : "A sua conversa será acompanhada pela equipa"}
+                      </p>
+                    </div>
+                    <span className="shrink-0 rounded-full border border-blue-200 bg-white px-2.5 py-1 text-[9px] font-bold text-blue-800">
+                      {supportAgentName ? "A acompanhar" : "Suporte"}
+                    </span>
                   </div>
                   {chat.messages?.map((message: any) => {
-                    const mine = message.senderRole === "CUSTOMER";
+                    const mine = message.senderRole === "CUSTOMER" || message.senderRole === "GUEST";
                     return <div key={message.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
                       <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm ${mine ? "rounded-br-md bg-[#1d6ac4] text-white" : "rounded-bl-md bg-gray-100 text-gray-800"}`}>
+                        {!mine && <p className="mb-1 text-[10px] font-bold text-gray-500">{message.senderName || supportAgentName || "Suporte"}</p>}
                         <p className="whitespace-pre-wrap leading-6">{message.content}</p>
                         <p className={`mt-1 text-[10px] ${mine ? "text-blue-100" : "text-gray-400"}`}>{new Date(message.createdAt).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })}</p>
                       </div>
                     </div>;
                   })}
                 </>
+              ) : isAuthenticated ? (
+                <div className="flex min-h-[300px] flex-col items-center justify-center text-center">
+                  <MessageCircle className="text-gray-300" size={34} />
+                  <h3 className="mt-3 text-sm font-black text-gray-900">Inicie uma conversa com o suporte</h3>
+                  <p className="mt-1 max-w-sm text-xs leading-5 text-gray-500">Envie a sua dúvida. A conversa ficará guardada aqui para continuar mais tarde.</p>
+                </div>
               ) : (
                 <div className="flex min-h-[300px] flex-col items-center justify-center text-center">
-                  <UserRoundCheck className="text-gray-300" size={34} />
-                  <h3 className="mt-3 text-sm font-black text-gray-900">Inicie sessão para falar com o suporte</h3>
-                  <p className="mt-1 max-w-sm text-xs leading-5 text-gray-500">O chat é privado e fica associado à sua conta e ao seu histórico de suporte.</p>
-                  <Link href="/login?next=/account/support" className="mt-4 rounded-lg bg-[#1d6ac4] px-4 py-2.5 text-xs font-black text-white">Entrar na conta</Link>
+                  <MessageCircle className="text-gray-300" size={34} />
+                  <h3 className="mt-3 text-sm font-black text-gray-900">Fale connosco sem criar conta</h3>
+                  <p className="mt-1 max-w-sm text-xs leading-5 text-gray-500">Indique o seu nome e e-mail para iniciar. O histórico fica guardado neste navegador.</p>
                 </div>
               )}
               {chatError && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-600">{chatError}</p>}
             </div>
-            {chat && <form onSubmit={sendChatMessage} className="border-t border-gray-100 p-4">
+            {!chatLoading && <form onSubmit={sendChatMessage} className="border-t border-gray-100 p-4">
+              {!chat && !isAuthenticated && <div className="mb-3 grid gap-2 sm:grid-cols-2"><input value={guestName} onChange={(e) => setGuestName(e.target.value)} required minLength={2} maxLength={100} autoComplete="name" placeholder="O seu nome" className="h-10 min-w-0 rounded-lg border border-gray-200 px-3 text-xs outline-none focus:border-[#1d6ac4]" aria-label="O seu nome" /><input value={guestEmail} onChange={(e) => setGuestEmail(e.target.value)} required type="email" maxLength={254} autoComplete="email" placeholder="O seu e-mail" className="h-10 min-w-0 rounded-lg border border-gray-200 px-3 text-xs outline-none focus:border-[#1d6ac4]" aria-label="O seu e-mail" /></div>}
               <div className="flex items-end gap-2 rounded-xl border border-gray-200 bg-white p-2 focus-within:border-[#1d6ac4] focus-within:ring-4 focus-within:ring-blue-50">
                 <textarea value={chatDraft} onChange={(e) => setChatDraft(e.target.value)} maxLength={4000} rows={2} placeholder="Escreva a sua mensagem..." className="min-h-[44px] flex-1 resize-none bg-transparent px-2 py-2 text-sm text-gray-900 outline-none" aria-label="Mensagem para o suporte" />
                 <button type="submit" disabled={!chatDraft.trim() || chatSending} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#1d6ac4] text-white transition hover:bg-[#155099] disabled:cursor-not-allowed disabled:opacity-40" aria-label="Enviar mensagem">
@@ -274,7 +331,7 @@ export default function SupportPage() {
             <div className="mt-4 space-y-4 text-xs leading-5 text-gray-500">
               <p><span className="font-bold text-gray-900">1. Envie a mensagem.</span><br />Explique o problema e, se necessário, indique o número da encomenda.</p>
               <p><span className="font-bold text-gray-900">2. A equipa responde.</span><br />O chat atualiza automaticamente enquanto a conversa estiver aberta.</p>
-              <p><span className="font-bold text-gray-900">3. Continue quando quiser.</span><br />O histórico fica associado à sua conta.</p>
+              <p><span className="font-bold text-gray-900">3. Continue quando quiser.</span><br />Com conta, o histórico fica associado ao perfil. Como visitante, use o mesmo navegador.</p>
             </div>
             <div className="mt-6 rounded-xl border border-gray-200 bg-white p-4">
               <p className="text-[10px] font-black uppercase tracking-wider text-gray-400">Segurança</p>
@@ -284,7 +341,7 @@ export default function SupportPage() {
         </div>
       </section>
 
-      <section>
+      <section id="support-topics" className="scroll-mt-24">
         <div className="mb-4 flex items-end justify-between gap-4">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#1d6ac4]">Navegação rápida</p>
@@ -295,10 +352,11 @@ export default function SupportPage() {
           </Link>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {topics.map(({ title, description, icon: Icon, href }) => (
+          {filteredTopics.map(({ title, description, icon: Icon, href }) => (
             <Link
               key={title}
               href={href}
+              aria-label={`${title}: ${description}`}
               className="group rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
             >
               <div className="flex items-start justify-between gap-3">
@@ -312,10 +370,19 @@ export default function SupportPage() {
             </Link>
           ))}
         </div>
+        {filteredTopics.length === 0 && (
+          <div className="mt-3 rounded-xl border border-dashed border-gray-300 bg-white p-6 text-center">
+            <p className="text-sm font-bold text-gray-800">Não encontrámos um tema correspondente.</p>
+            <p className="mt-1 text-xs text-gray-500">Experimente outra pesquisa ou fale com a equipa de suporte.</p>
+            <button type="button" onClick={() => setQuery("")} className="mt-3 text-xs font-bold text-[#1d6ac4] hover:underline">
+              Limpar pesquisa
+            </button>
+          </div>
+        )}
       </section>
 
-      <section className="grid gap-8 lg:grid-cols-[1fr_340px]">
-        <div>
+      <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div id="support-articles" className="scroll-mt-24">
           <div className="mb-4 flex items-end justify-between gap-4">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#1d6ac4]">Base de conhecimento</p>
@@ -363,7 +430,7 @@ export default function SupportPage() {
           )}
         </div>
 
-        <aside className="space-y-3">
+        <aside id="support-contacts" className="scroll-mt-24 space-y-3">
           <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
             <div className="flex items-start gap-3">
               <Clock3 className="mt-0.5 text-[#1d6ac4]" size={20} />
@@ -404,7 +471,7 @@ export default function SupportPage() {
         </aside>
       </section>
 
-      <section>
+      <section id="support-faq" className="scroll-mt-24">
         <div className="mb-4">
           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#1d6ac4]">Perguntas frequentes</p>
           <h2 className="mt-1 text-xl font-black text-gray-950">Respostas rápidas</h2>
@@ -429,32 +496,7 @@ export default function SupportPage() {
         </div>
       </section>
 
-      <section className="rounded-2xl bg-gray-950 p-6 text-white sm:p-8">
-        <div className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-center">
-          <div>
-            <div className="flex items-center gap-2 text-[#ffd700]">
-              <Headphones size={19} />
-              <span className="text-[10px] font-black uppercase tracking-[0.18em]">RUBRICA DILIGENTE</span>
-            </div>
-            <h2 className="mt-2 text-xl font-black">Ainda precisa de ajuda?</h2>
-            <p className="mt-1 max-w-xl text-sm leading-6 text-gray-300">
-              Envie-nos a sua questão. Se estiver relacionada com uma compra, indique o número da encomenda para acelerarmos o atendimento.
-            </p>
-          </div>
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-            <a href={supportMail} className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#ffd700] px-5 py-3 text-xs font-black text-gray-950 hover:bg-yellow-300">
-              <Mail size={16} /> Abrir pedido
-            </a>
-            <Link href="/info/contact" className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/20 px-5 py-3 text-xs font-black text-white hover:bg-white/10">
-              Contactos <ArrowRight size={16} />
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      <p className="text-center text-[11px] leading-5 text-gray-400">
-        Atendimento: {phone} · {email} · Segunda a sábado, 08h00–20h00
-      </p>
+      <p className="text-center text-[11px] leading-5 text-gray-400">Para questões sobre uma compra, indique o número da encomenda na conversa.</p>
     </main>
   );
 }

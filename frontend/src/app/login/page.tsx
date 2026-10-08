@@ -10,6 +10,14 @@ import { getDashboardDestination } from "@/lib/auth";
 
 const providerUrls = { google: process.env.NEXT_PUBLIC_GOOGLE_AUTH_URL, apple: process.env.NEXT_PUBLIC_APPLE_AUTH_URL };
 
+function getPostLoginDestination(profile: Parameters<typeof getDashboardDestination>[0]) {
+  const next = new URLSearchParams(window.location.search).get("next");
+  if (profile?.accessRole === "CUSTOMER" && profile.accountType === "B2B" && next && /^\/b2b(?:\/|$)/.test(next)) {
+    return next;
+  }
+  return getDashboardDestination(profile);
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
@@ -31,12 +39,7 @@ export default function LoginPage() {
       const profileResponse = await fetch("/api/auth/me", { headers: { Authorization: `Bearer ${data.token}` } });
       if (!profileResponse.ok) { localStorage.removeItem("jwt_token"); throw new Error("Não foi possível carregar o perfil. Tente novamente."); }
       const profile = await profileResponse.json();
-      const destination = getDashboardDestination({
-        roles: profile.data?.roles,
-        accessRole: profile.data?.accessRole,
-        email: profile.data?.email,
-        isAdmin: profile.data?.isAdmin,
-      });
+      const destination = getPostLoginDestination(profile.data);
       router.push(destination);
     } catch (error) { setMessage(error instanceof TypeError ? "Não foi possível contactar o servidor. Verifique se o backend está ativo." : error instanceof Error ? error.message : "Não foi possível iniciar sessão."); }
     finally { setLoading(false); }
@@ -60,7 +63,7 @@ export default function LoginPage() {
         <div className="mt-28 max-w-md">
           <p className="mb-4 text-xs font-bold uppercase tracking-[0.2em] text-[#f6b73c]">A sua conta, o seu catálogo</p>
           <h1 className="text-5xl font-black leading-[1.02] text-white xl:text-6xl">Compre melhor. Continue mais longe.</h1>
-          <p className="mt-6 max-w-sm text-base leading-7 text-blue-100">Acompanhe encomendas, guarde favoritos e tenha uma experiência de compra feita para si.</p>
+          <p className="mt-6 max-w-sm text-base leading-7 text-blue-100">Acompanhe as suas compras ou entre no painel empresarial para gerir cotações e encomendas da sua empresa.</p>
         </div>
       </div>
       <div className="relative z-10 grid max-w-lg gap-4 border-t border-white/15 pt-6 sm:grid-cols-2">
@@ -84,7 +87,7 @@ export default function LoginPage() {
           <button type="button" onClick={() => handleProviderLogin("apple")} className="inline-flex items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-white px-3 py-3 text-sm font-bold text-gray-700 shadow-sm transition hover:border-[#1d6ac4] hover:bg-[#f5f9ff] hover:text-[#1d6ac4]"><span className="text-lg leading-none" aria-hidden="true">&#63743;</span>Apple</button>
         </div>
         <div className="my-7 flex items-center gap-3 text-[11px] font-semibold uppercase tracking-wide text-gray-400"><span className="h-px flex-1 bg-gray-200" />ou email<span className="h-px flex-1 bg-gray-200" /></div>
-        <form onSubmit={twoFactorChallenge ? async (event) => { event.preventDefault(); setLoading(true); setMessage(""); try { const response = await fetch("/api/auth/login-2fa", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ challengeToken: twoFactorChallenge, code: twoFactorCode }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error || "Código inválido."); localStorage.setItem("jwt_token", data.token); router.push("/account"); } catch (error) { setMessage(error instanceof Error ? error.message : "Não foi possível validar o código."); } finally { setLoading(false); } } : handleSubmit} className="space-y-5">
+        <form onSubmit={twoFactorChallenge ? async (event) => { event.preventDefault(); setLoading(true); setMessage(""); try { const response = await fetch("/api/auth/login-2fa", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ challengeToken: twoFactorChallenge, code: twoFactorCode }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error || "Código inválido."); localStorage.setItem("jwt_token", data.token); const profileResponse = await fetch("/api/auth/me", { headers: { Authorization: `Bearer ${data.token}` } }); const profile = profileResponse.ok ? await profileResponse.json() : null; router.push(getPostLoginDestination(profile?.data)); } catch (error) { setMessage(error instanceof Error ? error.message : "Não foi possível validar o código."); } finally { setLoading(false); } } : handleSubmit} className="space-y-5">
           <div>
             <label htmlFor="email" className="mb-2 block text-sm font-bold text-gray-700">Email</label>
             <div className="relative">
