@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { BarChart3, Boxes, Building2, ClipboardList, LayoutDashboard, Megaphone, Package, ShieldCheck, ShoppingBag, Truck, Users, Wallet, X } from "lucide-react";
+import { BarChart3, Boxes, Building2, ClipboardList, LayoutDashboard, Megaphone, MessageCircle, Package, ShieldCheck, ShoppingBag, Truck, Users, Wallet, X } from "lucide-react";
 import { getDashboardDestination } from "@/lib/auth";
 import { fetchWithAuth } from "@/lib/api";
 import WorkspaceHeader from "@/components/layout/WorkspaceHeader";
@@ -11,7 +11,7 @@ import WorkspaceHeader from "@/components/layout/WorkspaceHeader";
 const groups = [
   { label: "Operação", items: [["Visão geral", "/admin", LayoutDashboard], ["Vendas", "/admin/orders", ShoppingBag], ["Produtos", "/admin/products", Package], ["Stock", "/admin/stock", Boxes], ["Fornecedores", "/admin/suppliers", Truck]] },
   { label: "B2B", items: [["Operação empresarial", "/admin/b2b", Building2]] },
-  { label: "Atendimento", items: [["Chat de suporte", "/admin/support", Users]] },
+  { label: "Atendimento", items: [["Chat de suporte", "/admin/support", MessageCircle]] },
   { label: "Clientes", items: [["Clientes", "/admin/clients", Users], ["Utilizadores", "/admin/users", Users]] },
   { label: "Financeiro", items: [["Visão financeira", "/admin/finance", Wallet], ["Pagamentos", "/admin/finance/payments", Wallet], ["Revisão de pagamentos", "/admin/finance/review", ShieldCheck], ["Reembolsos", "/admin/finance/refunds", Wallet], ["Conciliação", "/admin/finance/reconciliation", ShieldCheck], ["Relatórios", "/admin/finance/reports", BarChart3]] },
   { label: "Marketing", items: [["Cupões", "/admin/marketing", Megaphone], ["Promoções", "/admin/marketing/promotions", Megaphone], ["Newsletter", "/admin/marketing/newsletter", Megaphone], ["Depoimentos", "/admin/marketing/testimonials", Megaphone]] },
