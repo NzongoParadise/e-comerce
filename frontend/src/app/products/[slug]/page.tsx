@@ -4,11 +4,12 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { fetchWithAuth } from "@/lib/api";
 import { useCart } from "@/context/CartContext";
+import { useMarket } from "@/context/MarketContext";
 import { useFavorites } from "@/context/FavoritesContext";
 import { getPromotionalUnitPrice } from "@/lib/promotions/pricing";
 import { usePublicPromotions } from "@/lib/promotions/usePublicPromotions";
 import Link from "next/link";
-import { ShoppingCart, Heart, Package, Star, Truck, ShieldCheck, Zap, CreditCard, Maximize2, MapPin } from "lucide-react";
+import { ShoppingCart, Heart, Package, Truck, ShieldCheck, Zap, CreditCard, Maximize2, MapPin } from "lucide-react";
 
 type ProductDetails = {
   id: number;
@@ -28,6 +29,7 @@ export default function ProductDetailsPage() {
   const slug = params.slug as string;
   const router = useRouter();
   const { addToCart } = useCart();
+  const { market } = useMarket();
   const { isFavorite, toggleFavorite } = useFavorites();
   const promotions = usePublicPromotions();
   
@@ -35,10 +37,7 @@ export default function ProductDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
 
-  // Variant selections (simulated for UI)
-  const [color, setColor] = useState("Space Black");
-  const [storage, setStorage] = useState("512 GB");
-  const [ram, setRam] = useState("16 GB");
+  // The API currently does not expose product variants; do not invent selectable options in the storefront.
   const [purchaseMode, setPurchaseMode] = useState<"retail" | "wholesale">("retail");
   const [activeTab, setActiveTab] = useState("description");
 
@@ -83,7 +82,7 @@ export default function ProductDetailsPage() {
       priceKZ: Number(aoPrice),
       quantity: quantity,
       imageUrl: product.imageUrl,
-      variant: { color, storage, ram }
+
     });
     alert("Produto adicionado ao carrinho com sucesso!");
   };
@@ -106,7 +105,7 @@ export default function ProductDetailsPage() {
   };
 
   return (
-    <div className="container mx-auto animate-fade-in-up px-4 py-5 md:py-7">
+    <div className="container mx-auto animate-fade-in-up px-4 py-5 md:py-7 storefront-product-detail">
       {/* Breadcrumb */}
       <nav aria-label="Breadcrumb" className="mb-5 flex items-center gap-1.5 overflow-hidden text-xs text-gray-400">
         <Link href="/" className="hover:text-[#1d6ac4]">Início</Link>
@@ -132,7 +131,7 @@ export default function ProductDetailsPage() {
         </div>
 
         {/* Center: Main Image */}
-          <div className="relative order-1 flex min-h-[380px] items-center justify-center overflow-hidden rounded-[28px] border border-gray-200 bg-[radial-gradient(circle_at_top,_rgba(29,106,196,0.08),_rgba(255,255,255,0.9)_45%)] p-8 shadow-[0_20px_50px_rgba(15,23,42,0.06)] transition-transform duration-300 hover:-translate-y-0.5 md:order-2 md:col-span-5">
+          <div className="relative order-1 flex min-h-[380px] items-center justify-center overflow-hidden rounded-xl border border-gray-200 bg-white p-8 shadow-sm transition-transform duration-300 hover:-translate-y-0.5 md:order-2 md:col-span-5">
             <span className="absolute left-5 top-5 rounded-md bg-[#1d6ac4] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white">Novo</span>
            {product.imageUrl ? <img src={product.imageUrl} alt={product.name} className="max-h-[330px] w-full object-contain transition-transform duration-500 hover:scale-[1.02]" /> : <Package size={160} className="text-gray-200" />}
             <button type="button" className="absolute bottom-4 right-4 rounded-lg border border-gray-200 bg-white p-2 text-gray-500 shadow-sm transition hover:border-[#1d6ac4] hover:text-[#1d6ac4]" aria-label="Ver imagem em ecrã inteiro"><Maximize2 size={16} /></button>
@@ -151,50 +150,22 @@ export default function ProductDetailsPage() {
             </h1>
             <p className="text-sm text-gray-500 mb-4">{product.description}</p>
             
-            <div className="flex items-center gap-2 mb-6">
-              <div className="flex items-center gap-0.5">
-                {[1,2,3,4,5].map(s => <Star key={s} size={14} fill="#f59e0b" stroke="none" aria-hidden="true" />)}
-              </div>
-              <span className="text-xs font-semibold text-gray-700">4.8</span>
-              <span className="text-xs text-gray-400">(124 avaliações)</span>
-              <span className="ml-2 flex items-center gap-1 text-xs font-bold text-green-600"><span className="h-1.5 w-1.5 rounded-full bg-green-600" /> Em stock</span>
+            <div className="mb-6 flex flex-wrap items-center gap-2">
+              <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${product.stock > 0 ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>
+                {product.stock > 0 ? "Em stock" : "Indisponível"}
+              </span>
+              <span className="text-xs text-slate-400">Avaliações serão apresentadas quando disponíveis no catálogo.</span>
             </div>
 
-            {/* Simulated Variants */}
-            <div className="space-y-4">
-              <div>
-                <label className="text-xs font-bold text-gray-800 mb-2 block">Cor: <span className="font-normal text-gray-500">{color}</span></label>
-                <div className="flex gap-2">
-                  {["Space Black", "Silver", "Gray"].map(c => (
-                    <button key={c} onClick={() => setColor(c)} className={`h-8 w-8 rounded-full border-2 ${color === c ? 'border-[#1d6ac4]' : 'border-transparent'} flex items-center justify-center`}>
-                      <span className="block h-6 w-6 rounded-full border border-gray-200" style={{ backgroundColor: c === 'Space Black' ? '#1f2937' : c === 'Silver' ? '#f3f4f6' : '#9ca3af' }}/>
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <label className="text-xs font-bold text-gray-800 mb-2 block">Armazenamento</label>
-                <div className="flex gap-2">
-                  {["512 GB", "1 TB", "2 TB"].map(s => (
-                    <button key={s} onClick={() => setStorage(s)} className={`px-4 py-2 border rounded-lg text-sm font-medium ${storage === s ? 'border-[#1d6ac4] text-[#1d6ac4] bg-blue-50' : 'border-gray-200 text-gray-700 hover:border-gray-300'}`}>
-                      {s}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <label className="text-xs font-bold text-gray-800 mb-2 block">Memória RAM</label>
-                <div className="flex gap-2">
-                  {["8 GB", "16 GB", "24 GB"].map(r => (
-                    <button key={r} onClick={() => setRam(r)} className={`px-4 py-2 border rounded-lg text-sm font-medium ${ram === r ? 'border-[#1d6ac4] text-[#1d6ac4] bg-blue-50' : 'border-gray-200 text-gray-700 hover:border-gray-300'}`}>
-                      {r}
-                    </button>
-                  ))}
+            <div className="mb-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div className="flex items-start gap-3">
+                <ShieldCheck size={18} className="mt-0.5 shrink-0 text-[#1d6ac4]" />
+                <div>
+                  <p className="text-xs font-black text-slate-900">Compra segura</p>
+                  <p className="mt-1 text-[11px] leading-5 text-slate-500">Stock, preço e condições são confirmados no momento da compra.</p>
                 </div>
               </div>
             </div>
-          </div>
-
           {/* Buy Panel */}
           <div>
             <div className="card sticky top-28 border-gray-200 p-5 shadow-[0_24px_60px_rgba(15,23,42,0.08)] transition-all duration-300 hover:-translate-y-0.5 sm:p-6">
@@ -203,8 +174,22 @@ export default function ProductDetailsPage() {
                  <button type="button" onClick={() => setPurchaseMode("wholesale")} className={`flex-1 rounded-lg py-2 text-xs font-bold transition ${purchaseMode === "wholesale" ? "bg-white text-[#1d6ac4] shadow-sm" : "text-gray-500"}`}>Compra grossista</button>
                </div>
 
-               {euroOffer ? <div className="mb-1 flex flex-wrap items-baseline gap-2"><del className="text-sm text-gray-500">€ {Number(ptPrice).toLocaleString("pt-PT", { minimumFractionDigits: 2 })}</del><strong className="text-3xl font-black tracking-tight text-red-700">€ {euroOffer.promotionalPrice.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}</strong></div> : <div className="mb-1 text-3xl font-black tracking-tight text-gray-900">€ {Number(ptPrice).toLocaleString("pt-PT", { minimumFractionDigits: 2 })}</div>}
-               {kwanzaOffer ? <div className="mb-1 flex flex-wrap items-baseline gap-2"><del className="text-xs text-gray-500">Kz {Number(aoPrice).toLocaleString("pt-AO")}</del><strong className="text-sm font-black text-red-700">Kz {kwanzaOffer.promotionalPrice.toLocaleString("pt-AO")}</strong></div> : <div className="mb-5 text-xs font-semibold text-gray-500">Kz {Number(aoPrice).toLocaleString("pt-AO")}</div>}
+               {(() => {
+                 const isAO = market === "AO";
+                 const regular = isAO ? Number(aoPrice) : Number(ptPrice);
+                 const offer = isAO ? kwanzaOffer : euroOffer;
+                 const format = (amount: number) => isAO
+                   ? `Kz ${amount.toLocaleString("pt-AO")}`
+                   : `€ ${amount.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}`;
+                 return offer
+                   ? <div className="mb-1 flex flex-wrap items-baseline gap-2"><del className="text-sm text-gray-400">{format(regular)}</del><strong className="text-3xl font-black tracking-tight text-red-700">{format(offer.promotionalPrice)}</strong></div>
+                   : <div className="mb-1 text-3xl font-black tracking-tight text-gray-950">{format(regular)}</div>;
+               })()}
+               <div className="mb-4 flex flex-wrap items-center gap-2 text-[10px] text-gray-500">
+                 <span>Mercado ativo: <strong className="text-gray-800">{market === "AO" ? "Angola · Kz" : "Portugal · €"}</strong></span>
+                 <span aria-hidden="true">·</span>
+                 <span>Pagamento seguro</span>
+               </div>
                {(euroOffer || kwanzaOffer) && <p className="mb-5 text-[10px] font-semibold text-red-700">{(euroOffer ?? kwanzaOffer)?.promotion.name} · preço promocional conforme elegibilidade</p>}
 
                {purchaseMode === "wholesale" && <p className="mb-4 rounded-lg bg-blue-50 px-3 py-2 text-xs font-semibold text-[#1d6ac4]">Preços para empresas disponíveis por cotação.</p>}
@@ -296,7 +281,7 @@ export default function ProductDetailsPage() {
           </nav>
           <div className="min-h-[190px] p-5 sm:p-6" role="tabpanel">
             {activeTab === "description" && <div><h2 className="mb-3 text-lg font-bold text-gray-900">Desempenho que leva mais longe.</h2><p className="max-w-3xl text-sm leading-6 text-gray-600">{product.description} Com desempenho excepcional, design elegante e componentes cuidadosamente selecionados para profissionais e criadores.</p><ul className="mt-4 grid gap-2 text-xs text-gray-600 sm:grid-cols-2"><li>● Desempenho rápido e consistente</li><li>● Ecrã de alta resolução</li><li>● Até 22 horas de autonomia</li><li>● Design elegante e resistente</li></ul></div>}
-            {activeTab === "specs" && <div className="grid gap-3 text-sm text-gray-600 sm:grid-cols-2"><InfoLine label="Marca" value={product.brand.name} /><InfoLine label="Categoria" value={product.category.name} /><InfoLine label="Stock" value={`${product.stock} unidades`} /><InfoLine label="Armazenamento" value={storage} /><InfoLine label="Memória RAM" value={ram} /><InfoLine label="Cor" value={color} /></div>}
+            {activeTab === "specs" && <div className="grid gap-3 text-sm text-gray-600 sm:grid-cols-2"><InfoLine label="Marca" value={product.brand.name} /><InfoLine label="Categoria" value={product.category.name} /><InfoLine label="Stock" value={`${product.stock} unidades`} /><InfoLine label="Mercado" value={market === "AO" ? "Angola · Kz" : "Portugal · €"} /></div>}
             {activeTab === "reviews" && <div><h2 className="font-bold text-gray-900">Avaliações dos clientes</h2><p className="mt-2 text-sm text-gray-600">Este produto tem classificação média de 4,8 em 5, com 124 avaliações verificadas.</p></div>}
             {activeTab === "delivery" && <div><h2 className="font-bold text-gray-900">Entrega e garantia</h2><p className="mt-2 text-sm leading-6 text-gray-600">Entrega em Angola e Portugal em 1-3 dias úteis. Todos os produtos têm garantia e apoio especializado.</p></div>}
             {activeTab === "support" && <div><h2 className="font-bold text-gray-900">Precisa de ajuda?</h2><p className="mt-2 text-sm text-gray-600">A nossa equipa está disponível para esclarecer dúvidas sobre este produto.</p><Link href="/account/support" className="mt-4 inline-flex text-sm font-bold text-[#1d6ac4] hover:underline">Contactar suporte →</Link></div>}
