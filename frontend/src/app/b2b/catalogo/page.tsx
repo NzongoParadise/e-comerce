@@ -4,9 +4,9 @@ import Link from "next/link";
 import { FileText, Search, ShoppingBag } from "lucide-react";
 import { useEffect, useState } from "react";
 import { fetchWithAuth } from "@/lib/api";
-import { ProductTile, type Product } from "@/components/features/home/ProductTile";
+import { B2BProductCard, type B2BProductCardProduct } from "@/components/features/catalog/B2BProductCard";
 
-type B2BProduct = Product & { b2bPriceRules?: Array<{ id: number; minQuantity: number; unitPrice: number; currency: string }> };
+type B2BProduct = B2BProductCardProduct;
 
 export default function B2BCatalogPage() {
   const [products, setProducts] = useState<B2BProduct[]>([]);
@@ -24,7 +24,9 @@ export default function B2BCatalogPage() {
   const categories = Array.from(new Map(products.map((product) => [product.category.slug, product.category.name])).entries());
   const visible = products
     .filter((product) => {
-      const matchesQuery = product.name.toLowerCase().includes(query.trim().toLowerCase());
+      const normalizedQuery = query.trim().toLowerCase();
+      const haystack = (product.name + " " + product.brand.name + " " + product.category.name).toLowerCase();
+      const matchesQuery = !normalizedQuery || haystack.includes(normalizedQuery);
       const matchesCategory = category === "ALL" || product.category.slug === category;
       return matchesQuery && matchesCategory;
     })
@@ -72,24 +74,10 @@ export default function B2BCatalogPage() {
       </div>
 
       {loading ? (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">{Array.from({ length: 10 }, (_, i) => <div key={i} className="card h-[360px] animate-pulse bg-slate-50" />)}</div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">{Array.from({ length: 10 }, (_, i) => <div key={i} className="card h-[360px] animate-pulse bg-slate-50" />)}</div>
       ) : visible.length ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
-          {visible.map((product) => (
-            <div key={product.id} className="min-w-0">
-              <ProductTile product={product} />
-              <div className="border border-t-0 border-slate-200 bg-white px-3 py-3">
-                {product.b2bPriceRules?.length ? (
-                  <>
-                    <p className="mb-2 text-[9px] font-black uppercase tracking-[0.12em] text-[#1d6ac4]">Preço por volume</p>
-                    <div className="space-y-1.5">
-                      {product.b2bPriceRules.map((rule) => <div key={rule.id} className="flex items-center justify-between gap-2 text-[10px]"><span className="font-semibold text-slate-500">{rule.minQuantity}+ un.</span><strong className="text-slate-950">{rule.currency === "EUR" ? "€" : "Kz"} {rule.unitPrice.toLocaleString(rule.currency === "EUR" ? "pt-PT" : "pt-AO", { minimumFractionDigits: rule.currency === "EUR" ? 2 : 0, maximumFractionDigits: 2 })}</strong></div>)}
-                    </div>
-                  </>
-                ) : <p className="text-[10px] leading-4 text-slate-400">Preço empresarial sob consulta.</p>}
-              </div>
-            </div>
-          ))}
+          {visible.map((product) => <B2BProductCard key={product.id} product={product} />)}
         </div>
       ) : (
         <div className="card p-12 text-center">
