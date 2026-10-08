@@ -20,10 +20,35 @@ export default function B2BPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetchWithAuth("/api/b2b/dashboard")
-      .then((r) => setData(r.data ?? null))
-      .catch((e) => setError(e instanceof Error ? e.message : "Não foi possível carregar a área empresarial."));
+    let active = true;
+    fetchWithAuth("/api/auth/me")
+      .then(() => fetchWithAuth("/api/b2b/dashboard"))
+      .then((r) => { if (active) setData(r.data ?? null); })
+      .catch(() => { if (active) setGuest(true); })
+    return () => { active = false; };
   }, []);
+
+  if (guest) return (
+    <main className="bg-transparent">
+      <section className="container mx-auto grid gap-5 px-4 py-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="relative overflow-hidden rounded-[28px] bg-[#132238] p-7 text-white shadow-sm sm:p-10">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(246,183,60,0.24),transparent_35%)]" />
+          <div className="relative max-w-2xl">
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#f6b73c]">RUBRICA DILIGENTE · PARA EMPRESAS</p>
+            <h1 className="mt-3 text-3xl font-black leading-tight sm:text-5xl">Compre tecnologia para a sua empresa com condições B2B.</h1>
+            <p className="mt-4 max-w-xl text-sm leading-6 text-blue-100 sm:text-base">Catálogo empresarial, pedidos de cotação, preços negociados e acompanhamento de encomendas num único espaço.</p>
+            <div className="mt-7 flex flex-wrap gap-2">
+              <Link href="/register?accountType=B2B" className="inline-flex items-center gap-2 rounded-xl bg-[#f6b73c] px-5 py-3 text-sm font-black text-[#132238] hover:bg-[#ffd166]">Criar conta empresarial <ArrowRight size={16}/></Link>
+              <Link href="/login?next=/b2b" className="inline-flex items-center gap-2 rounded-xl border border-white/30 px-5 py-3 text-sm font-bold text-white hover:bg-white/10">Entrar</Link>
+            </div>
+          </div>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+          {[["Catálogo empresarial", "Consulte produtos e condições comerciais."], ["Cotações", "Envie pedidos de cotação para compras maiores."], ["Gestão", "Organize utilizadores, encomendas e dados da empresa."]].map(([title, detail]) => <div key={title} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm"><p className="text-sm font-black text-gray-900">{title}</p><p className="mt-2 text-xs leading-5 text-gray-500">{detail}</p></div>)}
+        </div>
+      </section>
+    </main>
+  );
 
   if (error) return <main className="container mx-auto px-4 py-12"><div className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-sm font-bold text-rose-700">{error}</div></main>;
 
