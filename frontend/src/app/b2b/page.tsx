@@ -18,6 +18,7 @@ type Dashboard = {
 export default function B2BPage() {
   const [data, setData] = useState<Dashboard | null>(null);
   const [error, setError] = useState("");
+  const [guest, setGuest] = useState(false);
 
   useEffect(() => {
     let active = true;
