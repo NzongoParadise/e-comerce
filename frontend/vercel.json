@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/release-expired-inventory",
       "schedule": "17 3 * * *"
+    },
+    {
+      "path": "/api/cron/issue-missing-invoices",
+      "schedule": "23 * * * *"
     }
   ]
 }
