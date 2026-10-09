@@ -43,7 +43,7 @@ const querySchema = z.object({
   maxPrice: z.coerce.number().finite().nonnegative().optional(),
   sort: z.enum(['relevance', 'price-low', 'price-high', 'name', 'newest']).default('relevance'),
   page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(48).default(24),
+  pageSize: z.coerce.number().int().min(1).max(100).default(24),
 }).superRefine((data, context) => {
   if (data.minPrice !== undefined && data.maxPrice !== undefined && data.minPrice > data.maxPrice) {
     context.addIssue({ code: 'custom', path: ['maxPrice'], message: 'O preço máximo tem de ser superior ou igual ao mínimo.' });
@@ -206,16 +206,25 @@ export async function GET(request: Request) {
     const activeMarket = market || 'PT';
     const currency = activeMarket === 'PT' ? 'EUR' : 'AOA';
     if (minPrice !== undefined || maxPrice !== undefined) {
-      where.prices = {
-        some: {
-          market: activeMarket,
-          currency,
-          amount: {
-            ...(minPrice !== undefined ? { gte: minPrice } : {}),
-            ...(maxPrice !== undefined ? { lte: maxPrice } : {}),
-          },
-        },
+      const amountRange = {
+        ...(minPrice !== undefined ? { gte: minPrice } : {}),
+        ...(maxPrice !== undefined ? { lte: maxPrice } : {}),
       };
+      const selectedMarketPrice = { market: activeMarket, currency, amount: amountRange };
+      if (activeMarket === 'PT') {
+        const existingAnd = where.AND ? (Array.isArray(where.AND) ? where.AND : [where.AND]) : [];
+        where.AND = [
+          ...existingAnd,
+          {
+            OR: [
+              { prices: { some: selectedMarketPrice } },
+              { AND: [{ prices: { none: { market: 'PT', currency: 'EUR' } } }, { basePrice: amountRange }] },
+            ],
+          },
+        ];
+      } else {
+        where.prices = { some: selectedMarketPrice };
+      }
     }
 
     const productCount = await prisma.product.count({ where });
@@ -226,6 +235,9 @@ export async function GET(request: Request) {
         name: true,
         createdAt: true,
         basePrice: true,
+        description: true,
+        brand: { select: { name: true } },
+        category: { select: { name: true } },
         prices: {
           where: { market: activeMarket, currency },
           select: { amount: true },
@@ -239,11 +251,32 @@ export async function GET(request: Request) {
       if (activeMarket === 'AO' && configuredPrice === undefined) return Number.POSITIVE_INFINITY;
       return Number(configuredPrice ?? product.basePrice);
     };
+    const queryTerm = (search || '').trim().toLocaleLowerCase('pt');
+    const relevance = (product: typeof matchingForSort[number]) => {
+      if (!queryTerm) return 0;
+      const name = product.name.toLocaleLowerCase('pt');
+      const brandName = product.brand.name.toLocaleLowerCase('pt');
+      const categoryName = product.category.name.toLocaleLowerCase('pt');
+      const description = (product.description || '').toLocaleLowerCase('pt');
+      if (name.startsWith(queryTerm)) return 0;
+      if (name.includes(queryTerm)) return 1;
+      if (brandName.startsWith(queryTerm)) return 2;
+      if (brandName.includes(queryTerm)) return 3;
+      if (categoryName.includes(queryTerm)) return 4;
+      if (description.includes(queryTerm)) return 5;
+      return 6;
+    };
     matchingForSort.sort((a, b) => {
-      if (sort === 'price-low') return sortPrice(a) - sortPrice(b) || a.name.localeCompare(b.name, 'pt');
-      if (sort === 'price-high') return sortPrice(b) - sortPrice(a) || a.name.localeCompare(b.name, 'pt');
+      if (sort === 'price-low' || sort === 'price-high') {
+        const left = sortPrice(a);
+        const right = sortPrice(b);
+        if (left === right) return a.name.localeCompare(b.name, 'pt');
+        if (sort === 'price-low') return left < right ? -1 : 1;
+        return left > right ? -1 : 1;
+      }
       if (sort === 'newest') return b.createdAt.getTime() - a.createdAt.getTime();
       if (sort === 'name') return a.name.localeCompare(b.name, 'pt');
+      if (queryTerm) return relevance(a) - relevance(b) || a.name.localeCompare(b.name, 'pt');
       return a.name.localeCompare(b.name, 'pt');
     });
     const pageProducts = matchingForSort.slice((page - 1) * pageSize, page * pageSize);
