@@ -8,6 +8,7 @@ import { isStripeCurrencySupported, matchesStripePayment } from '@/lib/server/pa
 import { authenticate, errorResponse, readJson, userSubject } from '@/lib/server/api';
 import { setStripeDefaultPaymentMethod } from '@/lib/server/payments/stripeCustomers';
 import { createNotificationIfAllowed } from '@/lib/server/notifications';
+import { issueInvoiceForPaidOrder } from '@/lib/server/finance/issueInvoiceForPaidOrder';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -136,6 +137,12 @@ export async function POST(request: Request) {
       }
       return saved;
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5000, timeout: 10000 });
+    if (paymentStatus === "PAID") {
+      await issueInvoiceForPaidOrder(order.id).catch((error) => logger.error("Invoice issuance after direct payment confirmation failed", {
+        orderId: order.id,
+        error: error instanceof Error ? error.message : error,
+      }));
+    }
     return Response.json({ data: payment }, { status: 201 });
   } catch (error) {
     await prisma.$transaction(async (transaction) => {
@@ -327,6 +334,12 @@ async function handleMulticaixaWebhook(request: Request) {
     });
   } catch (error) {
     if (error instanceof Error && error.message.includes("Unique constraint")) {
+      if (event.status === "PAID") {
+        await issueInvoiceForPaidOrder(payment.order.id).catch((invoiceError) => logger.error("Invoice issuance retry after duplicate MULTICAIXA event failed", {
+          orderId: payment.order.id,
+          error: invoiceError instanceof Error ? invoiceError.message : invoiceError,
+        }));
+      }
       return Response.json({ received: true, duplicate: true });
     }
     throw error;
@@ -642,8 +655,22 @@ async function handleStripeWebhook(request: Request) {
       await transaction.payment.update({ where: { id: payment.id }, data: { ...statusUpdates('PAID'), reference: sessionId } });
     });
   } catch (error) {
-    if (error instanceof Error && error.message.includes('Unique constraint')) return Response.json({ received: true, duplicate: true });
+    if (error instanceof Error && error.message.includes('Unique constraint')) {
+      if (successEvent && session.payment_status === 'paid') {
+        await issueInvoiceForPaidOrder(orderId).catch((invoiceError) => logger.error("Invoice issuance retry after duplicate Stripe event failed", {
+          orderId,
+          error: invoiceError instanceof Error ? invoiceError.message : invoiceError,
+        }));
+      }
+      return Response.json({ received: true, duplicate: true });
+    }
     throw error;
+  }
+  if (successEvent && session.payment_status === 'paid') {
+    await issueInvoiceForPaidOrder(orderId).catch((error) => logger.error("Invoice issuance after Stripe confirmation failed", {
+      orderId,
+      error: error instanceof Error ? error.message : error,
+    }));
   }
   return Response.json({ received: true });
 }
