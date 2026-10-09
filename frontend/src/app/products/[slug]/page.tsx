@@ -223,8 +223,12 @@ export default function ProductDetailsPage() {
     category: product.category.name,
     specs: product.description || "",
     priceEUR: Number(ptPrice),
+    priceKZ: aoPrice ? Number(aoPrice) : undefined,
+    stock: product.stock,
+    rating: reviewSummary.averageRating,
+    reviews: reviewSummary.count,
     imageUrl: product.imageUrl || undefined,
-  });
+  });;
 
   const handleBuyNow = () => {
     handleAddToCart();
