@@ -32,7 +32,6 @@ jobs:
       FRONTEND_URL: http://localhost:3000
       APP_URL: http://localhost:3000
       ALLOW_INSECURE_AUTH: "false"
-      NODE_ENV: production
     steps:
       - name: Checkout
         uses: actions/checkout@v4
