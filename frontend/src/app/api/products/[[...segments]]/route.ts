@@ -33,13 +33,21 @@ const productSchema = z.object({
 });
 
 const querySchema = z.object({
-  category: z.string().optional(),
-  brand: z.string().optional(),
+  category: z.string().trim().max(120).optional(),
+  brand: z.string().trim().max(120).optional(),
   market: z.enum(['PT', 'AO']).optional(),
   stockStatus: z.enum(['IN_STOCK', 'LOW_STOCK', 'OUT_OF_STOCK']).optional(),
-  search: z.string().optional(),
-  page: z.coerce.number().min(1).default(1),
-  pageSize: z.coerce.number().min(1).max(100).default(10),
+  inStockOnly: z.coerce.boolean().default(false),
+  search: z.string().trim().max(160).optional(),
+  minPrice: z.coerce.number().finite().nonnegative().optional(),
+  maxPrice: z.coerce.number().finite().nonnegative().optional(),
+  sort: z.enum(['relevance', 'price-low', 'price-high', 'name', 'newest']).default('relevance'),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(48).default(24),
+}).superRefine((data, context) => {
+  if (data.minPrice !== undefined && data.maxPrice !== undefined && data.minPrice > data.maxPrice) {
+    context.addIssue({ code: 'custom', path: ['maxPrice'], message: 'O preço máximo tem de ser superior ou igual ao mínimo.' });
+  }
 });
 
 
@@ -149,53 +157,151 @@ export async function GET(request: Request) {
     const params = Object.fromEntries(new URL(request.url).searchParams);
     const parsed = querySchema.safeParse(params);
     if (!parsed.success) return errorResponse('Invalid query parameters', 400, parsed.error.issues);
-    const { category, brand, market, stockStatus, search, page, pageSize } = parsed.data;
-    const where: Record<string, unknown> = {};
+    const {
+      category, brand, market, stockStatus, inStockOnly, search,
+      minPrice, maxPrice, sort, page, pageSize,
+    } = parsed.data;
+    const where: Prisma.ProductWhereInput = {};
     if (category) where.category = { slug: category };
     if (brand) where.brand = { slug: brand };
+
     const lowStockThreshold = Number.isInteger(Number(process.env.LOW_STOCK_THRESHOLD)) && Number(process.env.LOW_STOCK_THRESHOLD) > 0
       ? Number(process.env.LOW_STOCK_THRESHOLD)
       : 5;
     if (stockStatus === 'OUT_OF_STOCK') where.stock = 0;
     if (stockStatus === 'LOW_STOCK') where.stock = { gt: 0, lte: lowStockThreshold };
     if (stockStatus === 'IN_STOCK') where.stock = { gt: lowStockThreshold };
-    if (search) where.OR = [
-      { name: { contains: search, mode: 'insensitive' } },
-      { description: { contains: search, mode: 'insensitive' } },
-    ];
+    if (inStockOnly) where.stock = { gt: 0 };
 
-    const [total, inStock, lowStock, outOfStock, products] = await prisma.$transaction([
-      prisma.product.count({ where }),
-      prisma.product.count({ where: { stock: { gt: lowStockThreshold } } }),
-      prisma.product.count({ where: { stock: { gt: 0, lte: lowStockThreshold } } }),
-      prisma.product.count({ where: { stock: 0 } }),
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+        { brand: { is: { name: { contains: search, mode: 'insensitive' } } } },
+        { category: { is: { name: { contains: search, mode: 'insensitive' } } } },
+      ];
+    }
+
+    const activeMarket = market || 'PT';
+    const currency = activeMarket === 'PT' ? 'EUR' : 'AOA';
+    if (minPrice !== undefined || maxPrice !== undefined) {
+      where.prices = {
+        some: {
+          market: activeMarket,
+          currency,
+          amount: {
+            ...(minPrice !== undefined ? { gte: minPrice } : {}),
+            ...(maxPrice !== undefined ? { lte: maxPrice } : {}),
+          },
+        },
+      };
+    }
+
+    const productCount = await prisma.product.count({ where });
+    const matchingForSort = await prisma.product.findMany({
+      where,
+      select: {
+        id: true,
+        name: true,
+        createdAt: true,
+        basePrice: true,
+        prices: {
+          where: { market: activeMarket, currency },
+          select: { amount: true },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+      },
+    });
+    const sortPrice = (product: typeof matchingForSort[number]) => {
+      const configuredPrice = product.prices[0]?.amount;
+      if (activeMarket === 'AO' && configuredPrice === undefined) return Number.POSITIVE_INFINITY;
+      return Number(configuredPrice ?? product.basePrice);
+    };
+    matchingForSort.sort((a, b) => {
+      if (sort === 'price-low') return sortPrice(a) - sortPrice(b) || a.name.localeCompare(b.name, 'pt');
+      if (sort === 'price-high') return sortPrice(b) - sortPrice(a) || a.name.localeCompare(b.name, 'pt');
+      if (sort === 'newest') return b.createdAt.getTime() - a.createdAt.getTime();
+      if (sort === 'name') return a.name.localeCompare(b.name, 'pt');
+      return a.name.localeCompare(b.name, 'pt');
+    });
+    const pageProducts = matchingForSort.slice((page - 1) * pageSize, page * pageSize);
+    const pageIds = pageProducts.map((product) => product.id);
+
+    const [products, inStock, lowStock, outOfStock, categories, brands, attributeFacets] = await prisma.$transaction([
       prisma.product.findMany({
-        where,
+        where: { id: { in: pageIds } },
         include: {
           category: true,
           brand: true,
-          prices: market ? { where: { market } } : true,
+          prices: market ? { where: { market, currency } } : true,
           attributes: true,
+          _count: { select: { reviews: { where: { status: 'APPROVED' } } } },
         },
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-        orderBy: { name: 'asc' },
+      }),
+      prisma.product.count({ where: { stock: { gt: lowStockThreshold } } }),
+      prisma.product.count({ where: { stock: { gt: 0, lte: lowStockThreshold } } }),
+      prisma.product.count({ where: { stock: 0 } }),
+      prisma.category.findMany({ select: { id: true, name: true, slug: true }, orderBy: { name: 'asc' } }),
+      prisma.brand.findMany({ select: { id: true, name: true, slug: true }, orderBy: { name: 'asc' } }),
+      prisma.productAttribute.findMany({
+        distinct: ['name', 'value'],
+        select: { name: true, value: true },
+        orderBy: [{ name: 'asc' }, { value: 'asc' }],
       }),
     ]);
-    const data = products.map((product) => ({
-      id: product.id,
-      name: product.name,
-      slug: product.slug,
-      description: product.description,
-      basePrice: product.basePrice,
-      imageUrl: product.imageUrl,
-      stock: product.stock,
-      category: { id: product.category.id, name: product.category.name, slug: product.category.slug },
-      brand: { id: product.brand.id, name: product.brand.name, slug: product.brand.slug },
-      prices: product.prices.map((price) => ({ market: price.market, currency: price.currency, amount: price.amount })),
-      attributes: product.attributes,
-    }));
-    return Response.json({ data, meta: { total, page, pageSize, pageCount: Math.ceil(total / pageSize), lowStockThreshold }, stats: { total: await prisma.product.count(), inStock, lowStock, outOfStock } });
+
+    const productMap = new Map(products.map((product) => [product.id, product]));
+    const orderedProducts = pageIds.map((id) => productMap.get(id)).filter((product): product is NonNullable<typeof product> => Boolean(product));
+    const reviewGroups = orderedProducts.length
+      ? await prisma.productReview.groupBy({
+          by: ['productId'],
+          where: { productId: { in: orderedProducts.map((product) => product.id) }, status: 'APPROVED' },
+          _avg: { rating: true },
+          _count: { _all: true },
+        })
+      : [];
+    const reviewMap = new Map(reviewGroups.map((row) => [row.productId, row]));
+    const data = orderedProducts.map((product) => {
+      const review = reviewMap.get(product.id);
+      return {
+        id: product.id,
+        name: product.name,
+        slug: product.slug,
+        description: product.description,
+        basePrice: product.basePrice,
+        imageUrl: product.imageUrl,
+        stock: product.stock,
+        category: { id: product.category.id, name: product.category.name, slug: product.category.slug },
+        brand: { id: product.brand.id, name: product.brand.name, slug: product.brand.slug },
+        prices: product.prices.map((price) => ({ market: price.market, currency: price.currency, amount: price.amount })),
+        attributes: product.attributes,
+        rating: Number(review?._avg.rating || 0),
+        reviews: review?._count._all || 0,
+      };
+    });
+    const groupedAttributes = attributeFacets.reduce<Record<string, string[]>>((result, attribute) => {
+      (result[attribute.name] ||= []).push(attribute.value);
+      return result;
+    }, {});
+
+    return Response.json({
+      data,
+      meta: {
+        total: productCount,
+        page,
+        pageSize,
+        pageCount: Math.ceil(productCount / pageSize),
+        lowStockThreshold,
+      },
+      stats: {
+        total: await prisma.product.count(),
+        inStock,
+        lowStock,
+        outOfStock,
+      },
+      facets: { categories, brands, attributes: groupedAttributes },
+    });
   } catch (error) {
     console.error('Error fetching products:', error);
     return errorResponse('Internal server error', 500);
