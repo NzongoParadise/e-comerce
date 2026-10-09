@@ -1,8 +1,21 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ArrowUpRight, CheckCircle2, Clock3, RefreshCw, WalletCards, XCircle } from "lucide-react";
+import { ArrowUpRight, CheckCircle2, Clock3, ExternalLink, FileCheck2, RefreshCw, WalletCards, XCircle } from "lucide-react";
 import { fetchWithAuth } from "@/lib/api";
+import Link from "next/link";
+
+type Invoice = {
+  id: number;
+  invoiceNumber: string;
+  verificationCode: string;
+  status: string;
+  currency: string;
+  totalEUR: string | number;
+  totalKZ: string | number;
+  issuedAt: string;
+  order: { orderNumber: string; status: string; payment: { status: string; paidAt: string | null } | null };
+};
 
 type Payment = {
   id: number;
@@ -52,6 +65,7 @@ export default function B2BFinancePage() {
   useEffect(() => { void load(); }, []);
 
   const payments: Payment[] = data?.payments || [];
+  const invoices: Invoice[] = data?.invoices || [];
   const visible = useMemo(() => filter === "ALL" ? payments : payments.filter((payment) => payment.status === filter), [payments, filter]);
 
   if (loading) return <div className="space-y-5"><div className="grid gap-3 md:grid-cols-3"><div className="card h-28 animate-pulse" /><div className="card h-28 animate-pulse" /><div className="card h-28 animate-pulse" /></div><div className="card h-80 animate-pulse" /></div>;
@@ -105,6 +119,35 @@ export default function B2BFinancePage() {
           </div>
         ) : (
           <div className="p-12 text-center"><WalletCards size={32} className="mx-auto text-slate-300" /><h2 className="mt-3 text-sm font-black text-slate-800">Nenhuma transação neste filtro</h2><p className="mt-1 text-xs text-slate-500">As transações financeiras da empresa aparecerão aqui.</p></div>
+        )}
+      </section>
+
+      <section className="card overflow-hidden">
+        <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+          <div className="flex items-center gap-2"><FileCheck2 size={17} className="text-blue-700"/><div><h2 className="text-sm font-black text-slate-950">Faturas empresariais</h2><p className="mt-1 text-[10px] text-slate-500">Documentos emitidos para encomendas da empresa.</p></div></div>
+          <Link href="/account/invoices" className="inline-flex items-center gap-1.5 text-[10px] font-black text-blue-700 hover:underline">Abrir biblioteca de faturas <ExternalLink size={12}/></Link>
+        </div>
+        {invoices.length ? (
+          <div className="divide-y divide-slate-100">
+            {invoices.map((invoice) => (
+              <article key={invoice.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+                <div className="flex min-w-0 items-start gap-3">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700"><FileCheck2 size={17}/></span>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2"><h3 className="text-xs font-black text-slate-950">{invoice.invoiceNumber}</h3><span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[9px] font-black text-emerald-700">{invoice.status}</span></div>
+                    <p className="mt-1 text-[10px] text-slate-500">{invoice.order.orderNumber} · {new Date(invoice.issuedAt).toLocaleDateString("pt-PT")} · Pagamento: {invoice.order.payment?.status || "Desconhecido"}</p>
+                    <p className="mt-1 text-sm font-black text-slate-900">{money(invoice.currency === "EUR" ? invoice.totalEUR : invoice.totalKZ, invoice.currency)}</p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Link href={"/faturas/" + invoice.id} className="btn-primary">Abrir fatura</Link>
+                  <Link href={"/verificar-fatura/" + encodeURIComponent(invoice.verificationCode)} target="_blank" className="btn-secondary">Validar <ExternalLink size={12}/></Link>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="p-10 text-center"><FileCheck2 size={27} className="mx-auto text-slate-300"/><h3 className="mt-3 text-xs font-black text-slate-800">Ainda não existem faturas empresariais</h3><p className="mt-1 text-[10px] text-slate-500">Os documentos emitidos para as encomendas da empresa aparecerão aqui.</p></div>
         )}
       </section>
     </div>
