@@ -37,5 +37,22 @@ export async function GET(request: Request) {
     failedEUR: 0, failedAOA: 0,
   });
 
-  return Response.json({ data: { company: membership.company, role: membership.role, totals, payments } });
+  const invoices = await prisma.invoice.findMany({
+    where: { companyId: membership.companyId },
+    select: {
+      id: true,
+      invoiceNumber: true,
+      verificationCode: true,
+      status: true,
+      currency: true,
+      totalEUR: true,
+      totalKZ: true,
+      issuedAt: true,
+      order: { select: { orderNumber: true, status: true, payment: { select: { status: true, paidAt: true } } } },
+    },
+    orderBy: { issuedAt: "desc" },
+    take: 100,
+  });
+
+  return Response.json({ data: { company: membership.company, role: membership.role, totals, payments, invoices } });
 }
