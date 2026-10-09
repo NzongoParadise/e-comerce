@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/server/prisma';
 import { cancelAwaitingPaymentAndReleaseStock } from '@/lib/server/orders/inventory';
 import { multicaixaProvider } from '@/lib/server/payments/multicaixaProvider';
