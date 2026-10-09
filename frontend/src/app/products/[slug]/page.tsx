@@ -67,6 +67,7 @@ export default function ProductDetailsPage() {
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewNotice, setReviewNotice] = useState("");
   const [reviewError, setReviewError] = useState("");
+  const [hasSession, setHasSession] = useState(false);
 
   // The API currently does not expose product variants; do not invent selectable options in the storefront.
   const [purchaseMode, setPurchaseMode] = useState<"retail" | "wholesale">("retail");
@@ -136,6 +137,8 @@ export default function ProductDetailsPage() {
       setReviewSubmitting(false);
     }
   }
+
+  useEffect(() => { setHasSession(Boolean(localStorage.getItem("jwt_token"))); }, []);
 
   useEffect(() => {
     fetchWithAuth(`/api/products/${slug}`)
@@ -465,7 +468,7 @@ export default function ProductDetailsPage() {
               <div className="rounded-xl border border-slate-200 p-4">
                 <h3 className="text-sm font-black text-slate-950">Avaliar este produto</h3>
                 <p className="mt-1 text-[10px] leading-5 text-slate-500">Só são aceites avaliações associadas a uma encomenda sua com pagamento confirmado. A publicação depende de moderação.</p>
-                {localStorage.getItem("jwt_token") && reviewOrders.length > 0 ? <div className="mt-4 space-y-3">
+                {hasSession && reviewOrders.length > 0 ? <div className="mt-4 space-y-3">
                   <label className="block text-[10px] font-bold text-slate-600">Encomenda paga<select value={reviewOrderId} onChange={(event) => setReviewOrderId(event.target.value)} className="settings-input mt-1.5">{reviewOrders.map((order) => <option key={order.id} value={order.id}>{order.orderNumber}</option>)}</select></label>
                   <div><p className="mb-1.5 text-[10px] font-bold text-slate-600">Classificação</p><div className="flex gap-1">{[1,2,3,4,5].map((rating) => <button key={rating} type="button" onClick={() => setReviewRating(rating)} aria-label={rating + " estrelas"} className={"text-2xl " + (rating <= reviewRating ? "text-amber-500" : "text-slate-300")}>★</button>)}</div></div>
                   <label className="block text-[10px] font-bold text-slate-600">Título (opcional)<input value={reviewTitle} onChange={(event) => setReviewTitle(event.target.value)} maxLength={120} className="settings-input mt-1.5" placeholder="Resuma a sua experiência"/></label>
@@ -473,7 +476,7 @@ export default function ProductDetailsPage() {
                   {reviewNotice && <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-[10px] font-semibold text-emerald-800">{reviewNotice}</p>}
                   {reviewError && <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-[10px] font-semibold text-rose-800">{reviewError}</p>}
                   <button type="button" onClick={() => void submitReview()} disabled={reviewSubmitting} className="btn-primary disabled:opacity-50">{reviewSubmitting ? <Loader2 size={14} className="animate-spin"/> : <Send size={14}/>} Enviar avaliação</button>
-                </div> : <div className="mt-3 rounded-lg bg-slate-50 p-3 text-[10px] leading-5 text-slate-600">{localStorage.getItem("jwt_token") ? "Não encontramos uma encomenda paga deste produto na sua conta." : <span>Inicie sessão e tenha comprado este produto para poder avaliá-lo. <Link href={"/login?next=" + encodeURIComponent("/products/" + slug)} className="font-black text-blue-700 hover:underline">Iniciar sessão</Link></span>}</div>}
+                </div> : <div className="mt-3 rounded-lg bg-slate-50 p-3 text-[10px] leading-5 text-slate-600">{hasSession ? "Não encontramos uma encomenda paga deste produto na sua conta." : <span>Inicie sessão e tenha comprado este produto para poder avaliá-lo. <Link href={"/login?next=" + encodeURIComponent("/products/" + slug)} className="font-black text-blue-700 hover:underline">Iniciar sessão</Link></span>}</div>}
               </div>
             </div>}
             {activeTab === "delivery" && <div><h2 className="font-bold text-gray-900">Entrega e garantia</h2><p className="mt-2 text-sm leading-6 text-gray-600">Entrega em Angola e Portugal em 1-3 dias úteis. Todos os produtos têm garantia e apoio especializado.</p></div>}
