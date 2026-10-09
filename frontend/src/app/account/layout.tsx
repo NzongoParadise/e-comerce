@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type { LucideIcon } from "lucide-react";
-import { Home, Package, UserRound, MapPin, CreditCard, Heart, Headphones, RefreshCcw, Tags, Users, Settings, FileText, LogOut, Boxes, X, ShoppingBag } from "lucide-react";
+import { Home, Package, UserRound, MapPin, CreditCard, Heart, Headphones, RefreshCcw, Tags, Users, Settings, FileText, LogOut, Boxes, X, ShoppingBag, Bell } from "lucide-react";
 import { fetchWithAuth } from "@/lib/api";
 import WorkspaceHeader from "@/components/layout/WorkspaceHeader";
 
@@ -16,6 +16,7 @@ const groups: NavGroup[] = [
     { name: "Visão geral", href: "/account", Icon: Home },
     { name: "As minhas encomendas", href: "/account/orders", Icon: Package },
     { name: "Lista de favoritos", href: "/favorites", Icon: Heart },
+    { name: "Notificações", href: "/notifications", Icon: Bell },
   ]},
   { label: "Gestão", items: [
     { name: "Dados da conta", href: "/account/profile", Icon: UserRound },
