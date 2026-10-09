@@ -192,7 +192,7 @@ export default function ProductDetailsPage() {
   // Calculate prices based on backend data if available, else defaults
   const ptPrice = product.prices.find((p) => p.market === "PT" && p.currency === "EUR")?.amount || product.basePrice;
   const aoPrice = product.prices.find((p) => p.market === "AO" && p.currency === "AOA")?.amount || "";
-  const hasActivePrice = market === "AO" ? Boolean(aoPrice) : Boolean(ptPrice);
+  const hasActivePrice = market === "AO" ? Number(aoPrice) > 0 : Number(ptPrice) > 0;
   const promotionProduct = { id: product.id, categoryId: product.category.id, brandId: product.brand.id };
   const euroOffer = ptPrice ? getPromotionalUnitPrice(promotionProduct, "PT", Number(ptPrice), promotions) : null;
   const kwanzaOffer = aoPrice ? getPromotionalUnitPrice(promotionProduct, "AO", Number(aoPrice), promotions) : null;
