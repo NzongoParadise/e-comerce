@@ -1,0 +1,108 @@
+name: Commerce Staging End-to-End
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_staging_only:
+        description: "Confirm that E2E_BASE_URL is a disposable staging environment, never production."
+        type: boolean
+        required: true
+        default: false
+      enable_gateway_sandbox_tests:
+        description: "Create test checkout sessions/references in Stripe and MULTICAIXA sandbox."
+        type: boolean
+        required: true
+        default: false
+      enable_refund_sandbox_tests:
+        description: "Create a partial refund against the explicitly configured paid sandbox order."
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: commerce-staging-e2e
+  cancel-in-progress: false
+
+jobs:
+  e2e:
+    name: Staging commerce journeys
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      E2E_BASE_URL: ${{ secrets.E2E_BASE_URL }}
+      E2E_MUTATION_ALLOWED_HOSTS: ${{ vars.E2E_MUTATION_ALLOWED_HOSTS }}
+      E2E_B2C_TOKEN: ${{ secrets.E2E_B2C_TOKEN }}
+      E2E_B2B_OWNER_TOKEN: ${{ secrets.E2E_B2B_OWNER_TOKEN }}
+      E2E_B2B_BUYER_TOKEN: ${{ secrets.E2E_B2B_BUYER_TOKEN }}
+      E2E_ADMIN_TOKEN: ${{ secrets.E2E_ADMIN_TOKEN }}
+      E2E_B2C_EMAIL: ${{ vars.E2E_B2C_EMAIL }}
+      E2E_PRODUCT_ID_PT: ${{ vars.E2E_PRODUCT_ID_PT }}
+      E2E_PRODUCT_ID_AO: ${{ vars.E2E_PRODUCT_ID_AO }}
+      E2E_B2B_PRODUCT_ID: ${{ vars.E2E_B2B_PRODUCT_ID }}
+      E2E_B2B_QUANTITY: ${{ vars.E2E_B2B_QUANTITY || '1' }}
+      E2E_PAID_ORDER_ID: ${{ vars.E2E_PAID_ORDER_ID }}
+      E2E_RETURN_ORDER_ID: ${{ vars.E2E_RETURN_ORDER_ID }}
+      E2E_EXPIRED_ORDER_ID: ${{ vars.E2E_EXPIRED_ORDER_ID }}
+      E2E_CRON_SECRET: ${{ secrets.E2E_CRON_SECRET }}
+      E2E_REFUND_AMOUNT: ${{ vars.E2E_REFUND_AMOUNT }}
+      E2E_TEST_PHONE_NUMBER: ${{ vars.E2E_TEST_PHONE_NUMBER }}
+      E2E_ENABLE_MUTATIONS: "true"
+      E2E_ENABLE_GATEWAY_TESTS: ${{ inputs.enable_gateway_sandbox_tests }}
+      E2E_ENABLE_REFUND_TESTS: ${{ inputs.enable_refund_sandbox_tests }}
+      E2E_REQUIRE_FULL_RUN: "true"
+    steps:
+      - name: Require explicit staging and sandbox confirmation
+        shell: bash
+        env:
+          CONFIRM_STAGING_ONLY: ${{ inputs.confirm_staging_only }}
+          ENABLE_GATEWAY_TESTS: ${{ inputs.enable_gateway_sandbox_tests }}
+          ENABLE_REFUND_TESTS: ${{ inputs.enable_refund_sandbox_tests }}
+        run: |
+          if [ "$CONFIRM_STAGING_ONLY" != "true" ]; then
+            echo "::error::Confirm the target is staging before running mutating E2E scenarios."
+            exit 1
+          fi
+          if [ "$ENABLE_GATEWAY_TESTS" != "true" ]; then
+            echo "::error::Gateway scenarios must be explicitly enabled for the full journey suite."
+            exit 1
+          fi
+          if [ "$ENABLE_REFUND_TESTS" != "true" ]; then
+            echo "::error::Partial-refund tests mutate payment state; enable only for a sandbox order."
+            exit 1
+          fi
+          for name in E2E_BASE_URL E2E_MUTATION_ALLOWED_HOSTS E2E_B2C_TOKEN E2E_B2B_OWNER_TOKEN E2E_B2B_BUYER_TOKEN E2E_ADMIN_TOKEN E2E_PRODUCT_ID_PT E2E_PRODUCT_ID_AO E2E_B2B_PRODUCT_ID E2E_PAID_ORDER_ID E2E_RETURN_ORDER_ID E2E_EXPIRED_ORDER_ID E2E_CRON_SECRET E2E_REFUND_AMOUNT; do
+            eval "configured=\${$name}"
+            if [ -z "$configured" ]; then
+              echo "::error::Required staging E2E configuration is missing: $name"
+              exit 1
+            fi
+          done
+          node -e '
+            const u = new URL(process.env.E2E_BASE_URL);
+            const allowed = process.env.E2E_MUTATION_ALLOWED_HOSTS.split(",").map(v => v.trim().toLowerCase());
+            if (!["http:", "https:"].includes(u.protocol)) throw new Error("E2E_BASE_URL must use HTTP/HTTPS");
+            if (!allowed.includes(u.hostname.toLowerCase())) throw new Error("E2E target hostname is not explicitly allowlisted");
+            if (/e-comerce-sepia\.vercel\.app|git-master|production/i.test(u.hostname)) throw new Error("Production-like hostname refused");
+            console.log("Staging hostname allowlisted; no secrets printed.");
+          '
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install locked dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run configured end-to-end scenarios against staging
+        working-directory: frontend
+        run: npm run test:e2e
