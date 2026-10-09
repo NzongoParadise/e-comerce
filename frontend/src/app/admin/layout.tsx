@@ -13,7 +13,7 @@ const groups = [
   { label: "B2B", items: [["Operação empresarial", "/admin/b2b", Building2]] },
   { label: "Atendimento", items: [["Chat de suporte", "/admin/support", MessageCircle]] },
   { label: "Clientes", items: [["Clientes", "/admin/clients", Users], ["Utilizadores", "/admin/users", Users]] },
-  { label: "Financeiro", items: [["Visão financeira", "/admin/finance", Wallet], ["Pagamentos", "/admin/finance/payments", Wallet], ["Revisão de pagamentos", "/admin/finance/review", ShieldCheck], ["Reembolsos", "/admin/finance/refunds", Wallet], ["Faturas", "/admin/finance/invoices", FileCheck2], ["Conciliação", "/admin/finance/reconciliation", ShieldCheck], ["Relatórios", "/admin/finance/reports", BarChart3]] },
+  { label: "Financeiro", items: [["Visão financeira", "/admin/finance", Wallet], ["Pagamentos", "/admin/finance/payments", Wallet], ["Revisão de pagamentos", "/admin/finance/review", ShieldCheck], ["Reembolsos", "/admin/finance/refunds", Wallet], ["Faturas", "/admin/finance/invoices", FileCheck2], ["Notas de crédito", "/admin/finance/credit-notes", FileCheck2], ["Conciliação", "/admin/finance/reconciliation", ShieldCheck], ["Relatórios", "/admin/finance/reports", BarChart3]] },
   { label: "Marketing", items: [["Cupões", "/admin/marketing", Megaphone], ["Promoções", "/admin/marketing/promotions", Megaphone], ["Newsletter", "/admin/marketing/newsletter", Megaphone], ["Depoimentos", "/admin/marketing/testimonials", Megaphone]] },
   { label: "Sistema", items: [["Logs", "/admin/logs", ClipboardList], ["Configurações", "/admin/settings", ClipboardList]] },
 ] as const;
