@@ -40,6 +40,7 @@ const typeLabels: Record<string, string> = {
   PAYMENT_REVIEW_REQUIRED: "Verificação",
   B2B_INVITATION_ACCEPTED: "Equipa",
   INVOICE_ISSUED: "Fatura",
+  CREDIT_NOTE_ISSUED: "Nota de crédito",
   RETURN_REQUEST_RECEIVED: "Pós-venda",
   RETURN_STATUS_CHANGED: "Pós-venda",
   PRODUCT_REVIEW_MODERATED: "Avaliação",
@@ -47,7 +48,7 @@ const typeLabels: Record<string, string> = {
 
 function iconFor(type: string) {
   if (type.toLowerCase().includes("payment") || type.toLowerCase().includes("refund")) return CreditCard;
-  if (type.toLowerCase().includes("quote") || type.toLowerCase().includes("invoice")) return FileText;
+  if (type.toLowerCase().includes("quote") || type.toLowerCase().includes("invoice") || type.toLowerCase().includes("credit")) return FileText;
   if (type.toLowerCase().includes("security") || type.toLowerCase().includes("review")) return ShieldAlert;
   if (type.toLowerCase().includes("order")) return Package;
   return Bell;
