@@ -40,7 +40,11 @@ function money(amount: string | number, currency: string) {
 const statusLabel: Record<string, string> = {
   PAID: "Pago",
   PENDING: "Pendente",
+  CREATED: "A iniciar",
+  PROCESSING: "A processar",
+  AWAITING_PAYMENT: "A aguardar pagamento",
   FAILED: "Falhado",
+  EXPIRED: "Expirado",
   CANCELLED: "Cancelado",
 };
 
@@ -111,7 +115,12 @@ export default function B2BFinancePage() {
 
   const payments: Payment[] = data?.payments || [];
   const invoices: Invoice[] = data?.invoices || [];
-  const visible = useMemo(() => filter === "ALL" ? payments : payments.filter((payment) => payment.status === filter), [payments, filter]);
+  const visible = useMemo(() => {
+    if (filter === "ALL") return payments;
+    if (filter === "PENDING") return payments.filter((payment) => ["PENDING", "CREATED", "PROCESSING", "AWAITING_PAYMENT"].includes(payment.status));
+    if (filter === "FAILED") return payments.filter((payment) => ["FAILED", "EXPIRED", "CANCELLED"].includes(payment.status));
+    return payments.filter((payment) => payment.status === filter);
+  }, [payments, filter]);
 
   if (loading) return <div className="space-y-5"><div className="grid gap-3 md:grid-cols-3"><div className="card h-28 animate-pulse" /><div className="card h-28 animate-pulse" /><div className="card h-28 animate-pulse" /></div><div className="card h-80 animate-pulse" /></div>;
 
