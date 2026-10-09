@@ -1,8 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Mail, RefreshCw, ShieldCheck, Users } from "lucide-react";
+import { Check, Clock3, Loader2, Mail, Plus, RefreshCw, Send, ShieldCheck, Users, XCircle } from "lucide-react";
 import { fetchWithAuth } from "@/lib/api";
+
+type Invitation = {
+  id: number;
+  email: string;
+  role: "BUYER" | "APPROVER";
+  status: string;
+  expiresAt: string;
+  createdAt: string;
+  acceptedAt: string | null;
+  invitedBy?: { name: string | null; email: string | null } | null;
+};
 
 type Member = {
   id: number;
@@ -25,6 +36,11 @@ const roleDescriptions: Record<Member["role"], string> = {
 
 export default function B2BUsersPage() {
   const [members, setMembers] = useState<Member[]>([]);
+  const [invitations, setInvitations] = useState<Invitation[]>([]);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<Invitation["role"]>("BUYER");
+  const [inviting, setInviting] = useState(false);
+  const [cancellingId, setCancellingId] = useState<number | null>(null);
   const [currentRole, setCurrentRole] = useState<Member["role"] | "">("");
   const [draftRoles, setDraftRoles] = useState<Record<number, Member["role"]>>({});
   const [loading, setLoading] = useState(true);
@@ -36,10 +52,14 @@ export default function B2BUsersPage() {
     setLoading(true);
     setError("");
     try {
-      const response = await fetchWithAuth("/api/b2b/company/members", { cache: "no-store" });
-      const data = (response.data || []) as Member[];
+      const [memberResponse, invitationResponse] = await Promise.all([
+        fetchWithAuth("/api/b2b/company/members", { cache: "no-store" }),
+        fetchWithAuth("/api/b2b/company/invitations", { cache: "no-store" }),
+      ]);
+      const data = (memberResponse.data || []) as Member[];
       setMembers(data);
-      setCurrentRole(response.currentRole || "");
+      setInvitations((invitationResponse.data || []) as Invitation[]);
+      setCurrentRole(memberResponse.currentRole || invitationResponse.currentRole || "");
       setDraftRoles(Object.fromEntries(data.map((member) => [member.user.id, member.role])));
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Não foi possível carregar os utilizadores da empresa.");
@@ -71,6 +91,52 @@ export default function B2BUsersPage() {
     }
   }
 
+  async function sendInvitation(event?: React.FormEvent<HTMLFormElement>, invitation?: Pick<Invitation, "email" | "role">) {
+    event?.preventDefault();
+    const email = (invitation?.email || inviteEmail).trim().toLowerCase();
+    const role = invitation?.role || inviteRole;
+    if (!email) {
+      setError("Indique o e-mail da pessoa que pretende convidar.");
+      return;
+    }
+    setInviting(true);
+    setError("");
+    setMessage("");
+    try {
+      await fetchWithAuth("/api/b2b/company/invitations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, role }),
+      });
+      setInviteEmail("");
+      setMessage("Convite enviado para " + email + ".");
+      await load();
+    } catch (inviteError) {
+      setError(inviteError instanceof Error ? inviteError.message : "Não foi possível enviar o convite.");
+    } finally {
+      setInviting(false);
+    }
+  }
+
+  async function cancelInvitation(invitationId: number) {
+    setCancellingId(invitationId);
+    setError("");
+    setMessage("");
+    try {
+      await fetchWithAuth("/api/b2b/company/invitations", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ invitationId, action: "CANCEL" }),
+      });
+      setMessage("Convite cancelado. O link anterior deixou de ser válido.");
+      await load();
+    } catch (cancelError) {
+      setError(cancelError instanceof Error ? cancelError.message : "Não foi possível cancelar o convite.");
+    } finally {
+      setCancellingId(null);
+    }
+  }
+
   const owner = currentRole === "OWNER";
 
   return (
@@ -97,6 +163,59 @@ export default function B2BUsersPage() {
           </div>
           <span className="rounded-full bg-slate-100 px-3 py-1.5 text-[9px] font-black text-slate-600">O seu perfil: {currentRole ? roleLabels[currentRole] : "—"}</span>
         </div>
+      </section>
+
+      <section className="card overflow-hidden">
+        <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+          <div>
+            <div className="flex items-center gap-2"><Mail size={17} className="text-[#1d6ac4]"/><h2 className="text-sm font-black text-slate-950">Convites empresariais</h2></div>
+            <p className="mt-1 text-[10px] text-slate-500">Convide colegas por e-mail. Os links são pessoais e expiram após sete dias.</p>
+          </div>
+          <span className="w-fit rounded-full bg-slate-100 px-3 py-1.5 text-[9px] font-black text-slate-600">{invitations.filter((invitation) => invitation.status === "PENDING").length} pendente(s)</span>
+        </div>
+        {owner ? (
+          <form onSubmit={(event) => void sendInvitation(event)} className="grid gap-3 border-b border-slate-100 bg-slate-50/60 p-4 sm:grid-cols-[minmax(0,1fr)_170px_auto] sm:items-end sm:p-5">
+            <label className="block text-[9px] font-black uppercase tracking-wide text-slate-500">E-mail do convidado
+              <input type="email" required maxLength={320} value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="colega@empresa.com" className="settings-input mt-2 normal-case" />
+            </label>
+            <label className="block text-[9px] font-black uppercase tracking-wide text-slate-500">Função inicial
+              <select value={inviteRole} onChange={(event) => setInviteRole(event.target.value as Invitation["role"])} className="settings-input mt-2 normal-case">
+                <option value="BUYER">Comprador</option>
+                <option value="APPROVER">Aprovador</option>
+              </select>
+            </label>
+            <button type="submit" disabled={inviting} className="btn-primary min-h-11 disabled:opacity-50">{inviting ? <Loader2 size={14} className="animate-spin"/> : <Send size={14}/>} {inviting ? "A enviar..." : "Enviar convite"}</button>
+          </form>
+        ) : (
+          <div className="border-b border-slate-100 bg-slate-50/60 p-4 text-[10px] leading-5 text-slate-500">Apenas o proprietário pode enviar, reenviar ou cancelar convites.</div>
+        )}
+        {invitations.length ? (
+          <div className="divide-y divide-slate-100">
+            {invitations.map((invitation) => {
+              const labels: Record<string, string> = { PENDING: "À espera de aceitação", DELIVERY_FAILED: "Falha no envio", EXPIRED: "Expirado", CANCELLED: "Cancelado", ACCEPTED: "Aceite" };
+              const tone = invitation.status === "ACCEPTED" ? "bg-emerald-50 text-emerald-700" : invitation.status === "PENDING" ? "bg-amber-50 text-amber-700" : invitation.status === "DELIVERY_FAILED" ? "bg-rose-50 text-rose-700" : "bg-slate-100 text-slate-600";
+              const manageable = owner && ["PENDING", "DELIVERY_FAILED", "EXPIRED"].includes(invitation.status);
+              return <article key={invitation.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+                <div className="flex min-w-0 items-start gap-3">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600"><Mail size={15}/></span>
+                  <div className="min-w-0">
+                    <p className="break-all text-xs font-black text-slate-900">{invitation.email}</p>
+                    <p className="mt-1 text-[9px] text-slate-500">{roleLabels[invitation.role]} · Criado em {new Date(invitation.createdAt).toLocaleDateString("pt-PT")}</p>
+                    {invitation.status === "PENDING" && <p className="mt-1 inline-flex items-center gap-1 text-[9px] text-slate-400"><Clock3 size={11}/> Expira em {new Date(invitation.expiresAt).toLocaleDateString("pt-PT")}</p>}
+                    {invitation.invitedBy?.name && <p className="mt-1 text-[9px] text-slate-400">Enviado por {invitation.invitedBy.name}</p>}
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={"w-fit rounded-full px-2.5 py-1.5 text-[9px] font-black " + tone}>{labels[invitation.status] || invitation.status}</span>
+                  {manageable && <button type="button" onClick={() => void sendInvitation(undefined, { email: invitation.email, role: invitation.role })} disabled={inviting || cancellingId === invitation.id} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[9px] font-black text-slate-700 hover:border-blue-200 hover:text-blue-700 disabled:opacity-50">{inviting ? <Loader2 size={12} className="animate-spin"/> : <RefreshCw size={12}/>} Reenviar</button>}
+                  {owner && ["PENDING", "DELIVERY_FAILED"].includes(invitation.status) && <button type="button" onClick={() => void cancelInvitation(invitation.id)} disabled={cancellingId === invitation.id} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-[9px] font-black text-rose-600 hover:bg-rose-50 disabled:opacity-50">{cancellingId === invitation.id ? <Loader2 size={12} className="animate-spin"/> : <XCircle size={12}/>} Cancelar</button>}
+                </div>
+              </article>;
+            })}
+          </div>
+        ) : (
+          <div className="p-8 text-center"><Mail size={26} className="mx-auto text-slate-300"/><p className="mt-2 text-xs font-bold text-slate-700">Ainda não foram enviados convites.</p><p className="mt-1 text-[10px] text-slate-500">Os convites enviados aparecerão aqui, com o estado da entrega e aceitação.</p></div>
+        )}
       </section>
 
       {loading ? (
