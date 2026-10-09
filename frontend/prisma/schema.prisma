@@ -75,6 +75,8 @@ model Product {
   attributes  ProductAttribute[]
   promotionProducts PromotionProduct[]
   b2bPriceRules B2BPriceRule[]
+  favorites UserFavorite[]
+  reviews ProductReview[]
 }
 
 model UserFavorite {
@@ -87,6 +89,31 @@ model UserFavorite {
   @@unique([userId, productId])
   @@index([userId, createdAt])
   @@index([productId])
+}
+
+model ProductReview {
+  id               Int      @id @default(autoincrement())
+  productId        Int
+  userId           Int
+  orderId          Int
+  rating           Int
+  title            String?
+  comment          String
+  status           String   @default("PENDING")
+  verifiedPurchase Boolean  @default(true)
+  helpfulCount     Int      @default(0)
+  moderatedBy      String?
+  moderatedAt      DateTime?
+  moderationNote   String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  product          Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  order            Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  @@unique([userId, productId])
+  @@index([productId, status, createdAt])
+  @@index([userId, createdAt])
+  @@index([orderId])
 }
 
 model ProductAttribute {
@@ -243,6 +270,8 @@ model User {
   companyMemberships CompanyMember[]
   b2bInvitationsSent B2BInvitation[] @relation("B2BInvitationSender")
   b2bInvitationsAccepted B2BInvitation[] @relation("B2BInvitationAcceptor")
+  favorites UserFavorite[]
+  reviewsWritten ProductReview[]
 }
 
 model Address {
@@ -363,6 +392,7 @@ model Order {
   inventoryReserved Boolean  @default(false)
   inventoryReservationExpiresAt DateTime?
   items          OrderItem[]
+  productReviews ProductReview[]
   payment        Payment?
   trackingEvents TrackingEvent[]
   returnRequests ReturnRequest[]
