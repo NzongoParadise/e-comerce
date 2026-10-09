@@ -162,5 +162,5 @@ function FinanceCard({ label, value, secondaryValue, detail, icon: Icon, tone }:
     warning: "bg-amber-50 text-amber-600",
     danger: "bg-rose-50 text-rose-600",
   };
-  return <article className="card p-4 sm:p-5"><span className={`flex h-10 w-10 items-center justify-center rounded-xl ${tones[tone]}`}><Icon size={18} /></span><p className="mt-4 text-[10px] font-bold text-slate-500">{label}</p><p className="mt-1 text-xl font-black tracking-tight text-slate-950">{value}</p><p className="mt-1 text-[9px] text-slate-400">{detail}</p></article>;
+  return <article className="card p-4 sm:p-5"><span className={`flex h-10 w-10 items-center justify-center rounded-xl ${tones[tone]}`}><Icon size={18} /></span><p className="mt-4 text-[10px] font-bold text-slate-500">{label}</p><p className="mt-1 text-xl font-black tracking-tight text-slate-950">{value}</p>{secondaryValue && <p className="mt-1 text-xs font-bold text-slate-600">{secondaryValue}</p>}<p className="mt-1 text-[9px] text-slate-400">{detail}</p></article>;
 }
