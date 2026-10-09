@@ -487,7 +487,7 @@ export async function GET(request: Request) {
   if (!subject) return errorResponse('Authentication required', 401);
   const parts = segments(request);
   if (!parts.length) {
-    const orders = await prisma.order.findMany({ where: { user: { externalId: subject } }, include: { items: true }, orderBy: { createdAt: 'desc' } });
+    const orders = await prisma.order.findMany({ where: { user: { externalId: subject } }, include: { items: true, payment: { select: { status: true } } }, orderBy: { createdAt: 'desc' } });
     return Response.json({ data: orders });
   }
 
