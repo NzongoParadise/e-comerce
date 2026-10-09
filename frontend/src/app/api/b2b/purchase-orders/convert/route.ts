@@ -136,6 +136,10 @@ export async function POST(request: Request) {
         where: { id: po.id },
         data: { orderId: order.id, status: "CONVERTED" },
       });
+      await tx.quote.updateMany({
+        where: { id: quote.id, companyId: membership.companyId, status: "APPROVED" },
+        data: { status: "CONVERTED" },
+      });
 
       return { order, po };
     });
