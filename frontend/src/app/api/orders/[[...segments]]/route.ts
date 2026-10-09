@@ -286,7 +286,8 @@ export async function POST(request: Request) {
       if (item.quantity > product.stock) throw new Error(`STOCK:${product.name}`);
       const eurPrice = product.prices.find((price) => price.market === 'PT' && price.currency === 'EUR')?.amount ?? product.basePrice;
       const configuredAoPrice = product.prices.find((price) => price.market === 'AO' && price.currency === 'AOA')?.amount;
-      if (parsed.data.country === 'AO' && configuredAoPrice === undefined) throw new Error('PRICE_NOT_CONFIGURED');
+      if (parsed.data.country === 'AO' && (configuredAoPrice === undefined || Number(configuredAoPrice) <= 0)) throw new Error('PRICE_NOT_CONFIGURED');
+      if (parsed.data.country === 'PT' && Number(eurPrice) <= 0) throw new Error('PRICE_NOT_CONFIGURED');
       const aoPrice = configuredAoPrice ?? 0;
       const serverSelectedPrice = parsed.data.country === 'PT' ? Number(eurPrice) : Number(aoPrice);
       const clientSelectedPrice = parsed.data.country === 'PT' ? item.priceEUR : item.priceKZ;
@@ -479,7 +480,7 @@ export async function POST(request: Request) {
     if (error instanceof Error && error.message.startsWith('STOCK:')) return errorResponse(`Stock insuficiente: ${error.message.slice(6)}`, 409);
     if (error instanceof Error && error.message === 'PRODUCT_MISMATCH') return errorResponse('Os dados do produto não correspondem ao catálogo atual', 400);
     if (error instanceof Error && error.message === 'PRICE_CHANGED') return errorResponse('O preço de um produto foi atualizado. Reveja o carrinho.', 409);
-    if (error instanceof Error && error.message === 'PRICE_NOT_CONFIGURED') return errorResponse('Um produto ainda não tem preço configurado para Angola. Remova-o do carrinho ou contacte o suporte.', 422);
+    if (error instanceof Error && error.message === 'PRICE_NOT_CONFIGURED') return errorResponse('Um produto ainda não tem um preço positivo configurado para o mercado selecionado. Reveja o carrinho ou contacte o suporte.', 422);
     if (error instanceof Error && ['PROMOTION_CHANGED', 'PROMOTION_LIMIT', 'PROMOTION_CUSTOMER_LIMIT'].includes(error.message)) return errorResponse('A promoção já não está disponível. Atualize o carrinho e tente novamente.', 409);
     if ((error as Prisma.PrismaClientKnownRequestError)?.code === 'P2034') return errorResponse('A operação concorreu com outra compra. Tente novamente.', 409);
     logger.error('Error creating order', { error: error instanceof Error ? error.message : error });
