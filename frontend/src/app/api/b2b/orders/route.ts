@@ -62,7 +62,7 @@ export async function GET(request: Request) {
   };
 
   try {
-    const [orders, filteredCount, allCount, totals, statusGroups] = await prisma.$transaction([
+    const [orders, filteredCount, allCount, totals, pendingCount, awaitingPaymentCount, confirmedCount, processingCount, shippedCount, deliveredCount, completedCount, cancelledCount] = await prisma.$transaction([
       prisma.order.findMany({
         where,
         include: { items: true, payment: true },
@@ -76,15 +76,26 @@ export async function GET(request: Request) {
         where: { companyId: membership.companyId },
         _sum: { totalEUR: true, totalKZ: true },
       }),
-      prisma.order.groupBy({
-        by: ["status"],
-        where: { companyId: membership.companyId },
-        orderBy: { status: "asc" },
-        _count: { status: true },
-      }),
+      prisma.order.count({ where: { companyId: membership.companyId, status: "PENDING" } }),
+      prisma.order.count({ where: { companyId: membership.companyId, status: "AWAITING_PAYMENT" } }),
+      prisma.order.count({ where: { companyId: membership.companyId, status: "PAYMENT_CONFIRMED" } }),
+      prisma.order.count({ where: { companyId: membership.companyId, status: "PROCESSING" } }),
+      prisma.order.count({ where: { companyId: membership.companyId, status: "SHIPPED" } }),
+      prisma.order.count({ where: { companyId: membership.companyId, status: "DELIVERED" } }),
+      prisma.order.count({ where: { companyId: membership.companyId, status: "COMPLETED" } }),
+      prisma.order.count({ where: { companyId: membership.companyId, status: "CANCELLED" } }),
     ]);
 
-    const statusCounts = Object.fromEntries(statusGroups.map((entry) => [entry.status, entry._count.status]));
+    const statusCounts = {
+      PENDING: pendingCount,
+      AWAITING_PAYMENT: awaitingPaymentCount,
+      PAYMENT_CONFIRMED: confirmedCount,
+      PROCESSING: processingCount,
+      SHIPPED: shippedCount,
+      DELIVERED: deliveredCount,
+      COMPLETED: completedCount,
+      CANCELLED: cancelledCount,
+    };
     const processing = (statusCounts.PROCESSING || 0) + (statusCounts.PENDING || 0);
     const completed = (statusCounts.COMPLETED || 0) + (statusCounts.DELIVERED || 0);
 
