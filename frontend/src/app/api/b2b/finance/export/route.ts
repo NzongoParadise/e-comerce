@@ -8,7 +8,9 @@ const EXPORT_LIMIT = 5000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function csvCell(value: unknown) {
-  const text = value === null || value === undefined ? "" : value instanceof Date ? value.toISOString() : String(value);
+  let text = value === null || value === undefined ? "" : value instanceof Date ? value.toISOString() : String(value);
+  // Guard spreadsheet consumers against formula injection through text fields.
+  if (/^[\\s\\u0000-\\u001f]*[=+@-]/.test(text)) text = "'" + text;
   return '"' + text.replace(/"/g, '""') + '"';
 }
 
