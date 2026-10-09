@@ -509,6 +509,21 @@ model ReturnRequest {
   updatedAt     DateTime @updatedAt
   order         Order    @relation(fields: [orderId], references: [id])
   user          User     @relation(fields: [userId], references: [id])
+  events        ReturnRequestEvent[]
+  @@index([status, createdAt])
+  @@index([userId, createdAt])
+}
+
+model ReturnRequestEvent {
+  id              Int      @id @default(autoincrement())
+  returnRequestId Int
+  previousStatus  String?
+  nextStatus      String
+  actorExternalId String
+  note            String?
+  createdAt       DateTime @default(now())
+  returnRequest   ReturnRequest @relation(fields: [returnRequestId], references: [id], onDelete: Cascade)
+  @@index([returnRequestId, createdAt])
 }
 
 
