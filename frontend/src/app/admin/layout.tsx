@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { BarChart3, Boxes, Building2, ClipboardList, LayoutDashboard, Megaphone, MessageCircle, Package, ShieldCheck, ShoppingBag, Truck, Users, Wallet, X } from "lucide-react";
+import { BarChart3, Boxes, Building2, ClipboardList, FileCheck2, LayoutDashboard, Megaphone, MessageCircle, Package, ShieldCheck, ShoppingBag, Truck, Users, Wallet, X } from "lucide-react";
 import { getDashboardDestination } from "@/lib/auth";
 import { fetchWithAuth } from "@/lib/api";
 import WorkspaceHeader from "@/components/layout/WorkspaceHeader";
