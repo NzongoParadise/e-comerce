@@ -27,11 +27,12 @@ function mapFavorite(item: {
     description: string | null;
     imageUrl: string | null;
     basePrice: unknown;
+    stock: number;
     prices: Array<{ market: string; currency: string; amount: unknown }>;
     category: { name: string };
     brand: { name: string };
   };
-}) {
+}, rating?: { average: number; count: number }) {
   const euro = item.product.prices.find((price) => price.market === "PT" && price.currency === "EUR")?.amount;
   const category = item.product.category.name;
   const description = item.product.description || "";
@@ -42,8 +43,14 @@ function mapFavorite(item: {
     category,
     specs: description,
     priceEUR: Number(euro ?? item.product.basePrice),
+    priceKZ: (() => {
+      const amount = item.product.prices.find((price) => price.market === "AO" && price.currency === "AOA")?.amount;
+      return amount === undefined ? undefined : Number(amount);
+    })(),
+    stock: item.product.stock,
     imageUrl: item.product.imageUrl || undefined,
-    reviews: 0,
+    rating: rating?.count ? rating.average : undefined,
+    reviews: rating?.count || 0,
     brand: item.product.brand.name,
     createdAt: item.createdAt,
   };
@@ -68,7 +75,23 @@ export async function GET(request: Request) {
     take: 500,
   });
 
-  return Response.json({ data: favorites.map(mapFavorite) });
+  const productIds = favorites.map((item) => item.productId);
+  const ratings = productIds.length
+    ? await prisma.productReview.groupBy({
+        by: ["productId"],
+        where: { productId: { in: productIds }, status: "APPROVED" },
+        _avg: { rating: true },
+        _count: { rating: true },
+      })
+    : [];
+  const ratingByProduct = new Map(ratings.map((rating) => [
+    rating.productId,
+    { average: Number(rating._avg.rating || 0), count: rating._count.rating },
+  ]));
+
+  return Response.json({
+    data: favorites.map((item) => mapFavorite(item, ratingByProduct.get(item.productId))),
+  });
 }
 
 export async function POST(request: Request) {
