@@ -60,6 +60,8 @@ export default function ProductDetailsPage() {
   const [reviewsLoading, setReviewsLoading] = useState(false);
   const [reviewSort, setReviewSort] = useState<"recent" | "highest" | "lowest">("recent");
   const [reviewRatingFilter, setReviewRatingFilter] = useState("ALL");
+  const [reviewPage, setReviewPage] = useState(1);
+  const [reviewPageCount, setReviewPageCount] = useState(1);
   const [reviewOrders, setReviewOrders] = useState<ReviewOrder[]>([]);
   const [reviewOrderId, setReviewOrderId] = useState("");
   const [reviewRating, setReviewRating] = useState(5);
@@ -78,11 +80,12 @@ export default function ProductDetailsPage() {
   async function loadReviews() {
     setReviewsLoading(true);
     try {
-      const query = new URLSearchParams({ page: "1", pageSize: "10", sort: reviewSort });
+      const query = new URLSearchParams({ page: String(reviewPage), pageSize: "10", sort: reviewSort });
       if (reviewRatingFilter !== "ALL") query.set("rating", reviewRatingFilter);
       const response = await fetchWithAuth("/api/products/" + encodeURIComponent(slug) + "/reviews?" + query.toString(), { cache: "no-store" });
       setReviews(response.data || []);
       setReviewSummary(response.summary || { averageRating: 0, count: 0, distribution: {} });
+      setReviewPageCount(Math.max(1, Number(response.meta?.pageCount || 1)));
     } catch {
       setReviews([]);
       setReviewSummary({ averageRating: 0, count: 0, distribution: {} });
@@ -148,7 +151,7 @@ export default function ProductDetailsPage() {
       .finally(() => setLoading(false));
   }, [slug]);
 
-  useEffect(() => { void loadReviews(); }, [slug, reviewSort, reviewRatingFilter]);
+  useEffect(() => { void loadReviews(); }, [slug, reviewSort, reviewRatingFilter, reviewPage]);
 
   useEffect(() => {
     if (!product) return;
@@ -472,7 +475,7 @@ export default function ProductDetailsPage() {
                   {[5,4,3,2,1].map((rating) => {
                     const count = Number(reviewSummary.distribution[String(rating)] || 0);
                     const percent = reviewSummary.count ? count / reviewSummary.count * 100 : 0;
-                    return <button key={rating} type="button" onClick={() => setReviewRatingFilter(reviewRatingFilter === String(rating) ? "ALL" : String(rating))} className="flex w-full items-center gap-2 text-left text-[10px]">
+                    return <button key={rating} type="button" onClick={() => { setReviewRatingFilter(reviewRatingFilter === String(rating) ? "ALL" : String(rating)); setReviewPage(1); }} className="flex w-full items-center gap-2 text-left text-[10px]">
                       <span className="w-12 shrink-0 font-bold text-slate-600">{rating} estrela(s)</span>
                       <span className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100"><span className="block h-full rounded-full bg-amber-400" style={{ width: percent + "%" }}/></span>
                       <span className="w-8 text-right text-slate-400">{count}</span>
@@ -483,8 +486,8 @@ export default function ProductDetailsPage() {
               <div className="flex flex-wrap items-center justify-between gap-3 border-y border-slate-100 py-3">
                 <div><h3 className="text-sm font-black text-slate-900">Opiniões dos clientes</h3><p className="mt-1 text-[10px] text-slate-500">Apenas avaliações aprovadas são apresentadas publicamente.</p></div>
                 <div className="flex flex-wrap gap-2">
-                  <select value={reviewRatingFilter} onChange={(event) => setReviewRatingFilter(event.target.value)} className="settings-input w-auto"><option value="ALL">Todas as estrelas</option>{[5,4,3,2,1].map((rating) => <option key={rating} value={rating}>{rating} estrela(s)</option>)}</select>
-                  <select value={reviewSort} onChange={(event) => setReviewSort(event.target.value as typeof reviewSort)} className="settings-input w-auto"><option value="recent">Mais recentes</option><option value="highest">Maior classificação</option><option value="lowest">Menor classificação</option></select>
+                  <select value={reviewRatingFilter} onChange={(event) => { setReviewRatingFilter(event.target.value); setReviewPage(1); }} className="settings-input w-auto"><option value="ALL">Todas as estrelas</option>{[5,4,3,2,1].map((rating) => <option key={rating} value={rating}>{rating} estrela(s)</option>)}</select>
+                  <select value={reviewSort} onChange={(event) => { setReviewSort(event.target.value as typeof reviewSort); setReviewPage(1); }} className="settings-input w-auto"><option value="recent">Mais recentes</option><option value="highest">Maior classificação</option><option value="lowest">Menor classificação</option></select>
                 </div>
               </div>
               {reviewsLoading ? <div className="space-y-3">{[1,2,3].map((id) => <div key={id} className="h-20 animate-pulse rounded-xl bg-slate-50"/>)}</div> : reviews.length ? <div className="divide-y divide-slate-100">{reviews.map((review) => <article key={review.id} className="py-4">
@@ -493,6 +496,15 @@ export default function ProductDetailsPage() {
                 {review.title && <h4 className="mt-2 text-xs font-black text-slate-800">{review.title}</h4>}
                 <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-slate-600">{review.comment}</p>
               </article>)}</div> : <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center"><Star size={25} className="mx-auto text-slate-300"/><p className="mt-2 text-xs font-bold text-slate-800">Ainda não há avaliações publicadas</p><p className="mt-1 text-[10px] text-slate-500">Depois da compra, pode partilhar a sua experiência com outros clientes.</p></div>}
+              {reviewPageCount > 1 && (
+                <nav aria-label="Paginação de avaliações" className="flex flex-col gap-3 rounded-xl border border-slate-100 bg-slate-50/60 p-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-[10px] text-slate-500">Página <strong className="text-slate-800">{reviewPage}</strong> de <strong className="text-slate-800">{reviewPageCount}</strong></p>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => setReviewPage((page) => Math.max(1, page - 1))} disabled={reviewPage <= 1 || reviewsLoading} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-black text-slate-700 disabled:cursor-not-allowed disabled:opacity-40">Anterior</button>
+                    <button type="button" onClick={() => setReviewPage((page) => Math.min(reviewPageCount, page + 1))} disabled={reviewPage >= reviewPageCount || reviewsLoading} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-black text-slate-700 disabled:cursor-not-allowed disabled:opacity-40">Seguinte</button>
+                  </div>
+                </nav>
+              )}
               <div className="rounded-xl border border-slate-200 p-4">
                 <h3 className="text-sm font-black text-slate-950">Avaliar este produto</h3>
                 <p className="mt-1 text-[10px] leading-5 text-slate-500">Só são aceites avaliações associadas a uma encomenda sua com pagamento confirmado. A publicação depende de moderação.</p>
