@@ -17,7 +17,7 @@ type CompanyForm = {
 };
 
 type Company = CompanyForm & { id: number; status: string; createdAt?: string; updatedAt?: string };
-type CompanyResponse = { data: Company | null; role?: string };
+type CompanyResponse = { data: Company | null; role?: string; revalidationRequired?: boolean };
 
 const emptyForm: CompanyForm = {
   legalName: "", tradeName: "", nif: "", email: "", phone: "", province: "", city: "", address: "", country: "Angola",
@@ -99,7 +99,7 @@ export default function B2BCompanyPage() {
       setCompany(response.data);
       setRole(response.role || (company ? role : "OWNER"));
       setForm(toForm(response.data));
-      setNotice(company ? "Dados da empresa atualizados." : "Empresa registada. Aguardamos a validação da equipa.");
+      setNotice(response.revalidationRequired ? "O país da empresa foi alterado. O perfil voltou para validação; compras empresariais serão reativadas após homologação." : company ? "Dados da empresa atualizados." : "Empresa registada. Aguardamos a validação da equipa.");
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Não foi possível guardar os dados da empresa.");
     } finally {
