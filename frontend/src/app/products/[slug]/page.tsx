@@ -10,7 +10,7 @@ import { getPromotionalUnitPrice } from "@/lib/promotions/pricing";
 import { usePublicPromotions } from "@/lib/promotions/usePublicPromotions";
 import Link from "next/link";
 import { RecommendationRail } from "@/components/features/catalog/RecommendationRail";
-import { ShoppingCart, Heart, Package, Truck, ShieldCheck, Zap, CreditCard, Maximize2, MapPin, CheckCircle2, Star, Send, Loader2 } from "lucide-react";
+import { ShoppingCart, Heart, Package, Truck, ShieldCheck, Zap, CreditCard, Maximize2, MapPin, CheckCircle2, Star, Send, Loader2, X } from "lucide-react";
 
 type ProductDetails = {
   id: number;
@@ -71,6 +71,21 @@ export default function ProductDetailsPage() {
   const [reviewNotice, setReviewNotice] = useState("");
   const [reviewError, setReviewError] = useState("");
   const [hasSession, setHasSession] = useState(false);
+  const [imageViewerOpen, setImageViewerOpen] = useState(false);
+
+  useEffect(() => {
+    if (!imageViewerOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setImageViewerOpen(false);
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [imageViewerOpen]);
 
   // The API currently does not expose product variants; do not invent selectable options in the storefront.
   const [purchaseMode, setPurchaseMode] = useState<"retail" | "wholesale">("retail");
@@ -278,25 +293,35 @@ export default function ProductDetailsPage() {
       </nav>
 
       <div className="mb-12 grid grid-cols-1 gap-6 md:grid-cols-12 lg:gap-8">
-        
-        {/* Left: Gallery */}
-        <div className="order-2 flex flex-row gap-2 overflow-x-auto md:order-1 md:col-span-1 md:flex-col">
-           {[1,2,3,4].map((i) => (
-             <button type="button" key={i} aria-label={`Selecionar vista ${i} de ${product.name}`} className={`h-16 w-16 shrink-0 overflow-hidden rounded-xl border bg-white p-1.5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm ${i===1 ? 'border-[#1d6ac4] ring-2 ring-[#1d6ac4]/10' : 'border-gray-200 hover:border-[#1d6ac4]'}`}>
-               {product.imageUrl ? <img src={product.imageUrl} alt={`${product.name} vista ${i}`} className="h-full w-full object-contain" /> : <Package size={24} className="text-gray-300" />}
-             </button>
-           ))}
-        </div>
 
-        {/* Center: Main Image */}
-          <div className="relative order-1 flex min-h-[380px] items-center justify-center overflow-hidden rounded-xl border border-gray-200 bg-white p-8 shadow-sm transition-transform duration-300 hover:-translate-y-0.5 md:order-2 md:col-span-5">
-            
-           {product.imageUrl ? <img src={product.imageUrl} alt={product.name} className="max-h-[330px] w-full object-contain transition-transform duration-500 hover:scale-[1.02]" /> : <Package size={160} className="text-gray-200" />}
-            <button type="button" className="absolute bottom-4 right-4 rounded-lg border border-gray-200 bg-white p-2 text-gray-500 shadow-sm transition hover:border-[#1d6ac4] hover:text-[#1d6ac4]" aria-label="Ver imagem em ecrã inteiro"><Maximize2 size={16} /></button>
+        {/* Product image: render only the image actually provided by the catalogue API. */}
+        <div className="relative order-1 flex min-h-[320px] items-center justify-center overflow-hidden rounded-xl border border-gray-200 bg-white p-6 shadow-sm sm:min-h-[420px] sm:p-8 md:col-span-6">
+          {product.imageUrl ? (
+            <img
+              src={product.imageUrl}
+              alt={product.name}
+              className="max-h-[460px] w-full object-contain transition-transform duration-500 hover:scale-[1.02]"
+            />
+          ) : (
+            <div className="flex flex-col items-center gap-3 text-gray-300">
+              <Package size={112} strokeWidth={1.2} />
+              <span className="text-xs font-semibold text-gray-400">Imagem ainda não disponível</span>
+            </div>
+          )}
+          {product.imageUrl && (
+            <button
+              type="button"
+              onClick={() => setImageViewerOpen(true)}
+              className="absolute bottom-4 right-4 inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-600 shadow-sm transition hover:border-[#1d6ac4] hover:text-[#1d6ac4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1d6ac4] focus-visible:ring-offset-2"
+              aria-label="Abrir imagem do produto em ecrã inteiro"
+            >
+              <Maximize2 size={16} /> Ampliar imagem
+            </button>
+          )}
         </div>
 
         {/* Right: Product Info & Buy Panel */}
-        <div className="order-3 grid grid-cols-1 gap-8 md:col-span-6 lg:grid-cols-2">
+        <div className="order-2 grid grid-cols-1 gap-8 md:col-span-6 lg:grid-cols-2">
           {/* Info */}
           <div>
             <div className="mb-3 flex items-center justify-between gap-2 text-xs font-bold uppercase tracking-wide text-gray-500">
