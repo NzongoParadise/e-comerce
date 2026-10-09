@@ -17,9 +17,18 @@ export async function GET(request: Request) {
     orderBy: { createdAt: "desc" },
     take: 100,
   });
-  const totals = payments.reduce((acc, payment) => {
+  const paymentGroups = await prisma.payment.groupBy({
+    by: ["currency", "status"],
+    where: { order: { companyId: membership.companyId } },
+    _sum: { amountEUR: true, amountKZ: true },
+  });
+
+  // KPIs are aggregated from the complete ledger; the table remains a recent-activity view.
+  const totals = paymentGroups.reduce((acc, payment) => {
     const isEUR = payment.currency === "EUR";
-    const amount = isEUR ? Number(payment.amountEUR) : Number(payment.amountKZ);
+    const amount = isEUR
+      ? Number(payment._sum.amountEUR || 0)
+      : Number(payment._sum.amountKZ || 0);
     if (payment.status === "PAID") {
       if (isEUR) acc.paidEUR += amount;
       else acc.paidAOA += amount;
