@@ -9,7 +9,7 @@ import { fetchWithAuth } from "@/lib/api";
 import WorkspaceHeader from "@/components/layout/WorkspaceHeader";
 
 const groups = [
-  { label: "Operação", items: [["Visão geral", "/admin", LayoutDashboard], ["Vendas", "/admin/orders", ShoppingBag], ["Produtos", "/admin/products", Package], ["Stock", "/admin/stock", Boxes], ["Fornecedores", "/admin/suppliers", Truck]] },
+  { label: "Operação", items: [["Visão geral", "/admin", LayoutDashboard], ["Vendas", "/admin/orders", ShoppingBag], ["Pós-venda", "/admin/returns", ClipboardList], ["Produtos", "/admin/products", Package], ["Stock", "/admin/stock", Boxes], ["Fornecedores", "/admin/suppliers", Truck]] },
   { label: "B2B", items: [["Operação empresarial", "/admin/b2b", Building2]] },
   { label: "Atendimento", items: [["Chat de suporte", "/admin/support", MessageCircle]] },
   { label: "Clientes", items: [["Clientes", "/admin/clients", Users], ["Utilizadores", "/admin/users", Users]] },
