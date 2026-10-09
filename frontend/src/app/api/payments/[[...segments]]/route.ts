@@ -374,6 +374,10 @@ async function handleMulticaixaWebhook(request: Request) {
       link: payment.order.companyId ? "/b2b/encomendas" : `/account/orders/${payment.order.id}`,
       dedupeKey: `order:${payment.order.id}:payment:paid`,
     }).catch((error) => logger.error("Unable to create Multicaixa payment notification", { orderId: payment.order.id, error: error instanceof Error ? error.message : error }));
+    await issueInvoiceForPaidOrder(payment.order.id).catch((error) => logger.error("Invoice issuance after MULTICAIXA confirmation failed", {
+      orderId: payment.order.id,
+      error: error instanceof Error ? error.message : error,
+    }));
   } else if (outcome === "FAILED") {
     await createNotificationIfAllowed({
       userId: payment.order.userId,
