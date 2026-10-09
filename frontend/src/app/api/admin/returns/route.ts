@@ -78,6 +78,14 @@ export async function PATCH(request: Request) {
         },
       });
       if (!current) throw new Error("RETURN_NOT_FOUND");
+      if (current.status === parsed.data.status) {
+        return {
+          request: current,
+          userId: current.user.id,
+          orderNumber: current.order.orderNumber,
+          idempotent: true,
+        };
+      }
       const allowedTransition = (transitions[current.status] || []).includes(parsed.data.status) ||
         (current.type === "COMPLAINT" && current.status === "APPROVED" && parsed.data.status === "COMPLETED");
       if (!allowedTransition) throw new Error("INVALID_TRANSITION");
@@ -118,7 +126,7 @@ export async function PATCH(request: Request) {
         },
       });
 
-      return { request: updated, userId: current.user.id, orderNumber: current.order.orderNumber };
+      return { request: updated, userId: current.user.id, orderNumber: current.order.orderNumber, idempotent: false };
     });
 
     const labels: Record<string, string> = {
@@ -132,7 +140,7 @@ export async function PATCH(request: Request) {
       COMPLETED: "Concluída",
     };
 
-    await createNotificationIfAllowed({
+    if (!result.idempotent) await createNotificationIfAllowed({
       userId: result.userId,
       channel: "orderUpdates",
       type: "RETURN_STATUS_CHANGED",
@@ -142,7 +150,7 @@ export async function PATCH(request: Request) {
       dedupeKey: "return:" + result.request.id + ":status:" + result.request.status,
     }).catch(() => undefined);
 
-    return Response.json({ data: result.request });
+    return Response.json({ data: result.request, idempotent: result.idempotent });
   } catch (error) {
     const code = error instanceof Error ? error.message : "";
     if (code === "RETURN_NOT_FOUND") return errorResponse("Solicitação não encontrada.", 404);
