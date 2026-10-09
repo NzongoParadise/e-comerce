@@ -12,6 +12,7 @@ const providerUrls = { google: process.env.NEXT_PUBLIC_GOOGLE_AUTH_URL, apple: p
 
 function getPostLoginDestination(profile: Parameters<typeof getDashboardDestination>[0]) {
   const next = new URLSearchParams(window.location.search).get("next");
+  if (profile?.accessRole === "CUSTOMER" && next && /^\/convite-empresa(?:\?.*)?$/.test(next)) return next;
   if (profile?.accessRole === "CUSTOMER" && profile.accountType === "B2B" && next && /^\/b2b(?:\/|$)/.test(next)) {
     return next;
   }
