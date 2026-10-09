@@ -117,7 +117,29 @@ model Company {
   orders Order[]
   priceRules B2BPriceRule[]
   purchaseOrders PurchaseOrder[]
+  invitations B2BInvitation[]
   @@index([status])
+}
+
+model B2BInvitation {
+  id Int @id @default(autoincrement())
+  companyId Int
+  email String
+  role String @default("BUYER")
+  status String @default("PENDING")
+  tokenHash String @unique
+  invitedByUserId Int
+  acceptedByUserId Int?
+  expiresAt DateTime
+  acceptedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  invitedBy User @relation("B2BInvitationSender", fields: [invitedByUserId], references: [id], onDelete: Cascade)
+  acceptedBy User? @relation("B2BInvitationAcceptor", fields: [acceptedByUserId], references: [id], onDelete: SetNull)
+  @@index([companyId, status, expiresAt])
+  @@index([email, status, expiresAt])
+  @@index([companyId, email])
 }
 
 model CompanyMember {
@@ -207,6 +229,8 @@ model User {
   supportMessages SupportMessage[]
   company Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
   companyMemberships CompanyMember[]
+  b2bInvitationsSent B2BInvitation[] @relation("B2BInvitationSender")
+  b2bInvitationsAccepted B2BInvitation[] @relation("B2BInvitationAcceptor")
 }
 
 model Address {
