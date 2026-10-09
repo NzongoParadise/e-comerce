@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/cron/issue-missing-invoices",
-      "schedule": "23 * * * *"
+      "schedule": "37 3 * * *"
     }
   ]
 }
