@@ -1,11 +1,12 @@
 import { prisma } from "@/lib/server/prisma";
 
-export type CommunicationChannel = "promotions" | "newProducts" | "orderUpdates";
+export type CommunicationChannel = "promotions" | "newProducts" | "orderUpdates" | "commercialUpdates";
 
-const preferenceField: Record<CommunicationChannel, "promotions" | "newProducts" | "orderUpdates"> = {
+const preferenceField: Record<CommunicationChannel, "promotions" | "newProducts" | "orderUpdates" | "commercialUpdates"> = {
   promotions: "promotions",
   newProducts: "newProducts",
   orderUpdates: "orderUpdates",
+  commercialUpdates: "commercialUpdates",
 };
 
 export async function createNotificationIfAllowed(input: {
@@ -22,7 +23,7 @@ export async function createNotificationIfAllowed(input: {
     where: { userId: input.userId },
     create: { userId: input.userId },
     update: {},
-    select: { promotions: true, newProducts: true, orderUpdates: true },
+    select: { promotions: true, newProducts: true, orderUpdates: true, commercialUpdates: true },
   });
 
   if (!preference[field]) return null;
