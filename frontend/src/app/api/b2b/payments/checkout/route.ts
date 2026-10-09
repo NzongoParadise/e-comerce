@@ -7,6 +7,7 @@ import { multicaixaProvider } from "@/lib/server/payments/multicaixaProvider";
 import { cancelAwaitingPaymentAndReleaseStock } from "@/lib/server/orders/inventory";
 import { logger } from "@/lib/server/logger";
 import { createNotificationIfAllowed } from "@/lib/server/notifications";
+import { issueInvoiceForPaidOrder } from "@/lib/server/finance/issueInvoiceForPaidOrder";
 
 export const runtime = "nodejs";
 
@@ -385,6 +386,10 @@ export async function POST(request: Request) {
         link: "/b2b/encomendas",
         dedupeKey: `order:${po.order.id}:payment:paid`,
       }).catch(() => undefined);
+      await issueInvoiceForPaidOrder(po.order.id).catch((error) => logger.error("B2B invoice issuance after immediate payment confirmation failed", {
+        orderId: po.order!.id,
+        error: error instanceof Error ? error.message : error,
+      }));
     } else if (terminalFailure) {
       await prisma.$transaction(async (tx) => {
         const cancelled = await cancelAwaitingPaymentAndReleaseStock(
