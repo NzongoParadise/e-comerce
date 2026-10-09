@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ArrowUpRight, CheckCircle2, Clock3, ExternalLink, FileCheck2, RefreshCw, WalletCards, XCircle } from "lucide-react";
+import { ArrowUpRight, CheckCircle2, Clock3, Download, ExternalLink, FileCheck2, Loader2, RefreshCw, WalletCards, XCircle } from "lucide-react";
 import { fetchWithAuth } from "@/lib/api";
 import Link from "next/link";
 
@@ -49,6 +49,9 @@ export default function B2BFinancePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState("ALL");
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
+  const [exportMessage, setExportMessage] = useState("");
 
   async function load() {
     setLoading(true);
@@ -60,6 +63,47 @@ export default function B2BFinancePage() {
       setError(loadError instanceof Error ? loadError.message : "Não foi possível carregar o financeiro empresarial.");
     } finally {
       setLoading(false);
+    }
+  }
+
+
+  async function exportCsv() {
+    setExporting(true);
+    setExportError("");
+    setExportMessage("");
+    try {
+      const token = localStorage.getItem("jwt_token");
+      if (!token) throw new Error("Inicie sessão antes de exportar o financeiro.");
+      const to = new Date();
+      const from = new Date(to.getTime() - 365 * 24 * 60 * 60 * 1000);
+      const params = new URLSearchParams({
+        from: from.toISOString().slice(0, 10),
+        to: to.toISOString().slice(0, 10),
+      });
+      const response = await fetch("/api/b2b/finance/export?" + params.toString(), {
+        headers: { Authorization: "Bearer " + token },
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null) as { error?: string; message?: string } | null;
+        throw new Error(payload?.error || payload?.message || "Não foi possível exportar o financeiro.");
+      }
+      const blob = await response.blob();
+      const disposition = response.headers.get("content-disposition") || "";
+      const fileName = disposition.match(/filename="([^"]+)"/i)?.[1] || "financeiro-empresarial.csv";
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+      setExportMessage("Exportação criada para os últimos 12 meses, mantendo os valores na moeda de origem.");
+    } catch (exportFailure) {
+      setExportError(exportFailure instanceof Error ? exportFailure.message : "Não foi possível exportar o financeiro.");
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -81,8 +125,14 @@ export default function B2BFinancePage() {
           <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">Financeiro empresarial</h1>
           <p className="mt-2 text-sm text-slate-500">{data.company.tradeName || data.company.legalName} · NIF {data.company.nif}</p>
         </div>
-        <button type="button" onClick={() => void load()} className="btn-secondary"><RefreshCw size={14} /> Atualizar</button>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => void exportCsv()} disabled={exporting || loading} className="btn-secondary disabled:opacity-50">{exporting ? <Loader2 size={14} className="animate-spin"/> : <Download size={14}/>} {exporting ? "A exportar..." : "Exportar CSV"}</button>
+          <button type="button" onClick={() => void load()} className="btn-secondary"><RefreshCw size={14} /> Atualizar</button>
+        </div>
       </header>
+
+      {exportError && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-semibold text-rose-800">{exportError}</div>}
+      {exportMessage && <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-semibold text-emerald-800">{exportMessage}</div>}
 
       <section className="grid gap-3 md:grid-cols-3">
         <FinanceCard label="Total pago" value={money(data.totals.paidEUR || 0, "EUR")} secondaryValue={money(data.totals.paidAOA || 0, "AOA")} icon={CheckCircle2} tone="success" detail="Pagamentos confirmados por moeda" />
@@ -123,7 +173,7 @@ export default function B2BFinancePage() {
         )}
       </section>
 
-      <section className="card overflow-hidden">
+      <section id="b2b-invoices" className="card overflow-hidden">
         <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
           <div className="flex items-center gap-2"><FileCheck2 size={17} className="text-blue-700"/><div><h2 className="text-sm font-black text-slate-950">Faturas empresariais</h2><p className="mt-1 text-[10px] text-slate-500">Documentos emitidos para encomendas da empresa.</p></div></div>
           <Link href="/account/invoices" className="inline-flex items-center gap-1.5 text-[10px] font-black text-blue-700 hover:underline">Abrir biblioteca de faturas <ExternalLink size={12}/></Link>
