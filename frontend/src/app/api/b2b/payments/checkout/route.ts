@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/server/prisma";
 import { authenticate, errorResponse, readJson, userSubject } from "@/lib/server/api";
@@ -163,6 +164,34 @@ export async function POST(request: Request) {
 
   const currentPayment = await prisma.payment.findUnique({ where: { orderId: po.order.id } });
   if (currentPayment?.status === "PAID") return errorResponse("A encomenda já está paga.", 409);
+
+  if (po.order.status === "AWAITING_PAYMENT" &&
+      po.order.inventoryReserved &&
+      po.order.inventoryReservationExpiresAt &&
+      po.order.inventoryReservationExpiresAt.getTime() <= Date.now()) {
+    const released = await prisma.$transaction(async (tx) => {
+      const cancelled = await cancelAwaitingPaymentAndReleaseStock(
+        tx,
+        po.order!.id,
+        po.order!.items.map((item) => ({ productId: item.productId, quantity: item.quantity })),
+        "EXPIRED",
+        "Reserva empresarial expirada antes da confirmação do pagamento.",
+      );
+      if (cancelled) {
+        await tx.purchaseOrder.updateMany({
+          where: { id: po.id, orderId: po.order!.id, status: "CONVERTED" },
+          data: { status: "APPROVED", orderId: null, approvedBy: null, approvedAt: null },
+        });
+      }
+      return cancelled;
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    if (released) return errorResponse("A reserva expirou. O stock foi libertado; volte a converter o Purchase Order para iniciar uma nova tentativa.", 409);
+  }
+
+  if (currentPayment && ["CREATED", "PROCESSING"].includes(currentPayment.status) &&
+      Date.now() - currentPayment.updatedAt.getTime() < 120_000) {
+    return errorResponse("Já existe uma tentativa de pagamento em preparação. Atualize as encomendas antes de tentar novamente.", 409);
+  }
   if (currentPayment?.status === "AWAITING_PAYMENT" && currentPayment.method === method &&
       currentPayment.expiresAt && currentPayment.expiresAt.getTime() > Date.now()) {
     const checkoutUrl = currentPayment.reference?.startsWith("cs_") ? await stripeSessionUrl(currentPayment.reference) : null;
@@ -179,8 +208,28 @@ export async function POST(request: Request) {
 
   try {
     const prepared = await prisma.$transaction(async (tx) => {
-      const payment = await tx.payment.findUnique({ where: { orderId: po.order!.id } });
+      const order = await tx.order.findUnique({
+        where: { id: po.order!.id },
+        include: { items: true, payment: true },
+      });
+      if (!order || order.companyId !== membership.companyId) throw new Error("ORDER_NOT_FOUND");
+      if (order.status === "CANCELLED") throw new Error("ORDER_CANCELLED");
+      const payment = order.payment;
       if (payment?.status === "PAID") throw new Error("ALREADY_PAID");
+      if (payment && ["CREATED", "PROCESSING"].includes(payment.status) &&
+          Date.now() - payment.updatedAt.getTime() < 120_000) {
+        throw new Error("PAYMENT_ATTEMPT_IN_PROGRESS");
+      }
+
+      if (!order.inventoryReserved) {
+        for (const item of order.items) {
+          const reserved = await tx.product.updateMany({
+            where: { id: item.productId, stock: { gte: item.quantity } },
+            data: { stock: { decrement: item.quantity } },
+          });
+          if (reserved.count !== 1) throw new Error(`STOCK:${item.name}`);
+        }
+      }
 
       const paymentData = {
         provider: method === "STRIPE_CHECKOUT" ? "stripe" : "multicaixa",
@@ -208,12 +257,17 @@ export async function POST(request: Request) {
       });
 
       await tx.order.update({
-        where: { id: po.order!.id },
-        data: { status: "AWAITING_PAYMENT", paymentMethod: method },
+        where: { id: order.id },
+        data: {
+          status: "AWAITING_PAYMENT",
+          paymentMethod: method,
+          inventoryReserved: true,
+          inventoryReservationExpiresAt: new Date(Date.now() + 15 * 60 * 1000),
+        },
       });
 
       return { payment: savedPayment, attempt };
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5000, timeout: 10000 });
     paymentId = prepared.payment.id;
     attemptId = prepared.attempt.id;
 
@@ -248,14 +302,21 @@ export async function POST(request: Request) {
       providerPaymentId = sessionId;
       providerPaymentCreated = true;
 
-      const updated = await prisma.payment.update({
-        where: { id: paymentId },
-        data: { status: "AWAITING_PAYMENT", providerPaymentId: sessionId, reference: sessionId, expiresAt },
-      });
-      await prisma.paymentAttempt.update({
-        where: { id: attemptId },
-        data: { providerPaymentId: sessionId, status: "CREATED" },
-      });
+      const updated = await prisma.$transaction(async (tx) => {
+        const saved = await tx.payment.update({
+          where: { id: paymentId! },
+          data: { status: "AWAITING_PAYMENT", providerPaymentId: sessionId, reference: sessionId, expiresAt },
+        });
+        await tx.paymentAttempt.update({
+          where: { id: attemptId! },
+          data: { providerPaymentId: sessionId, status: "CREATED" },
+        });
+        await tx.order.update({
+          where: { id: po.order!.id },
+          data: { status: "AWAITING_PAYMENT", paymentMethod: method, inventoryReserved: true, inventoryReservationExpiresAt: expiresAt },
+        });
+        return saved;
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5000, timeout: 10000 });
       return Response.json({ data: { payment: updated, checkoutUrl: sessionUrl, sessionId }, status: "AWAITING_PAYMENT" }, { status: 201 });
     }
 
@@ -283,26 +344,36 @@ export async function POST(request: Request) {
     const isPaid = result.status === "PAID";
     const terminalFailure = ["FAILED", "EXPIRED", "CANCELLED"].includes(result.status);
     const nextStatus = isPaid ? "PAID" : terminalFailure ? result.status : "AWAITING_PAYMENT";
-    const updated = await prisma.payment.update({
-      where: { id: paymentId },
-      data: {
-        status: nextStatus,
-        providerPaymentId: result.providerPaymentId,
-        entity: result.entity,
-        referenceNumber: result.referenceNumber,
-        expiresAt: result.expiresAt,
-        phoneNumber: result.phoneNumber ?? null,
-        paidAt: isPaid ? new Date() : null,
-        failedAt: terminalFailure ? new Date() : null,
-      },
-    });
-    await prisma.paymentAttempt.update({
-      where: { id: attemptId },
-      data: { providerPaymentId: result.providerPaymentId, status: result.status },
-    });
+    const expiresAt = result.expiresAt ?? new Date(Date.now() + 30 * 60 * 1000);
+    const updated = await prisma.$transaction(async (tx) => {
+      const saved = await tx.payment.update({
+        where: { id: paymentId! },
+        data: {
+          status: nextStatus,
+          providerPaymentId: result.providerPaymentId,
+          entity: result.entity,
+          referenceNumber: result.referenceNumber,
+          expiresAt: result.expiresAt,
+          phoneNumber: result.phoneNumber ?? null,
+          paidAt: isPaid ? new Date() : null,
+          failedAt: terminalFailure ? new Date() : null,
+        },
+      });
+      await tx.paymentAttempt.update({
+        where: { id: attemptId! },
+        data: { providerPaymentId: result.providerPaymentId, status: result.status },
+      });
+      await tx.order.update({
+        where: { id: po.order!.id },
+        data: isPaid
+          ? { status: "PAYMENT_CONFIRMED", inventoryReserved: false, inventoryReservationExpiresAt: null }
+          : { status: terminalFailure ? "AWAITING_PAYMENT" : "AWAITING_PAYMENT", inventoryReserved: true, inventoryReservationExpiresAt: expiresAt },
+      });
+      return saved;
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5000, timeout: 10000 });
 
     if (isPaid) {
-      await prisma.order.update({ where: { id: po.order.id }, data: { status: "PAYMENT_CONFIRMED" } });
+      await prisma.order.update({ where: { id: po.order.id }, data: { status: "PAYMENT_CONFIRMED", inventoryReserved: false, inventoryReservationExpiresAt: null } });
       await createNotificationIfAllowed({
         userId: po.order.userId,
         channel: "orderUpdates",
@@ -378,6 +449,11 @@ export async function POST(request: Request) {
       });
     }
     if (error instanceof Error && error.message === "ALREADY_PAID") return errorResponse("A encomenda já está paga.", 409);
+    if (error instanceof Error && error.message === "PAYMENT_ATTEMPT_IN_PROGRESS") return errorResponse("Já existe uma tentativa de pagamento em preparação. Atualize as encomendas antes de tentar novamente.", 409);
+    if (error instanceof Error && error.message === "ORDER_NOT_FOUND") return errorResponse("A encomenda empresarial já não está disponível.", 409);
+    if (error instanceof Error && error.message === "ORDER_CANCELLED") return errorResponse("A encomenda foi cancelada. Volte a converter o Purchase Order.", 409);
+    if (error instanceof Error && error.message.startsWith("STOCK:")) return errorResponse(`Stock insuficiente: ${error.message.slice(6)}`, 409);
+    if ((error as { code?: string })?.code === "P2034") return errorResponse("Outra tentativa alterou a reserva de stock. Atualize as encomendas e tente de novo.", 409);
     if (error instanceof Error && error.message === "MULTICAIXA_NOT_CONFIGURED") return errorResponse("Gateway MULTICAIXA não configurado.", 503);
     if (error instanceof Error && error.message === "STRIPE_NOT_CONFIGURED") return errorResponse("Stripe não está configurado no ambiente.", 503);
     return errorResponse("Não foi possível iniciar o pagamento empresarial. Se a tentativa tiver criado uma sessão, atualize as encomendas antes de tentar de novo.", 502);
