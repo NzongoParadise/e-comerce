@@ -12,7 +12,9 @@
     "validate:production-env": "node scripts/validate-production-env.mjs",
     "db:migrate": "node scripts/prisma-with-env.mjs migrate deploy --schema prisma/schema.prisma",
     "build:ci": "npm run prisma:generate && next build",
-    "db:migrate:deploy": "npm run db:migrate"
+    "db:migrate:deploy": "npm run db:migrate",
+    "test:e2e": "node --test e2e/commerce.e2e.test.mjs",
+    "test:e2e:smoke": "node --test e2e/commerce.e2e.test.mjs"
   },
   "dependencies": {
     "@prisma/client": "^5.19.1",
