@@ -9,6 +9,8 @@ type Quote = {
   id: number;
   quoteNumber: string;
   status: string;
+  market: "AO" | "PT";
+  currency: "AOA" | "EUR";
   companyName: string;
   companyNif: string;
   email: string;
@@ -19,6 +21,12 @@ type Quote = {
   user?: { name?: string | null; email?: string | null } | null;
   purchaseOrders: Array<{ id: number; poNumber: string; status: string; orderId?: number | null }>;
 };
+
+function formatQuoteMoney(value: string | number, currency: string) {
+  return currency === "EUR"
+    ? "€ " + Number(value).toLocaleString("pt-PT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : "Kz " + Number(value).toLocaleString("pt-AO", { maximumFractionDigits: 0 });
+}
 
 type Rule = {
   id: number;
@@ -136,11 +144,11 @@ export default function AdminB2BPage() {
           quotes.filter(q => ["SUBMITTED","UNDER_REVIEW"].includes(q.status)).map((quote) => (
             <article key={quote.id} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex flex-wrap items-start justify-between gap-4">
-                <div><h2 className="font-black">{quote.quoteNumber}</h2><p className="mt-1 text-sm font-semibold">{quote.company?.tradeName || quote.companyName}</p><p className="text-xs text-slate-500">NIF {quote.companyNif} · {quote.email} · {new Date(quote.createdAt).toLocaleString("pt-PT")}</p></div>
+                <div><h2 className="font-black">{quote.quoteNumber}</h2><p className="mt-1 text-sm font-semibold">{quote.company?.tradeName || quote.companyName}</p><p className="text-xs text-slate-500">NIF {quote.companyNif} · {quote.email} · {new Date(quote.createdAt).toLocaleString("pt-PT")}</p><p className="mt-1 text-[10px] font-black uppercase tracking-wide text-blue-700">Mercado {quote.market} · {quote.currency}</p></div>
                 <span className="rounded-full bg-amber-50 px-3 py-1 text-[10px] font-black text-amber-700">{quote.status}</span>
               </div>
               <div className="mt-4 divide-y divide-slate-100 border-y border-slate-100">
-                {quote.items.map((item) => <div key={item.productId} className="flex justify-between gap-4 py-2 text-sm"><span>{item.quantity} × {item.name}</span><strong>{Number(item.subtotal).toLocaleString("pt-AO")} Kz</strong></div>)}
+                {quote.items.map((item) => <div key={item.productId} className="flex justify-between gap-4 py-2 text-sm"><span>{item.quantity} × {item.name}</span><strong>{formatQuoteMoney(item.subtotal, quote.currency)}</strong></div>)}
               </div>
               <label className="mt-4 block text-[9px] font-black uppercase tracking-wide text-slate-500">
                 Nota de decisão <span className="font-medium normal-case tracking-normal text-slate-400">— obrigatória para rejeitar</span>
