@@ -4,27 +4,29 @@ A suite **commerce.e2e.test.mjs** usa **node:test** e **fetch** nativos do Node 
 
 ## Smoke no CI
 
-O workflow **.github/workflows/ecommerce-senior-quality-gate.yml** constrói a aplicação, inicia o servidor Next.js e executa o smoke HTTP sobre páginas públicas e APIs protegidas:
+O workflow **.github/workflows/ecommerce-senior-quality-gate.yml** constrói a aplicação, inicia o servidor Next.js e executa o smoke HTTP sobre páginas públicas e APIs protegidas.
 
-\`\`\`bash
-cd frontend
-E2E_BASE_URL=http://127.0.0.1:3000 npm run test:e2e:smoke
-\`\`\`
+Com a aplicação local em execução, o comando é:
+
+    cd frontend
+    E2E_BASE_URL=http://127.0.0.1:3000 npm run test:e2e:smoke
 
 Sem tokens e sem os gates de mutação, a suite não cria dados nem inicia pagamentos.
 
 ## Percursos completos em staging
 
-Executar o workflow manual **Commerce Staging End-to-End** em **.github/workflows/commerce-staging-e2e.yml**. Configure primeiro os GitHub Actions **secrets** e **variables** indicados abaixo. O workflow recusa execução se o hostname de destino não estiver explicitamente autorizado.
+Executar o workflow manual **Commerce Staging End-to-End** em **.github/workflows/commerce-staging-e2e.yml**. Configure primeiro os GitHub Actions secrets e variables indicados abaixo. O workflow recusa execução se o hostname de destino não estiver explicitamente autorizado.
 
-Secrets necessários:
+### Secrets necessários
+
 - **E2E_BASE_URL** — URL de staging.
 - **E2E_B2C_TOKEN** — sessão/token de um cliente que possui as encomendas de teste.
 - **E2E_B2B_OWNER_TOKEN** e **E2E_B2B_BUYER_TOKEN** — membros de uma empresa B2B ativa; o OWNER inicia o pagamento e o BUYER deve receber 403.
 - **E2E_ADMIN_TOKEN** — sessão/token administrativo para aprovar cotações, moderar devoluções e consultar/emitir faturas.
 - **E2E_CRON_SECRET** — o mesmo segredo configurado como **CRON_SECRET** em staging; nunca reutilize segredo de produção.
 
-Variables necessárias:
+### Variables necessárias
+
 - **E2E_MUTATION_ALLOWED_HOSTS** — hostname exato de staging, sem protocolo, por exemplo **shop-staging.example.test**. Não inclua domínio de produção.
 - **E2E_PRODUCT_ID_PT** e **E2E_PRODUCT_ID_AO** — artigos de teste com preço positivo configurado em EUR e AOA, respetivamente, e stock suficiente.
 - **E2E_B2B_PRODUCT_ID** — artigo de teste com preço de mercado ou regra B2B aplicável à empresa associada ao token OWNER.
