@@ -8,6 +8,8 @@ type Quote = { id: number; quoteNumber: string; status: string; createdAt: strin
 type Product = { id: number; name: string };
 
 const statusLabels: Record<string, string> = {
+  SUBMITTED: "Submetida",
+  UNDER_REVIEW: "Em análise",
   PENDING: "Em análise",
   REVIEW: "Em análise",
   APPROVED: "Aprovada",
