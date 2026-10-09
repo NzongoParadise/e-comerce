@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import AppShell from "@/components/layout/AppShell";
+import CookieConsent from "@/components/layout/CookieConsent";
 
 import { CartProvider } from "@/context/CartContext";
 import { MarketProvider } from "@/context/MarketContext";
@@ -48,6 +49,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <CartProvider>
             <FavoritesProvider>
               <AppShell>{children}</AppShell>
+              <CookieConsent />
             </FavoritesProvider>
           </CartProvider>
         </MarketProvider>

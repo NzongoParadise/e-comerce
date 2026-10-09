@@ -103,6 +103,36 @@ const pages: Record<string, InfoPage> = {
     secondary: { label: "Centro de ajuda", href: "/info/support" },
     note: "Para uma política formal, consulte a versão completa disponibilizada pela empresa e aplicável ao seu mercado.",
   },
+  cookies: {
+    kicker: "COOKIES E ARMAZENAMENTO",
+    title: "Política de cookies.",
+    intro: "Explicamos que cookies e dados no armazenamento do navegador são usados nesta loja, para que servem e como pode removê-los.",
+    sections: [
+      {
+        title: "Cookie essencial do chat",
+        body: "Ao iniciar um chat de suporte como visitante, a loja pode guardar o cookie support_guest_session. É um identificador aleatório, necessário para associar as mensagens à conversa e permitir que a retome no mesmo navegador. O cookie é HTTP-only, limitado ao percurso do chat e tem duração máxima de 30 dias.",
+      },
+      {
+        title: "Cookie das suas preferências",
+        body: "Quando guarda a escolha no banner, usamos o cookie cookie_consent_v1 para memorizar se aceitou ou rejeitou categorias opcionais. É um cookie funcional, não é usado para análise ou publicidade e expira após 12 meses. Pode alterar a escolha em qualquer altura nas definições de cookies no rodapé.",
+      },
+      {
+        title: "Não é um cookie",
+        body: "A aplicação também usa o armazenamento local do navegador para manter a sessão iniciada (jwt_token), o carrinho (tg_cart), os favoritos (tg_favorites), o mercado escolhido (market) e algumas preferências ou rascunhos da conta. Estes dados ficam no seu dispositivo e não são cookies; alguns podem ser removidos ao terminar sessão ou ao limpar os dados do site.",
+      },
+      {
+        title: "Cookies de análise e publicidade",
+        body: "Atualmente, a aplicação não instala cookies nem carrega serviços próprios de análise ou publicidade. O banner permite registar a sua escolha para estas categorias, mas aceitar não ativa ferramentas que não estão instaladas. Se forem adicionados serviços opcionais, a política e a implementação serão atualizadas para respeitar a escolha antes de os carregar.",
+      },
+      {
+        title: "Como controlar ou apagar",
+        body: "Pode alterar a sua escolha através de «Definições de cookies» no rodapé ou bloquear e apagar cookies nas definições do navegador. Se bloquear o cookie essencial do chat, a conversa de suporte como visitante poderá não continuar entre visitas. Limpar o armazenamento local pode terminar a sessão e remover o carrinho, favoritos ou preferências guardadas neste dispositivo.",
+      },
+    ],
+    cta: { label: "Contactar sobre privacidade", href: "/info/contact" },
+    secondary: { label: "Ler a política de privacidade", href: "/info/privacy" },
+    note: "A utilização de cookies estritamente necessários destina-se a fornecer funcionalidades pedidas pelo utilizador. Esta informação descreve o comportamento atualmente identificado na aplicação e não substitui aconselhamento jurídico para cada mercado.",
+  },
   blog: {
     kicker: "GUIAS E CONTEÚDOS",
     title: "Escolha com mais informação.",

@@ -2,13 +2,33 @@
 
 import { useCart } from "@/context/CartContext";
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ShieldCheck, Truck, Zap, Store, CreditCard, Building2, Banknote, LockKeyhole, ChevronLeft, Package } from "lucide-react";
+import { ShieldCheck, Truck, Zap, Store, CreditCard, Building2, Banknote, LockKeyhole, ChevronLeft, Package, type LucideIcon } from "lucide-react";
 import { fetchWithAuth } from "@/lib/api";
 import { useMarket } from "@/context/MarketContext";
 import { calculatePortugalShipping, estimateCartWeightKg } from "@/lib/shipping";
 import { AddressSelector, type SavedAddress } from "@/components/features/checkout/AddressSelector";
+
+const paymentBrands = {
+  multicaixa: { name: "MULTICAIXA", src: "/payment-logos/multicaixa.svg", width: 210, height: 39, imageClassName: "h-4 w-[72px]", tileClassName: "bg-[#002133]" },
+  mbway: { name: "MB WAY", src: "/payment-logos/mb-way.png", width: 292, height: 143, imageClassName: "h-6 w-[44px]", tileClassName: "bg-white" },
+  visa: { name: "Visa", src: "/payment-logos/visa.svg", width: 1000, height: 325, imageClassName: "h-4 w-[42px]", tileClassName: "bg-white" },
+  mastercard: { name: "Mastercard", src: "/payment-logos/mastercard.svg", width: 999, height: 776, imageClassName: "h-6 w-[28px]", tileClassName: "bg-white" },
+} as const;
+
+type PaymentBrand = keyof typeof paymentBrands;
+type PaymentOption = { value: string; title: string; description: string; Icon: LucideIcon; brands?: PaymentBrand[] };
+
+const paymentOptions: PaymentOption[] = [
+  { value: "multicaixa_reference", title: "Referência MULTICAIXA", description: "Pague numa caixa automática ou no homebanking", Icon: CreditCard, brands: ["multicaixa"] },
+  { value: "multicaixa_express", title: "MULTICAIXA Express", description: "Autorize o pagamento na aplicação MCX Express", Icon: CreditCard, brands: ["multicaixa"] },
+  { value: "transfer", title: "Transferência bancária", description: "Confirmação em até 24h", Icon: Building2 },
+  { value: "card", title: "Cartão de crédito / débito", description: "Visa e Mastercard", Icon: CreditCard, brands: ["visa", "mastercard"] },
+  { value: "mbway", title: "MB WAY", description: "Pague usando o seu telemóvel", Icon: CreditCard, brands: ["mbway"] },
+  { value: "cash", title: "Pagamento na entrega", description: "Disponível em Luanda", Icon: Banknote },
+];
 
 export default function CheckoutPage() {
   const { items, isLoaded, cartTotalEUR, cartTotalKZ, clearCart } = useCart();
@@ -342,7 +362,7 @@ export default function CheckoutPage() {
               <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-white font-bold">3</span>
               <h2 className="text-lg font-bold text-gray-900">Método de pagamento</h2>
             </div>
-            <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800">
+            <div className="mb-4 rounded-lg border border-primary/20 bg-primary-light p-3 text-xs text-primary">
               {defaultSavedMethod ? (
                 <span>
                   Pagamento rápido ativo: <strong>{defaultSavedMethod.type === "CARD" ? "Cartão guardado" : defaultSavedMethod.type === "MBWAY" ? "MB WAY guardado" : "Método guardado"}</strong>.
@@ -353,40 +373,40 @@ export default function CheckoutPage() {
             </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {[
-                ["multicaixa_reference", "Referência MULTICAIXA", "Pague numa caixa automática ou no homebanking", CreditCard],
-                ["multicaixa_express", "MULTICAIXA Express", "Autorize o pagamento na aplicação MCX Express", CreditCard],
-                ["transfer", "Transferência bancária", "Confirmação em até 24h", Building2],
-                ["card", "Cartão de crédito / débito", "Visa e Mastercard", CreditCard],
-                ["mbway", "MB WAY", "Pague usando o seu telemóvel", CreditCard],
-                ["cash", "Pagamento na entrega", "Disponível em Luanda", Banknote],
-              ].filter(([value]) => {
+              {paymentOptions.filter(({ value }) => {
                 if (country === "AO") {
-                  return !["card", "mbway", "cash"].includes(value as string) && !(value === "multicaixa_express" && !phone);
+                  return !["card", "mbway", "cash"].includes(value) && !(value === "multicaixa_express" && !phone);
                 }
                 if (country === "PT") {
-                  return !["multicaixa_reference", "multicaixa_express", "cash"].includes(value as string);
+                  return !["multicaixa_reference", "multicaixa_express", "cash"].includes(value);
                 }
                 return true;
-              }).map(([value, title, description, Icon]) => {
-                const PaymentIcon = Icon as typeof CreditCard;
+              }).map(({ value, title, description, Icon, brands }) => {
+                const visibleBrands: PaymentBrand[] | undefined = value === "transfer" && country === "AO"
+                  ? ["multicaixa"]
+                  : brands;
                 const showSavedBadge =
                   (value === "card" && defaultSavedMethod?.type === "CARD") ||
                   (value === "mbway" && defaultSavedMethod?.type === "MBWAY");
                 const paymentTitle = value === "card" && defaultSavedMethod?.type === "CARD" && defaultSavedMethod.lastFour
                   ? `${defaultSavedMethod.label} •••• ${defaultSavedMethod.lastFour}`
-                  : title as string;
+                  : title;
 
                 return (
                   <button
                     type="button"
-                    key={value as string}
+                    key={value}
                     aria-pressed={activePaymentMethod === value}
-                    onClick={() => setPaymentMethod(value as string)}
-                    className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${activePaymentMethod === value ? "border-primary bg-blue-50 shadow-sm" : "border-gray-200 hover:border-gray-300"}`}
+                    onClick={() => setPaymentMethod(value)}
+                    className={`flex min-h-[92px] items-center gap-3 rounded-lg border p-4 text-left transition ${activePaymentMethod === value ? "border-primary bg-primary-light shadow-sm ring-1 ring-primary/20" : "border-gray-200 hover:border-primary/40 hover:bg-gray-50"}`}
                   >
-                    <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-gray-100">
-                      <PaymentIcon size={22} className={activePaymentMethod === value ? "text-primary" : "text-gray-500"} aria-hidden="true" />
+                    <div className="flex h-12 w-[5.5rem] shrink-0 items-center justify-center gap-1 rounded-md bg-white px-2 ring-1 ring-black/5" aria-hidden="true">
+                      {visibleBrands ? visibleBrands.map((brand) => {
+                        const paymentBrand = paymentBrands[brand];
+                        return <span key={brand} className={`flex h-9 min-w-0 flex-1 items-center justify-center rounded-[3px] px-1 ${paymentBrand.tileClassName}`}>
+                          <Image src={paymentBrand.src} alt="" width={paymentBrand.width} height={paymentBrand.height} className={`${paymentBrand.imageClassName} max-w-full object-contain`} />
+                        </span>;
+                      }) : <Icon size={21} className={activePaymentMethod === value ? "text-primary" : "text-gray-500"} />}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-2">
@@ -397,7 +417,7 @@ export default function CheckoutPage() {
                           </span>
                         )}
                       </div>
-                      <span className="mt-1 block text-xs text-gray-500">{description as string}</span>
+                      <span className="mt-1 block text-xs text-gray-500">{description}</span>
                     </div>
                   </button>
                 );
@@ -416,7 +436,7 @@ export default function CheckoutPage() {
             </label>
             {message && <p role="alert" aria-live="assertive" className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">{message}</p>}
             <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
-              <button onClick={handleCompleteOrder} disabled={submitting} className="btn-primary flex-1 bg-green-600 hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60"><LockKeyhole size={16} /> {submitting ? "A confirmar..." : "Confirmar encomenda"}</button>
+              <button onClick={handleCompleteOrder} disabled={submitting} className="btn-primary flex-1 disabled:cursor-not-allowed disabled:opacity-60"><LockKeyhole size={16} /> {submitting ? "A confirmar..." : "Confirmar encomenda"}</button>
               <Link href="/cart" className="inline-flex items-center justify-center gap-1 text-sm font-bold text-primary hover:underline"><ChevronLeft size={15} /> Voltar ao carrinho</Link>
             </div>
             <p className="mt-3 flex items-center gap-1 text-xs text-green-700"><ShieldCheck size={14} /> A sua compra é segura e encriptada.</p>

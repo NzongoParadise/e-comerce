@@ -75,7 +75,7 @@ export default function B2BLayout({ children }: { children: React.ReactNode }) {
     return <div className="flex min-h-screen items-center justify-center bg-[#f7f8fa] text-sm text-slate-500"><div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">A carregar a área empresarial...</div></div>;
   }
 
-  if (!authenticated) return <><Header /><main className="flex-1">{children}</main><Footer /></>;
+  if (!authenticated) return <div className="storefront-public min-h-screen"><Header /><main className="flex-1">{children}</main><Footer /></div>;
 
   return (
     <B2BCartProvider>
