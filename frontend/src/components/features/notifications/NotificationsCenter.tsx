@@ -164,7 +164,7 @@ export default function NotificationsCenter({ workspace }: { workspace: Workspac
           <ShieldAlert size={34} className="mx-auto text-slate-300"/>
           <h2 className="mt-3 text-sm font-black text-slate-900">Inicie sessão para ver as notificações</h2>
           <p className="mt-2 text-xs leading-5 text-slate-500">As notificações são privadas e só podem ser consultadas pelo titular da conta.</p>
-          <a href="/login?next=%2Fnotifications" className="btn-primary mt-5">Iniciar sessão</a>
+          <a href={"/login?next=" + encodeURIComponent(workspace === "b2b" ? "/b2b/notificacoes" : "/notifications")} className="btn-primary mt-5">Iniciar sessão</a>
         </section>
       ) : (
         <section className="card overflow-hidden">
