@@ -2,10 +2,9 @@
 
 import Link from "next/link";
 import { ArrowRight, FileText, Minus, Plus, ShoppingBag, Trash2, ShieldCheck, Truck } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { fetchWithAuth } from "@/lib/api";
 import { getB2BUnitPrice, useB2BCart } from "@/context/B2BCartContext";
-import { useMarket } from "@/context/MarketContext";
 
 function money(value: number, market: "AO" | "PT") {
   return market === "PT"
@@ -14,16 +13,36 @@ function money(value: number, market: "AO" | "PT") {
 }
 
 export default function B2BCartPage() {
-  const { market } = useMarket();
+  const [market, setMarket] = useState<"AO" | "PT">("AO");
+  const [marketLoaded, setMarketLoaded] = useState(false);
   const { items, isLoaded, removeFromCart, updateQuantity, clearCart, cartCount } = useB2BCart();
+
+  useEffect(() => {
+    let active = true;
+    fetchWithAuth("/api/b2b/catalog", { cache: "no-store" })
+      .then((result) => {
+        if (active && (result.companyMarket === "AO" || result.companyMarket === "PT")) setMarket(result.companyMarket);
+      })
+      .catch(() => undefined)
+      .finally(() => { if (active) setMarketLoaded(true); });
+    return () => { active = false; };
+  }, []);
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
   const totals = useMemo(() => {
-    const productTotal = items.reduce((sum, item) => sum + getB2BUnitPrice(item, item.quantity, market) * item.quantity, 0);
-    return { productTotal };
+    const currency = market === "PT" ? "EUR" : "AOA";
+    const complete = items.every((item) => {
+      const hasBasePrice = market === "PT" ? item.priceEUR > 0 : item.priceKZ > 0;
+      const hasApplicableRule = item.b2bPriceRules.some((rule) => rule.currency === currency && rule.minQuantity <= item.quantity);
+      return hasBasePrice || hasApplicableRule;
+    });
+    const productTotal = complete
+      ? items.reduce((sum, item) => sum + getB2BUnitPrice(item, item.quantity, market) * item.quantity, 0)
+      : 0;
+    return { productTotal, complete };
   }, [items, market]);
 
   async function requestQuote() {
@@ -87,6 +106,7 @@ export default function B2BCartPage() {
         </div>
       </header>
 
+      {!marketLoaded && <div role="status" className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">A confirmar o mercado da empresa...</div>}
       {notice && <div role="status" className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800"><ShieldCheck size={17} className="mt-0.5 shrink-0"/><span>{notice} <Link href="/b2b/cotacoes" className="underline">Ver cotações</Link></span></div>}
       {error && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800">{error}</div>}
 
@@ -142,9 +162,9 @@ export default function B2BCartPage() {
                 <textarea value={notes} onChange={(event) => setNotes(event.target.value)} maxLength={2000} className="settings-input mt-2 min-h-28 normal-case" placeholder="Prazo, compra recorrente, entrega, referências..." />
               </label>
               <div className="mt-4 border-t border-slate-100 pt-4">
-                <div className="flex items-center justify-between text-xs"><span className="text-slate-500">Total estimado</span><strong className="text-lg font-black text-slate-950">{money(totals.productTotal, market)}</strong></div>
-                <p className="mt-2 text-[9px] leading-4 text-slate-400">Estimativa baseada nas regras de preço disponíveis para a sua empresa. O servidor volta a validar preço e stock.</p>
-                <button type="button" onClick={() => void requestQuote()} disabled={submitting} className="btn-primary mt-4 w-full disabled:opacity-50">{submitting ? "A enviar..." : "Enviar pedido de cotação"} <ArrowRight size={14}/></button>
+                <div className="flex items-center justify-between gap-3 text-xs"><span className="text-slate-500">Total estimado</span><strong className="text-right text-lg font-black text-slate-950">{totals.complete ? money(totals.productTotal, market) : "A confirmar na cotação"}</strong></div>
+                <p className="mt-2 text-[9px] leading-4 text-slate-400">{totals.complete ? "Estimativa baseada no preço de referência e nas regras comerciais conhecidas. O servidor volta a validar preço e stock." : "Um ou mais artigos não têm preço de referência nem uma regra de volume aplicável à quantidade selecionada. A cotação só poderá ser enviada quando existir uma condição de preço válida."}</p>
+                <button type="button" onClick={() => void requestQuote()} disabled={submitting || !marketLoaded || !totals.complete} className="btn-primary mt-4 w-full disabled:opacity-50">{submitting ? "A enviar..." : "Enviar pedido de cotação"} <ArrowRight size={14}/></button>
               </div>
             </section>
 
