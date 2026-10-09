@@ -25,6 +25,7 @@ export default function B2BCatalogPage() {
   const [pageCount, setPageCount] = useState(0);
   const [page, setPage] = useState(1);
   const [query, setQuery] = useState("");
+  const [searchInitialized, setSearchInitialized] = useState(false);
   const [category, setCategory] = useState("ALL");
   const [sort, setSort] = useState<"RELEVANCE" | "PRICE_ASC" | "PRICE_DESC">("RELEVANCE");
   const [loading, setLoading] = useState(true);
@@ -32,6 +33,13 @@ export default function B2BCatalogPage() {
   const [notice, setNotice] = useState("");
 
   useEffect(() => {
+    const initialQuery = new URLSearchParams(window.location.search).get("search")?.trim() || "";
+    if (initialQuery) setQuery(initialQuery);
+    setSearchInitialized(true);
+  }, []);
+
+  useEffect(() => {
+    if (!searchInitialized) return;
     let active = true;
     const timer = window.setTimeout(async () => {
       setLoading(true);
@@ -68,7 +76,7 @@ export default function B2BCatalogPage() {
       active = false;
       window.clearTimeout(timer);
     };
-  }, [query, category, sort, page]);
+  }, [searchInitialized, query, category, sort, page]);
 
   function setPageAndScroll(next: number) {
     setPage(Math.max(1, Math.min(pageCount, next)));
