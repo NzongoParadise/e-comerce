@@ -294,7 +294,7 @@ export async function POST(request: Request) {
     if (!stripeResponse.ok || !stripeRefund.id) throw new Error(stripeRefund.error?.message || "STRIPE_REFUND_FAILED");
 
     const succeeded = stripeRefund.status === "succeeded";
-    const updated = await prisma.$transaction(async (tx) => {
+    const operation = await prisma.$transaction(async (tx) => {
       const saved = await tx.refund.update({
         where: { id: refund!.id },
         data: {
@@ -322,7 +322,45 @@ export async function POST(request: Request) {
           data: { status: refunded + 0.000001 >= original ? "REFUNDED" : "PARTIALLY_REFUNDED" },
         });
       }
-      return saved;
+
+      let completedReturn: { id: number; requestNumber: string; userId: number; orderNumber: string } | null = null;
+      if (succeeded && refund!.returnRequestId) {
+        const returnRequest = await tx.returnRequest.findUnique({
+          where: { id: refund!.returnRequestId },
+          include: {
+            user: { select: { id: true } },
+            order: { select: { orderNumber: true } },
+          },
+        });
+        if (
+          returnRequest &&
+          returnRequest.type === "RETURN" &&
+          returnRequest.orderId === refund!.orderId &&
+          returnRequest.status === "REFUND_PROCESSING"
+        ) {
+          const completed = await tx.returnRequest.update({
+            where: { id: returnRequest.id },
+            data: { status: "COMPLETED" },
+          });
+          await tx.returnRequestEvent.create({
+            data: {
+              returnRequestId: completed.id,
+              previousStatus: "REFUND_PROCESSING",
+              nextStatus: "COMPLETED",
+              actorExternalId: userSubject(auth.user) || "admin",
+              note: "Stripe confirmou o reembolso " + stripeRefund.id + ".",
+            },
+          });
+          completedReturn = {
+            id: completed.id,
+            requestNumber: completed.requestNumber,
+            userId: returnRequest.user.id,
+            orderNumber: returnRequest.order.orderNumber,
+          };
+        }
+      }
+
+      return { refund: saved, completedReturn };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5000, timeout: 10000 });
 
     let creditNotePending = false;
@@ -331,22 +369,33 @@ export async function POST(request: Request) {
         userId: refund.userId,
         orderId: refund.orderId,
         orderNumber: refund.order.orderNumber,
-        refundId: refund.id,
+        refundId: operation.refund.id,
         status: "SUCCEEDED",
       });
+      if (operation.completedReturn) {
+        await createNotificationIfAllowed({
+          userId: operation.completedReturn.userId,
+          channel: "orderUpdates",
+          type: "RETURN_STATUS_CHANGED",
+          title: "Devolução concluída",
+          message: "A solicitação " + operation.completedReturn.requestNumber + " da encomenda " + operation.completedReturn.orderNumber + " foi concluída após confirmação do reembolso.",
+          link: "/account/returns",
+          dedupeKey: "return:" + operation.completedReturn.id + ":status:COMPLETED",
+        }).catch(() => undefined);
+      }
       try {
-        await issueCreditNoteForSucceededRefund(refund.id, userSubject(auth.user) || "admin");
+        await issueCreditNoteForSucceededRefund(operation.refund.id, userSubject(auth.user) || "admin");
       } catch (creditNoteError) {
         creditNotePending = true;
         logger.error("Refund succeeded but credit note issuance is pending", {
-          refundId: refund.id,
+          refundId: operation.refund.id,
           orderId: refund.orderId,
           error: creditNoteError instanceof Error ? creditNoteError.message : creditNoteError,
         });
       }
     }
 
-    return Response.json({ data: updated, idempotent: false, creditNotePending }, { status: 201 });
+    return Response.json({ data: operation.refund, idempotent: false, creditNotePending, returnCompleted: Boolean(operation.completedReturn) }, { status: 201 });
   } catch (error) {
     const failureReason = error instanceof Error ? error.message : "STRIPE_REFUND_FAILED";
     // A network failure or a 5xx response after the POST may mean Stripe created the refund
