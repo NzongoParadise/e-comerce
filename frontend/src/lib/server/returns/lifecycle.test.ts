@@ -19,7 +19,7 @@ test("allows only valid forward transitions for returns, exchanges and complaint
 test("prevents refunding a return before the returned item has been received", () => {
   assert.equal(validateReturnTransition("RETURN", "ITEM_RECEIVED", "REFUND_PROCESSING"), null);
   assert.equal(validateReturnTransition("RETURN", "APPROVED", "REFUND_PROCESSING"), "RETURN_ITEM_NOT_RECEIVED");
-  assert.equal(validateReturnTransition("RETURN", "WAITING_FOR_RETURN", "REFUND_PROCESSING"), "RETURN_ITEM_NOT_RECEIVED");
+  assert.equal(validateReturnTransition("RETURN", "WAITING_FOR_RETURN", "REFUND_PROCESSING"), "INVALID_TRANSITION");
 });
 
 test("prevents lifecycle states that do not match the after-sales request type", () => {
