@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { AlertCircle, CheckCircle2, Loader2, RefreshCw, RotateCcw } from "lucide-react";
 import { fetchWithAuth } from "@/lib/api";
 
@@ -19,6 +20,7 @@ type Refund = {
   order: { orderNumber: string; status?: string };
   payment?: { provider: string; method: string; currency: string; status: string };
   returnRequest?: { id: number; requestNumber: string; status: string } | null;
+  creditNote?: { id: number; creditNoteNumber: string; status: string } | null;
 };
 
 const statusLabel: Record<string, string> = {
@@ -198,7 +200,7 @@ export default function RefundsPage() {
                 <td className="whitespace-nowrap px-4 py-3 font-black text-slate-800">{formatMoney(item)}</td>
                 <td className="whitespace-nowrap px-4 py-3 text-slate-600">{item.provider}</td>
                 <td className="whitespace-nowrap px-4 py-3"><span className={"rounded-full px-2.5 py-1.5 text-[9px] font-black " + (item.status === "SUCCEEDED" ? "bg-emerald-50 text-emerald-700" : item.status === "FAILED" ? "bg-rose-50 text-rose-700" : "bg-amber-50 text-amber-700")}>{statusLabel[item.status] || item.status}</span></td>
-                <td className="min-w-56 max-w-md px-4 py-3 text-slate-600">{item.reason}{item.failureReason ? <p className="mt-1 break-words text-[10px] font-semibold text-rose-600">{item.failureReason}</p> : null}</td>
+                <td className="min-w-56 max-w-md px-4 py-3 text-slate-600">{item.reason}{item.failureReason ? <p className="mt-1 break-words text-[10px] font-semibold text-rose-600">{item.failureReason}</p> : null}{item.creditNote ? <Link href={"/notas-de-credito/" + item.creditNote.id} className="mt-2 inline-flex font-black text-amber-800 hover:underline">{item.creditNote.creditNoteNumber} · {item.creditNote.status}</Link> : item.status === "SUCCEEDED" ? <p className="mt-2 text-[9px] text-amber-700">Nota de crédito pendente de emissão/reconciliação.</p> : null}</td>
                 <td className="whitespace-nowrap px-4 py-3 text-[10px] text-slate-500">{new Date(item.createdAt).toLocaleString("pt-PT")}</td>
                 <td className="min-w-72 px-4 py-3">
                   {item.provider !== "stripe" && ["REQUESTED", "PROCESSING"].includes(item.status) ? (
