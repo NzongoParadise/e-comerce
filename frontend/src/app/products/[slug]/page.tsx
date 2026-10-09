@@ -208,7 +208,7 @@ export default function ProductDetailsPage() {
       priceEUR: Number(ptPrice),
       priceKZ: Number(aoPrice),
       quantity: quantity,
-      imageUrl: product.imageUrl,
+      imageUrl: product.imageUrl || undefined,
 
     });
     setCartMessage(`${product.name} foi adicionado ao carrinho.`);
@@ -223,7 +223,7 @@ export default function ProductDetailsPage() {
     category: product.category.name,
     specs: product.description || "",
     priceEUR: Number(ptPrice),
-    imageUrl: product.imageUrl,
+    imageUrl: product.imageUrl || undefined,
   });
 
   const handleBuyNow = () => {
