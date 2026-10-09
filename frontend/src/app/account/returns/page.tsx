@@ -6,7 +6,20 @@ import { fetchWithAuth } from "@/lib/api";
 
 type RequestType = "RETURN" | "EXCHANGE" | "COMPLAINT";
 type Order = { id: number; orderNumber: string; createdAt: string };
-type ReturnRequest = { id: number; requestNumber: string; orderId: number; type: RequestType; status: string; reason: string; description?: string | null; createdAt: string; order?: { orderNumber?: string } | null };
+type ReturnRequestEvent = { id: number; previousStatus: string | null; nextStatus: string; note: string | null; createdAt: string };
+type ReturnRequest = { id: number; requestNumber: string; orderId: number; type: RequestType; status: string; reason: string; description?: string | null; createdAt: string; events?: ReturnRequestEvent[]; order?: { orderNumber?: string; status?: string } | null };
+
+const returnStatusLabels: Record<string, string> = {
+  RECEIVED: "Recebida",
+  UNDER_REVIEW: "Em análise",
+  APPROVED: "Aprovada",
+  REJECTED: "Rejeitada",
+  WAITING_FOR_RETURN: "A aguardar artigo",
+  ITEM_RECEIVED: "Artigo recebido",
+  REFUND_PROCESSING: "Reembolso em processamento",
+  EXCHANGE_PROCESSING: "Troca em processamento",
+  COMPLETED: "Concluída",
+};
 
 const requestTypes: Array<{ id: RequestType; label: string; description: string; icon: typeof Package }> = [
   { id: "RETURN", label: "Devolução", description: "Devolver um produto dentro das condições aplicáveis.", icon: Package },
@@ -92,9 +105,18 @@ export default function ReturnsPage() {
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                   <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600"><FileText size={17}/></span>
                   <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2"><p className="text-xs font-black text-slate-950">{request.requestNumber}</p><span className="rounded-full bg-blue-50 px-2.5 py-1 text-[9px] font-black text-blue-700">{request.status}</span></div>
+                    <div className="flex flex-wrap items-center gap-2"><p className="text-xs font-black text-slate-950">{request.requestNumber}</p><span className={"rounded-full px-2.5 py-1 text-[9px] font-black " + (["REJECTED"].includes(request.status) ? "bg-rose-50 text-rose-700" : request.status === "COMPLETED" ? "bg-emerald-50 text-emerald-700" : "bg-blue-50 text-blue-700")}>{returnStatusLabels[request.status] || request.status}</span></div>
                     <p className="mt-1 text-[10px] text-slate-500">{request.type === "RETURN" ? "Devolução" : request.type === "EXCHANGE" ? "Troca" : "Reclamação"} · {request.order?.orderNumber || "Encomenda #" + request.orderId} · {new Date(request.createdAt).toLocaleDateString("pt-PT")}</p>
                     <p className="mt-2 line-clamp-2 text-[10px] leading-4 text-slate-600">{request.reason}{request.description ? " · " + request.description : ""}</p>
+                    {request.events?.length ? <div className="mt-3 rounded-xl border border-slate-100 bg-slate-50/70 p-3">
+                      <p className="mb-2 text-[9px] font-black uppercase tracking-wide text-slate-500">Histórico da solicitação</p>
+                      <ol className="space-y-2">
+                        {request.events.map((event) => <li key={event.id} className="flex flex-col gap-0.5 text-[10px] sm:flex-row sm:items-start sm:justify-between">
+                          <span className="font-semibold text-slate-700">{event.previousStatus ? (returnStatusLabels[event.previousStatus] || event.previousStatus) + " → " : ""}{returnStatusLabels[event.nextStatus] || event.nextStatus}{event.note ? " · " + event.note : ""}</span>
+                          <time className="shrink-0 text-slate-400">{new Date(event.createdAt).toLocaleString("pt-PT")}</time>
+                        </li>)}
+                      </ol>
+                    </div> : null}
                   </div>
                 </div>
               </article>
