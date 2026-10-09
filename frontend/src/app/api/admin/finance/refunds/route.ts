@@ -76,6 +76,7 @@ export async function GET(request: Request) {
       order: { select: { orderNumber: true, status: true } },
       payment: { select: { provider: true, method: true, currency: true, status: true } },
       returnRequest: { select: { id: true, requestNumber: true, status: true } },
+      creditNote: { select: { id: true, creditNoteNumber: true, status: true } },
     },
     orderBy: { createdAt: "desc" },
     take: 100,
