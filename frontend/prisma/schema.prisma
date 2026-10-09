@@ -573,6 +573,8 @@ model Quote {
   quoteNumber String   @unique
   userId      Int
   status      String   @default("SUBMITTED")
+  market      String   @default("AO")
+  currency    String   @default("AOA")
   companyName String
   companyNif  String
   address     String?
