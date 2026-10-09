@@ -34,6 +34,10 @@ export async function GET(request: Request) {
       totalEUR: true,
       totalKZ: true,
       issuedAt: true,
+      creditNotes: {
+        select: { id: true, creditNoteNumber: true, verificationCode: true, status: true, currency: true, amountEUR: true, amountKZ: true, issuedAt: true },
+        orderBy: { issuedAt: "desc" },
+      },
       order: {
         select: {
           orderNumber: true,
