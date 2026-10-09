@@ -57,15 +57,20 @@ export async function POST(request: Request) {
   if (parsed.data.method === 'MULTICAIXA_EXPRESS' && !parsed.data.phoneNumber) return errorResponse('O telemóvel é obrigatório para MULTICAIXA Express', 400);
   const user = await prisma.user.findUnique({ where: { externalId: subject } });
   if (!user) return errorResponse('User profile not found', 401);
-  const order = await prisma.order.findFirst({ where: { id: parsed.data.orderId, userId: user.id }, include: { payment: true } });
+  const order = await prisma.order.findFirst({ where: { id: parsed.data.orderId, userId: user.id }, include: { payment: true, items: { select: { productId: true, quantity: true } } } });
   if (!order || !order.payment) return errorResponse('Encomenda ou pagamento não encontrado', 404);
   if (order.country !== 'AO' || order.currency !== 'AOA') return errorResponse('MULTICAIXA só está disponível para encomendas em Angola', 400);
   if (order.payment.status === 'PAID') return errorResponse('A encomenda já está paga', 409);
 
-  const existingAttempt = await prisma.paymentAttempt.findUnique({ where: { idempotencyKey: parsed.data.idempotencyKey } });
+  const existingAttempt = await prisma.paymentAttempt.findUnique({
+    where: { idempotencyKey: parsed.data.idempotencyKey },
+    include: { payment: true },
+  });
   if (existingAttempt) {
-    const payment = await prisma.payment.findUnique({ where: { id: existingAttempt.paymentId } });
-    return Response.json({ data: payment });
+    if (existingAttempt.payment.orderId !== order.id || existingAttempt.payment.userId !== user.id) {
+      return errorResponse("A chave de idempotência já está associada a outra encomenda.", 409);
+    }
+    return Response.json({ data: existingAttempt.payment, idempotent: true });
   }
   const attempt = await prisma.paymentAttempt.create({ data: { paymentId: order.payment.id, idempotencyKey: parsed.data.idempotencyKey, status: 'PROCESSING' } });
   try {
@@ -81,26 +86,76 @@ export async function POST(request: Request) {
     const result = parsed.data.method === 'MULTICAIXA_REFERENCE'
       ? await multicaixaProvider.createReference(input)
       : await multicaixaProvider.createExpress(input);
-    const payment = await prisma.payment.update({
-      where: { id: order.payment.id },
-      data: {
-        provider: 'multicaixa',
-        method: parsed.data.method,
-        providerPaymentId: result.providerPaymentId,
-        entity: result.entity,
-        referenceNumber: result.referenceNumber,
-        expiresAt: result.expiresAt,
-        phoneNumber: result.phoneNumber,
-        ...statusUpdates(result.status),
-      },
-    });
-    await prisma.paymentAttempt.update({ where: { id: attempt.id }, data: { providerPaymentId: result.providerPaymentId, status: result.status } });
+    const terminalFailure = ["FAILED", "EXPIRED", "CANCELLED"].includes(result.status);
+    const paymentStatus = result.status === "PAID" ? "PAID" : terminalFailure ? result.status : "AWAITING_PAYMENT";
+    const reservationExpiresAt = result.expiresAt ?? new Date(Date.now() + 30 * 60 * 1000);
+    const payment = await prisma.$transaction(async (transaction) => {
+      const saved = await transaction.payment.update({
+        where: { id: order.payment!.id },
+        data: {
+          provider: "multicaixa",
+          method: parsed.data.method,
+          providerPaymentId: result.providerPaymentId,
+          entity: result.entity,
+          referenceNumber: result.referenceNumber,
+          expiresAt: result.expiresAt ?? reservationExpiresAt,
+          phoneNumber: result.phoneNumber,
+          ...statusUpdates(paymentStatus),
+        },
+      });
+      await transaction.paymentAttempt.update({
+        where: { id: attempt.id },
+        data: { providerPaymentId: result.providerPaymentId, status: result.status },
+      });
+
+      if (result.status === "PAID") {
+        const confirmed = await transaction.order.updateMany({
+          where: { id: order.id, status: "AWAITING_PAYMENT" },
+          data: { status: "PAYMENT_CONFIRMED", inventoryReserved: false, inventoryReservationExpiresAt: null },
+        });
+        if (!confirmed.count && order.status === "CANCELLED") {
+          await transaction.order.update({
+            where: { id: order.id },
+            data: { status: "PAYMENT_REVIEW_REQUIRED", inventoryReserved: false, inventoryReservationExpiresAt: null },
+          });
+        }
+      } else if (terminalFailure) {
+        await cancelAwaitingPaymentAndReleaseStock(
+          transaction,
+          order.id,
+          order.items,
+          result.status === "EXPIRED" ? "EXPIRED" : result.status === "CANCELLED" ? "CANCELLED" : "FAILED",
+          "Encomenda cancelada após falha ao iniciar MULTICAIXA.",
+        );
+      } else {
+        await transaction.order.updateMany({
+          where: { id: order.id, status: "AWAITING_PAYMENT" },
+          data: { inventoryReservationExpiresAt: reservationExpiresAt },
+        });
+      }
+      return saved;
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5000, timeout: 10000 });
     return Response.json({ data: payment }, { status: 201 });
   } catch (error) {
-    await prisma.paymentAttempt.update({ where: { id: attempt.id }, data: { status: error instanceof Error && error.message === 'MULTICAIXA_NOT_CONFIGURED' ? 'PAYMENT_NOT_CONFIGURED' : 'FAILED' } });
-    if (error instanceof Error && error.message === 'MULTICAIXA_NOT_CONFIGURED') return errorResponse('Gateway MULTICAIXA não configurado', 503);
-    logger.error('MULTICAIXA payment error', { orderId: order.id, paymentId: order.payment.id, method: parsed.data.method, error: error instanceof Error ? error.message : error });
-    return errorResponse('Não foi possível iniciar o pagamento MULTICAIXA', 502);
+    await prisma.$transaction(async (transaction) => {
+      await transaction.paymentAttempt.updateMany({
+        where: { id: attempt.id },
+        data: { status: error instanceof Error && error.message === "MULTICAIXA_NOT_CONFIGURED" ? "PAYMENT_NOT_CONFIGURED" : "FAILED" },
+      });
+      await cancelAwaitingPaymentAndReleaseStock(
+        transaction,
+        order.id,
+        order.items,
+        "FAILED",
+        "Encomenda cancelada após erro ao iniciar o pagamento MULTICAIXA.",
+      );
+    }).catch((transactionError) => logger.error("Unable to release failed Multicaixa order reservation", {
+      orderId: order.id,
+      error: transactionError instanceof Error ? transactionError.message : transactionError,
+    }));
+    if (error instanceof Error && error.message === "MULTICAIXA_NOT_CONFIGURED") return errorResponse("Gateway MULTICAIXA não configurado", 503);
+    logger.error("MULTICAIXA payment error", { orderId: order.id, paymentId: order.payment.id, method: parsed.data.method, error: error instanceof Error ? error.message : error });
+    return errorResponse("Não foi possível iniciar o pagamento MULTICAIXA. A encomenda foi cancelada se a reserva de stock ainda estava ativa.", 502);
   }
 }
 
