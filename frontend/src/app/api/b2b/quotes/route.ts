@@ -139,6 +139,8 @@ export async function POST(request: Request) {
       quoteNumber: number,
       userId: context.user.id,
       companyId: context.membership.company.id,
+      market,
+      currency,
       status: "SUBMITTED",
       companyName: context.membership.company.legalName,
       companyNif: context.membership.company.nif,
