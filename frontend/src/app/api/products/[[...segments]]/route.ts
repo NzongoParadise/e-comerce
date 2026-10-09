@@ -94,7 +94,7 @@ export async function GET(request: Request) {
       sort === "lowest" ? { rating: "asc" } :
       { createdAt: "desc" };
 
-    const [reviews, total, summary, distribution] = await prisma.$transaction([
+    const [reviews, total, summary] = await prisma.$transaction([
       prisma.productReview.findMany({
         where,
         include: { user: { select: { name: true } } },
@@ -108,12 +108,13 @@ export async function GET(request: Request) {
         _avg: { rating: true },
         _count: { _all: true },
       }),
-      prisma.productReview.groupBy({
-        by: ["rating"],
-        where: { productId: product.id, status: "APPROVED" },
-        _count: { _all: true },
-      }),
     ]);
+
+    const distribution = await prisma.productReview.groupBy({
+      by: ["rating"],
+      where: { productId: product.id, status: "APPROVED" },
+      _count: { rating: true },
+    });
 
     return Response.json({
       data: reviews,
@@ -123,7 +124,7 @@ export async function GET(request: Request) {
         count: summary._count._all,
         distribution: Object.fromEntries([1, 2, 3, 4, 5].map((value) => [
           value,
-          distribution.find((row) => row.rating === value)?._count._all || 0,
+          distribution.find((row) => row.rating === value)?._count.rating || 0,
         ])),
       },
     });
