@@ -239,6 +239,10 @@ export async function POST(request: Request) {
     return errorResponse("Stripe não está configurado.", 503);
   }
 
+  let stripeRefundRequestStarted = false;
+  let stripeRefundResponseStatus: number | null = null;
+  let stripeRefundResponseParsed = false;
+
   try {
     const reference = refund.payment.reference;
     if (!reference) throw new Error("CHECKOUT_SESSION_MISSING");
@@ -268,6 +272,7 @@ export async function POST(request: Request) {
       }),
     });
 
+    stripeRefundRequestStarted = true;
     const stripeResponse = await fetch("https://api.stripe.com/v1/refunds", {
       method: "POST",
       headers: {
@@ -278,12 +283,14 @@ export async function POST(request: Request) {
       body,
       cache: "no-store",
     });
+    stripeRefundResponseStatus = stripeResponse.status;
     const stripeRefund = await stripeResponse.json() as {
       id?: string;
       status?: string;
       failure_reason?: string;
       error?: { message?: string };
     };
+    stripeRefundResponseParsed = true;
     if (!stripeResponse.ok || !stripeRefund.id) throw new Error(stripeRefund.error?.message || "STRIPE_REFUND_FAILED");
 
     const succeeded = stripeRefund.status === "succeeded";
@@ -342,16 +349,37 @@ export async function POST(request: Request) {
     return Response.json({ data: updated, idempotent: false, creditNotePending }, { status: 201 });
   } catch (error) {
     const failureReason = error instanceof Error ? error.message : "STRIPE_REFUND_FAILED";
+    // A network failure or a 5xx response after the POST may mean Stripe created the refund
+    // but the response was lost. Keep that result pending so the same provider idempotency
+    // key can be retried safely; never report an uncertain transfer as definitively failed.
+    const outcomeUncertain = stripeRefundRequestStarted && (
+      stripeRefundResponseStatus === null ||
+      stripeRefundResponseStatus >= 500 ||
+      (stripeRefundResponseStatus < 400 && !stripeRefundResponseParsed)
+    );
     const updated = await prisma.refund.update({
       where: { id: refund.id },
-      data: { status: "FAILED", failureReason, processedBy: userSubject(auth.user) || "admin" },
+      data: {
+        status: outcomeUncertain ? "PROCESSING" : "FAILED",
+        failureReason: outcomeUncertain
+          ? "Resultado incerto no gateway. Aguarda reconciliação através da mesma chave de idempotência e confirmação do Stripe."
+          : failureReason,
+        processedBy: userSubject(auth.user) || "admin",
+        processedAt: outcomeUncertain ? null : new Date(),
+      },
     });
-    logger.error("Stripe refund creation failed", {
+    logger.error(outcomeUncertain ? "Stripe refund outcome is uncertain and requires reconciliation" : "Stripe refund creation failed", {
       refundId: refund.id,
       orderId: refund.orderId,
+      httpStatus: stripeRefundResponseStatus,
       error: failureReason,
     });
-    return Response.json({ data: updated, error: "O reembolso não foi concluído. O estado foi registado para auditoria." }, { status: 502 });
+    return Response.json({
+      data: updated,
+      error: outcomeUncertain
+        ? "O Stripe não confirmou o resultado. O pedido foi mantido em processamento para evitar um reembolso duplicado; aguarde o webhook ou a reconciliação."
+        : "O reembolso não foi concluído. O estado foi registado para auditoria.",
+    }, { status: outcomeUncertain ? 202 : 502 });
   }
 }
 
