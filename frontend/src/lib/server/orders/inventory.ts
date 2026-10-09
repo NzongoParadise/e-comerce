@@ -10,23 +10,51 @@ export async function cancelAwaitingPaymentAndReleaseStock(
   paymentStatus: FailedPaymentStatus,
   description: string,
 ) {
+  const order = await transaction.order.findUnique({
+    where: { id: orderId },
+    select: {
+      id: true,
+      status: true,
+      inventoryReserved: true,
+      payment: { select: { id: true, status: true } },
+    },
+  });
+
+  if (!order || order.status !== 'AWAITING_PAYMENT') return false;
+  if (order.payment?.status === 'PAID') throw new Error('Cannot cancel an order with a paid payment');
+
   const cancelled = await transaction.order.updateMany({
-    where: { id: orderId, status: 'AWAITING_PAYMENT' },
-    data: { status: 'CANCELLED' },
+    where: {
+      id: orderId,
+      status: 'AWAITING_PAYMENT',
+      inventoryReserved: order.inventoryReserved,
+    },
+    data: {
+      status: 'CANCELLED',
+      inventoryReserved: false,
+      inventoryReservationExpiresAt: null,
+    },
   });
   if (!cancelled.count) return false;
 
-  const failedPayment = await transaction.payment.updateMany({
-    where: { orderId, status: { not: 'PAID' } },
-    data: { status: paymentStatus, failedAt: new Date() },
-  });
-  if (!failedPayment.count) throw new Error('Cannot cancel an order with a paid payment');
-
-  for (const item of items) {
-    await transaction.product.update({
-      where: { id: item.productId },
-      data: { stock: { increment: item.quantity } },
+  if (order.payment) {
+    const failedPayment = await transaction.payment.updateMany({
+      where: { id: order.payment.id, status: { not: 'PAID' } },
+      data: {
+        status: paymentStatus,
+        failedAt: new Date(),
+      },
     });
+    if (!failedPayment.count) throw new Error('Cannot cancel an order with a paid payment');
+  }
+
+  if (order.inventoryReserved) {
+    for (const item of items) {
+      await transaction.product.update({
+        where: { id: item.productId },
+        data: { stock: { increment: item.quantity } },
+      });
+    }
   }
 
   await transaction.trackingEvent.create({
@@ -37,5 +65,6 @@ export async function cancelAwaitingPaymentAndReleaseStock(
       description,
     },
   });
+
   return true;
 }
