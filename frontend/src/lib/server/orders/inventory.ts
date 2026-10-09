@@ -1,7 +1,7 @@
 import type { Prisma } from '@prisma/client';
 
 type ReservedItem = { productId: number; quantity: number };
-type FailedPaymentStatus = 'FAILED' | 'EXPIRED';
+type FailedPaymentStatus = 'FAILED' | 'EXPIRED' | 'CANCELLED';
 
 export async function cancelAwaitingPaymentAndReleaseStock(
   transaction: Prisma.TransactionClient,
