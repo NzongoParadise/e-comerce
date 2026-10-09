@@ -13,6 +13,18 @@ const schema = z.object({
   orderId: z.number().int().positive(),
   amount: z.number().positive().max(1_000_000_000_000),
   reason: z.string().trim().min(8).max(500),
+  returnRequestId: z.number().int().positive().optional(),
+});
+
+const manualReconciliationSchema = z.object({
+  refundId: z.number().int().positive(),
+  action: z.enum(["CONFIRM_SUCCEEDED", "MARK_FAILED"]),
+  providerReference: z.string().trim().min(4).max(160).optional(),
+  note: z.string().trim().min(5).max(500),
+}).superRefine((value, context) => {
+  if (value.action === "CONFIRM_SUCCEEDED" && !value.providerReference) {
+    context.addIssue({ code: "custom", path: ["providerReference"], message: "Indique a referência real do reembolso externo." });
+  }
 });
 
 async function admin(request: Request) {
@@ -22,10 +34,11 @@ async function admin(request: Request) {
   return { error: null, user };
 }
 
-function sameRequest(refund: { orderId: number; amountEUR: unknown; amountKZ: unknown; reason: string }, orderId: number, amount: number, reason: string) {
+function sameRequest(refund: { orderId: number; amountEUR: unknown; amountKZ: unknown; reason: string; returnRequestId: number | null }, orderId: number, amount: number, reason: string, returnRequestId: number | null) {
   return refund.orderId === orderId &&
     Math.abs(Number(refund.amountEUR) + Number(refund.amountKZ) - amount) < 0.000001 &&
-    refund.reason === reason;
+    refund.reason === reason &&
+    refund.returnRequestId === returnRequestId;
 }
 
 async function notifyRefund(input: {
@@ -62,6 +75,7 @@ export async function GET(request: Request) {
     include: {
       order: { select: { orderNumber: true, status: true } },
       payment: { select: { provider: true, method: true, currency: true, status: true } },
+      returnRequest: { select: { id: true, requestNumber: true, status: true } },
     },
     orderBy: { createdAt: "desc" },
     take: 100,
@@ -92,7 +106,7 @@ export async function POST(request: Request) {
   });
 
   if (refund) {
-    if (!sameRequest(refund, parsed.data.orderId, amount, reason)) {
+    if (!sameRequest(refund, parsed.data.orderId, amount, reason, parsed.data.returnRequestId ?? null)) {
       return errorResponse("A Idempotency-Key já foi utilizada para outro pedido de reembolso.", 409);
     }
     if (refund.status !== "PROCESSING" || refund.provider !== "stripe") {
@@ -109,7 +123,7 @@ export async function POST(request: Request) {
           },
         });
         if (existing) {
-          if (!sameRequest(existing, parsed.data.orderId, amount, reason)) throw new Error("IDEMPOTENCY_CONFLICT");
+          if (!sameRequest(existing, parsed.data.orderId, amount, reason, parsed.data.returnRequestId ?? null)) throw new Error("IDEMPOTENCY_CONFLICT");
           return existing;
         }
 
@@ -120,6 +134,20 @@ export async function POST(request: Request) {
           },
         });
         if (!payment) throw new Error("PAID_PAYMENT_REQUIRED");
+
+        if (parsed.data.returnRequestId) {
+          const returnRequest = await tx.returnRequest.findUnique({
+            where: { id: parsed.data.returnRequestId },
+            select: { id: true, orderId: true, userId: true, type: true, status: true },
+          });
+          if (!returnRequest) throw new Error("RETURN_REQUEST_NOT_FOUND");
+          if (
+            returnRequest.orderId !== payment.orderId ||
+            returnRequest.userId !== payment.userId ||
+            returnRequest.type !== "RETURN" ||
+            !["ITEM_RECEIVED", "REFUND_PROCESSING"].includes(returnRequest.status)
+          ) throw new Error("RETURN_REQUEST_MISMATCH");
+        }
 
         const previous = await tx.refund.aggregate({
           where: {
@@ -143,6 +171,7 @@ export async function POST(request: Request) {
             amountKZ: payment.currency === "AOA" ? amount : 0,
             currency: payment.currency,
             reason,
+            returnRequestId: parsed.data.returnRequestId ?? null,
             provider: payment.provider,
             requestedBy: userSubject(auth.user) || "admin",
             status: payment.provider === "stripe" ? "PROCESSING" : "REQUESTED",
@@ -163,6 +192,8 @@ export async function POST(request: Request) {
       if (code === "IDEMPOTENCY_CONFLICT") return errorResponse("A Idempotency-Key já foi utilizada para outro pedido de reembolso.", 409);
       if (code === "PAID_PAYMENT_REQUIRED") return errorResponse("A encomenda não possui um pagamento confirmado.", 409);
       if (code === "REFUND_AMOUNT_EXCEEDED") return errorResponse("O valor ultrapassa o saldo disponível para reembolso.", 422);
+      if (code === "RETURN_REQUEST_NOT_FOUND") return errorResponse("Solicitação de devolução não encontrada.", 404);
+      if (code === "RETURN_REQUEST_MISMATCH") return errorResponse("A devolução não pertence à encomenda paga, já não está na etapa elegível ou não é uma devolução.", 409);
       if ((error as { code?: string })?.code === "P2034") return errorResponse("Outro reembolso foi registado em simultâneo. Atualize os dados e tente novamente.", 409);
       if ((error as { code?: string })?.code === "P2002") {
         const duplicate = await prisma.refund.findUnique({
@@ -172,7 +203,7 @@ export async function POST(request: Request) {
             payment: { select: { id: true, provider: true, reference: true, currency: true, amountEUR: true, amountKZ: true, status: true, userId: true } },
           },
         });
-        if (duplicate && sameRequest(duplicate, parsed.data.orderId, amount, reason)) return Response.json({ data: duplicate, idempotent: true });
+        if (duplicate && sameRequest(duplicate, parsed.data.orderId, amount, reason, parsed.data.returnRequestId ?? null)) return Response.json({ data: duplicate, idempotent: true });
       }
       logger.error("Unable to create refund record", { orderId: parsed.data.orderId, error: error instanceof Error ? error.message : error });
       return errorResponse("Não foi possível registar o reembolso.", 503);
