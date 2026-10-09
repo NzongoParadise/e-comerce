@@ -100,3 +100,29 @@ jobs:
 
       - name: Build Next.js application
         run: npm run build:ci
+
+      - name: Start built Next.js server for black-box E2E smoke
+        run: |
+          PORT=3000 npm run start -- --hostname 127.0.0.1 > /tmp/next-e2e.log 2>&1 &
+          echo $! > /tmp/next-e2e.pid
+          for attempt in $(seq 1 45); do
+            if curl --silent --fail "http://127.0.0.1:3000/api/products?page=1&pageSize=1&market=PT" > /dev/null; then
+              echo "Next.js is responding to HTTP requests."
+              exit 0
+            fi
+            sleep 2
+          done
+          cat /tmp/next-e2e.log
+          exit 1
+
+      - name: Run black-box HTTP E2E smoke tests
+        env:
+          E2E_BASE_URL: http://127.0.0.1:3000
+        run: npm run test:e2e:smoke
+
+      - name: Stop Next.js smoke server
+        if: always()
+        run: |
+          if [ -f /tmp/next-e2e.pid ]; then
+            kill "$(cat /tmp/next-e2e.pid)" || true
+          fi
