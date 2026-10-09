@@ -117,8 +117,9 @@ export async function POST(request: Request) {
       .filter((rule) => rule.minQuantity <= requested.quantity)
       .sort((a, b) => b.minQuantity - a.minQuantity)[0];
 
-    const marketPrice = product.prices.find((price) => price.market === market && price.currency === currency)?.amount;
-    if (!matchingRule && !marketPrice) {
+    const configuredMarketPrice = product.prices.find((price) => price.market === market && price.currency === currency)?.amount;
+    const marketPrice = configuredMarketPrice ?? (market === "PT" ? product.basePrice : undefined);
+    if (!matchingRule && (marketPrice === undefined || Number(marketPrice) <= 0)) {
       return errorResponse(`Preço empresarial não configurado para ${product.name} no mercado ${market}.`, 422);
     }
     const unitPrice = matchingRule?.unitPrice ?? marketPrice!;
