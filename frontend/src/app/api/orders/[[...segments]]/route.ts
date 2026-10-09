@@ -334,9 +334,11 @@ export async function POST(request: Request) {
     const totalEUR = Math.max(0, productTotalEUR - (parsed.data.country === 'PT' ? promoDiscount : 0) + (parsed.data.country === 'PT' ? finalShipping : 0));
     const totalKZ = Math.max(0, productTotalKZ - (parsed.data.country === 'AO' ? promoDiscount : 0) + (parsed.data.country === 'AO' ? finalShipping : 0));
     const isStripePayment = parsed.data.paymentMethod === 'card' || parsed.data.paymentMethod === 'mbway';
+    const requiresOnlinePayment = ['card', 'mbway', 'multicaixa_reference', 'multicaixa_express', 'multicaixa'].includes(parsed.data.paymentMethod);
     if (isStripePayment && !isStripeCurrencySupported(currency)) return errorResponse('Pagamentos por cartão e MB WAY não estão disponíveis para encomendas em AOA. Selecione MULTICAIXA.', 400);
     if (isStripePayment && !process.env.STRIPE_SECRET_KEY) return errorResponse('Pagamentos por cartão não estão configurados', 503);
     const stripeExpiresAt = isStripePayment ? new Date(Date.now() + 60 * 60 * 1000) : undefined;
+    const inventoryReservationExpiresAt = requiresOnlinePayment ? (stripeExpiresAt ?? new Date(Date.now() + 30 * 60 * 1000)) : null;
     const orderNumber = `TG${new Date().getFullYear()}${String(Date.now()).slice(-8)}`;
     const order = await prisma.$transaction(async (transaction) => {
       for (const entry of calculatedItems) {
@@ -350,7 +352,9 @@ export async function POST(request: Request) {
         data: {
           orderNumber,
           idempotencyKey,
-          status: ['card', 'mbway', 'multicaixa_reference', 'multicaixa_express', 'multicaixa'].includes(parsed.data.paymentMethod) ? 'AWAITING_PAYMENT' : 'PROCESSING',
+          status: requiresOnlinePayment ? 'AWAITING_PAYMENT' : 'PROCESSING',
+          inventoryReserved: requiresOnlinePayment,
+          inventoryReservationExpiresAt,
           userId: user.id,
           deliveryMode: parsed.data.deliveryMode,
           shippingMethod: parsed.data.shippingMethod,
