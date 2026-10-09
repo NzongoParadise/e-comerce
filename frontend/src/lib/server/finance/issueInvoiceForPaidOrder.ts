@@ -16,7 +16,7 @@ export async function issueInvoiceForPaidOrder(orderId: number, issuedBy = "SYST
 
   // A paid event that arrived after cancellation remains in manual reconciliation.
   // Do not issue a commercial invoice until the order lifecycle is safe to process.
-  const issuableStatuses = ["PAYMENT_CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED", "COMPLETED"];
+  const issuableStatuses = ["PAYMENT_CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED", "COMPLETED", "PARTIALLY_REFUNDED", "REFUNDED"];
   if (!issuableStatuses.includes(order.status)) return null;
 
   const existing = await prisma.invoice.findUnique({ where: { orderId: order.id } });
