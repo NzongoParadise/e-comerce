@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { z } from "zod";
 import { authenticate, errorResponse, readJson, userSubject } from "@/lib/server/api";
 import { prisma } from "@/lib/server/prisma";
@@ -133,7 +134,7 @@ export async function POST(request: Request) {
     });
   }
 
-  const number = `COT-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
+  const number = `COT-${new Date().getFullYear()}-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
   const quote = await prisma.quote.create({
     data: {
       quoteNumber: number,
