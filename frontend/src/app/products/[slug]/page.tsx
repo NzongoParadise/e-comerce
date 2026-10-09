@@ -221,7 +221,7 @@ export default function ProductDetailsPage() {
     name: product.name,
     slug: product.slug,
     category: product.category.name,
-    specs: product.description,
+    specs: product.description || "",
     priceEUR: Number(ptPrice),
     imageUrl: product.imageUrl,
   });
@@ -327,13 +327,24 @@ export default function ProductDetailsPage() {
                  <button type="button" onClick={() => setPurchaseMode("wholesale")} className={`flex-1 rounded-lg py-2 text-xs font-bold transition ${purchaseMode === "wholesale" ? "bg-white text-[#1d6ac4] shadow-sm" : "text-gray-500"}`}>Compra grossista</button>
                </div>
 
-               {(() => {
+               {purchaseMode === "wholesale" ? (
+                 <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50/60 p-4">
+                   <p className="text-[10px] font-black uppercase tracking-wide text-blue-700">Condições empresariais</p>
+                   <p className="mt-1 text-sm font-bold text-slate-900">Preço por volume e cotação</p>
+                   <p className="mt-1 text-[10px] leading-5 text-slate-600">Solicite uma cotação para consultar as condições disponíveis para a sua empresa.</p>
+                 </div>
+               ) : !hasActivePrice ? (
+                 <div role="alert" className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
+                   <p className="text-sm font-black text-amber-900">Preço não configurado</p>
+                   <p className="mt-1 text-xs leading-5 text-amber-800">Este produto ainda não tem preço válido para {market === "AO" ? "Angola" : "Portugal"}.</p>
+                 </div>
+               ) : (() => {
                  const isAO = market === "AO";
                  const regular = isAO ? Number(aoPrice) : Number(ptPrice);
                  const offer = isAO ? kwanzaOffer : euroOffer;
                  const format = (amount: number) => isAO
-                   ? `Kz ${amount.toLocaleString("pt-AO")}`
-                   : `€ ${amount.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}`;
+                   ? "Kz " + amount.toLocaleString("pt-AO")
+                   : "€ " + amount.toLocaleString("pt-PT", { minimumFractionDigits: 2 });
                  return offer
                    ? <div className="mb-1 flex flex-wrap items-baseline gap-2"><del className="text-sm text-gray-400">{format(regular)}</del><strong className="text-3xl font-black tracking-tight text-red-700">{format(offer.promotionalPrice)}</strong></div>
                    : <div className="mb-1 text-3xl font-black tracking-tight text-gray-950">{format(regular)}</div>;
@@ -347,20 +358,29 @@ export default function ProductDetailsPage() {
 
                {purchaseMode === "wholesale" && <p className="mb-4 rounded-lg bg-blue-50 px-3 py-2 text-xs font-semibold text-[#1d6ac4]">Preços para empresas disponíveis por cotação.</p>}
 
-               <div className="mb-4 flex items-center gap-3">
-                 <div className="flex items-center border border-gray-300 rounded-lg">
-                   <button onClick={() => setQuantity(Math.max(1, quantity - 1))} className="px-3 py-2 text-gray-500 hover:bg-gray-50 rounded-l-lg">−</button>
-                   <span className="px-4 py-2 text-sm font-bold border-x border-gray-300">{quantity}</span>
-                   <button onClick={() => setQuantity(quantity + 1)} className="px-3 py-2 text-gray-500 hover:bg-gray-50 rounded-r-lg">+</button>
+               {purchaseMode === "retail" ? (
+                 <div className="mb-4 flex items-center gap-3">
+                   <div className="flex items-center rounded-lg border border-gray-300">
+                     <button type="button" onClick={() => setQuantity(Math.max(1, quantity - 1))} className="rounded-l-lg px-3 py-2 text-gray-500 hover:bg-gray-50" aria-label="Diminuir quantidade">−</button>
+                     <span className="border-x border-gray-300 px-4 py-2 text-sm font-bold">{quantity}</span>
+                     <button type="button" onClick={() => setQuantity(Math.min(product.stock, quantity + 1))} disabled={quantity >= product.stock} className="rounded-r-lg px-3 py-2 text-gray-500 hover:bg-gray-50 disabled:opacity-40" aria-label="Aumentar quantidade">+</button>
+                   </div>
+                   <button type="button" onClick={handleAddToCart} disabled={!hasActivePrice || product.stock <= 0} className="btn-primary flex-1 gap-2 py-3 text-base disabled:cursor-not-allowed disabled:opacity-50">
+                     <ShoppingCart size={18} strokeWidth={2.5} aria-hidden="true" />
+                     Adicionar ao carrinho
+                   </button>
                  </div>
-                 <button onClick={handleAddToCart} disabled={!hasActivePrice || product.stock <= 0} className="btn-primary flex-1 py-3 text-base gap-2 disabled:cursor-not-allowed disabled:opacity-50">
-                   <ShoppingCart size={18} strokeWidth={2.5} aria-hidden="true" />
-                   Adicionar ao carrinho
-                 </button>
-               </div>
+               ) : (
+                 <div className="mb-4">
+                   <button type="button" onClick={() => router.push("/b2b/cotacoes?product=" + product.id)} className="btn-primary flex w-full items-center justify-center gap-2 py-3 text-sm">
+                     <Package size={16}/> Solicitar cotação empresarial
+                   </button>
+                   <p className="mt-2 text-[10px] leading-5 text-slate-500">A cotação é gerida na área empresarial e não será adicionada ao carrinho de retalho.</p>
+                 </div>
+               )}
                {cartMessage && <div role="status" aria-live="polite" className="mb-3 flex items-start gap-2 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2.5 text-xs font-semibold text-emerald-800"><CheckCircle2 size={15} className="mt-0.5 shrink-0" />{cartMessage}</div>}
 
-               <button onClick={handleBuyNow} disabled={!hasActivePrice || product.stock <= 0} className="mb-3 w-full btn-secondary py-3 text-sm border-gray-300 text-gray-700 hover:bg-gray-50 gap-2 disabled:cursor-not-allowed disabled:opacity-50">
+               <button onClick={handleBuyNow} disabled={purchaseMode !== "retail" || !hasActivePrice || product.stock <= 0} className="mb-3 w-full btn-secondary py-3 text-sm border-gray-300 text-gray-700 hover:bg-gray-50 gap-2 disabled:cursor-not-allowed disabled:opacity-50">
                  <Zap size={16} strokeWidth={2} aria-hidden="true" />
                  Comprar agora
                </button>
@@ -488,7 +508,11 @@ export default function ProductDetailsPage() {
           </div>
         </section>
 
-        <aside className="card p-5"><div className="mb-4 flex items-center justify-between"><h2 className="font-bold text-gray-900">Também pode gostar</h2><Link href="/products" className="text-xs font-bold text-[#1d6ac4]">Ver mais →</Link></div><div className="grid grid-cols-2 gap-3 lg:grid-cols-1">{[{ name: "MacBook Air M2 13\"", price: 1299, image: "/Apple.jpg" }, { name: "Magic Mouse", price: 99, image: "/ASUS.jpg" }].map((item) => <div key={item.name} className="rounded-lg border border-gray-100 p-2"><div className="flex h-24 items-center justify-center rounded bg-gray-50"><img src={item.image} alt="" className="h-full w-full object-contain" /></div><p className="mt-2 line-clamp-1 text-xs font-bold text-gray-900">{item.name}</p><p className="text-xs font-black text-gray-900">€ {item.price.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}</p></div>)}</div></aside>
+        <aside className="card p-5">
+          <h2 className="font-bold text-gray-900">Descubra mais produtos</h2>
+          <p className="mt-2 text-xs leading-5 text-gray-500">Explore o catálogo completo e compare opções disponíveis para o seu mercado.</p>
+          <Link href="/products" className="mt-4 inline-flex text-xs font-bold text-[#1d6ac4] hover:underline">Explorar catálogo →</Link>
+        </aside>
       </div>
 
       <section className="relative mt-6 min-h-[150px] overflow-hidden rounded-lg bg-[#06233d] text-white">
