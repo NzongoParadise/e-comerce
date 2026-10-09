@@ -1,0 +1,63 @@
+name: Ecommerce Senior Quality Gate
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/**"
+  push:
+    branches:
+      - feat/senior-commerce-experience
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ecommerce-quality-\${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Prisma, TypeScript, tests and production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ecommerce_ci
+      JWT_SECRET: ci-build-secret-at-least-thirty-two-characters
+      FRONTEND_URL: http://localhost:3000
+      APP_URL: http://localhost:3000
+      ALLOW_INSECURE_AUTH: "false"
+      NODE_ENV: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Validate Prisma schema
+        run: npx prisma validate --schema prisma/schema.prisma
+
+      - name: Generate Prisma Client
+        run: npm run prisma:generate
+
+      - name: Type-check TypeScript
+        run: npx tsc --noEmit
+
+      - name: Run automated unit tests
+        run: npm test
+
+      - name: Build Next.js application
+        run: npm run build:ci
