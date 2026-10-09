@@ -44,6 +44,7 @@ export default function AdminB2BPage() {
   const [busy, setBusy] = useState<number | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [decisionNotes, setDecisionNotes] = useState<Record<number, string>>({});
   const [form, setForm] = useState({ companyId: "", productId: "", minQuantity: "1", unitPrice: "", currency: "AOA" });
 
   async function load() {
@@ -64,17 +65,23 @@ export default function AdminB2BPage() {
 
   useEffect(() => { void load(); }, []);
 
-  async function processQuote(quoteId: number, action: "APPROVE" | "REJECT") {
+  async function processQuote(quoteId: number, action: "APPROVE" | "REJECT", note = "") {
+    const decisionNote = note.trim();
+    if (action === "REJECT" && decisionNote.length < 5) {
+      setError("Indique o motivo da rejeição com pelo menos cinco caracteres.");
+      return;
+    }
     setBusy(quoteId); setError(""); setMessage("");
     try {
       const result = await fetchWithAuth("/api/admin/b2b/quotes", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ quoteId, action }),
+        body: JSON.stringify({ quoteId, action, note: decisionNote || undefined }),
       });
       setMessage(action === "APPROVE"
         ? `Cotação aprovada. Documento ${result.data.purchaseOrder?.poNumber || "PO"} criado.`
         : "Cotação rejeitada.");
+      setDecisionNotes((current) => ({ ...current, [quoteId]: "" }));
       await load();
     } catch (e) { setError(e instanceof Error ? e.message : "Não foi possível processar a cotação."); }
     finally { setBusy(null); }
@@ -135,9 +142,20 @@ export default function AdminB2BPage() {
               <div className="mt-4 divide-y divide-slate-100 border-y border-slate-100">
                 {quote.items.map((item) => <div key={item.productId} className="flex justify-between gap-4 py-2 text-sm"><span>{item.quantity} × {item.name}</span><strong>{Number(item.subtotal).toLocaleString("pt-AO")} Kz</strong></div>)}
               </div>
+              <label className="mt-4 block text-[9px] font-black uppercase tracking-wide text-slate-500">
+                Nota de decisão <span className="font-medium normal-case tracking-normal text-slate-400">— obrigatória para rejeitar</span>
+                <textarea
+                  value={decisionNotes[quote.id] || ""}
+                  onChange={(event) => setDecisionNotes((current) => ({ ...current, [quote.id]: event.target.value }))}
+                  maxLength={1000}
+                  rows={2}
+                  placeholder="Registe o motivo, condições ou esclarecimentos comerciais..."
+                  className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-normal normal-case tracking-normal text-slate-700 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+                />
+              </label>
               <div className="mt-4 flex flex-wrap justify-end gap-2">
-                <button disabled={busy === quote.id} onClick={() => void processQuote(quote.id, "REJECT")} className="inline-flex items-center gap-2 rounded-lg border border-rose-200 px-4 py-2 text-xs font-black text-rose-700 hover:bg-rose-50 disabled:opacity-50"><XCircle size={14}/>Rejeitar</button>
-                <button disabled={busy === quote.id} onClick={() => void processQuote(quote.id, "APPROVE")} className="inline-flex items-center gap-2 rounded-lg bg-blue-700 px-4 py-2 text-xs font-black text-white hover:bg-blue-800 disabled:opacity-50"><CheckCircle2 size={14}/>{busy === quote.id ? "A processar..." : "Aprovar cotação"}</button>
+                <button disabled={busy === quote.id} onClick={() => void processQuote(quote.id, "REJECT", decisionNotes[quote.id] || "")} className="inline-flex items-center gap-2 rounded-lg border border-rose-200 px-4 py-2 text-xs font-black text-rose-700 hover:bg-rose-50 disabled:opacity-50"><XCircle size={14}/>Rejeitar</button>
+                <button disabled={busy === quote.id} onClick={() => void processQuote(quote.id, "APPROVE", decisionNotes[quote.id] || "")} className="inline-flex items-center gap-2 rounded-lg bg-blue-700 px-4 py-2 text-xs font-black text-white hover:bg-blue-800 disabled:opacity-50"><CheckCircle2 size={14}/>{busy === quote.id ? "A processar..." : "Aprovar cotação"}</button>
               </div>
             </article>
           ))}
