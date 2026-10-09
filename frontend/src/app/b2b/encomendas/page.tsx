@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ArrowRight,
   CheckCircle2,
@@ -43,6 +43,21 @@ type Order = {
   createdAt: string;
 };
 
+type OrderSummary = {
+  count: number;
+  totalEUR: number | string;
+  totalKZ: number | string;
+  processing: number;
+  completed: number;
+  statusCounts: Record<string, number>;
+};
+
+type OrderMeta = { page: number; pageSize: number; total: number; pageCount: number };
+
+const emptySummary: OrderSummary = {
+  count: 0, totalEUR: 0, totalKZ: 0, processing: 0, completed: 0, statusCounts: {},
+};
+
 const orderStatus: Record<string, string> = {
   PENDING: "Pendente",
   AWAITING_PAYMENT: "A aguardar pagamento",
@@ -65,7 +80,10 @@ const poStatus: Record<string, string> = {
 
 export default function B2BOrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
-  const [summary, setSummary] = useState<Record<string, number | string>>({});
+  const [summary, setSummary] = useState<OrderSummary>(emptySummary);
+  const [meta, setMeta] = useState<OrderMeta>({ page: 1, pageSize: 25, total: 0, pageCount: 0 });
+  const [page, setPage] = useState(1);
+  const [loadingOrders, setLoadingOrders] = useState(true);
   const [pos, setPos] = useState<PO[]>([]);
   const [role, setRole] = useState("");
   const [busy, setBusy] = useState<number | null>(null);
@@ -79,42 +97,45 @@ export default function B2BOrdersPage() {
   const [paymentInfo, setPaymentInfo] = useState<{ poNumber: string; payment: NonNullable<PO["order"]>["payment"] } | null>(null);
   const [copiedPaymentField, setCopiedPaymentField] = useState("");
 
-  async function load() {
+  const load = useCallback(async () => {
     setError("");
+    setLoadingOrders(true);
     try {
+      const query = new URLSearchParams({ page: String(page), pageSize: "25" });
+      if (filter !== "ALL") query.set("status", filter);
+      if (search.trim()) query.set("search", search.trim());
       const [ordersResult, poResult] = await Promise.all([
-        fetchWithAuth("/api/b2b/orders"),
-        fetchWithAuth("/api/b2b/purchase-orders"),
+        fetchWithAuth("/api/b2b/orders?" + query.toString(), { cache: "no-store" }),
+        fetchWithAuth("/api/b2b/purchase-orders", { cache: "no-store" }),
       ]);
       setOrders(ordersResult.data || []);
-      setSummary(ordersResult.summary || {});
+      setSummary({ ...emptySummary, ...(ordersResult.summary || {}), statusCounts: ordersResult.summary?.statusCounts || {} });
+      setMeta({ page: Number(ordersResult.meta?.page || page), pageSize: Number(ordersResult.meta?.pageSize || 25), total: Number(ordersResult.meta?.total || 0), pageCount: Number(ordersResult.meta?.pageCount || 0) });
       setPos(poResult.data || []);
       setRole(poResult.role || "");
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Não foi possível carregar as operações.");
+    } finally {
+      setLoadingOrders(false);
     }
-  }
+  }, [filter, page, search]);
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void load(); }, search.trim() ? 250 : 0);
+    return () => window.clearTimeout(timer);
+  }, [load, search]);
 
   const canConvert = role === "OWNER" || role === "APPROVER";
 
-  const visibleOrders = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return orders.filter((order) => {
-      const status = orderStatus[order.status] || order.status;
-      return (!query || order.orderNumber.toLowerCase().includes(query) || status.toLowerCase().includes(query)) &&
-        (filter === "ALL" || order.status === filter);
-    });
-  }, [orders, search, filter]);
-
+  const visibleOrders = orders;
+  const statusCounts = summary.statusCounts || {};
   const tabs = [
-    ["ALL", "Todas", orders.length],
-    ["PENDING", "Pendentes", orders.filter((item) => item.status === "PENDING").length],
-    ["AWAITING_PAYMENT", "Pagamento", orders.filter((item) => item.status === "AWAITING_PAYMENT").length],
-    ["PROCESSING", "Processamento", orders.filter((item) => item.status === "PROCESSING").length],
-    ["SHIPPED", "Enviadas", orders.filter((item) => item.status === "SHIPPED").length],
-    ["DELIVERED", "Entregues", orders.filter((item) => item.status === "DELIVERED" || item.status === "COMPLETED").length],
+    ["ALL", "Todas", Number(summary.count || 0)],
+    ["PENDING", "Pendentes", Number(statusCounts.PENDING || 0)],
+    ["AWAITING_PAYMENT", "Pagamento", Number(statusCounts.AWAITING_PAYMENT || 0)],
+    ["PROCESSING", "Processamento", Number(statusCounts.PROCESSING || 0)],
+    ["SHIPPED", "Enviadas", Number(statusCounts.SHIPPED || 0)],
+    ["DELIVERED", "Entregues", Number(statusCounts.DELIVERED || 0) + Number(statusCounts.COMPLETED || 0)],
   ];
 
   async function convert(poId: number) {
@@ -219,7 +240,7 @@ export default function B2BOrdersPage() {
             </div>
             <div className="relative w-full max-w-xs">
               <Search size={15} className="pointer-events-none absolute left-3 top-3 text-slate-400"/>
-              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Pesquisar encomenda..." className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-xs outline-none focus:border-[#1d6ac4] focus:ring-4 focus:ring-blue-50"/>
+              <input value={search} onChange={(event) => { setPage(1); setSearch(event.target.value); }} placeholder="Pesquisar encomenda..." className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-xs outline-none focus:border-[#1d6ac4] focus:ring-4 focus:ring-blue-50"/>
             </div>
           </div>
           <div className="mt-4 flex gap-1 overflow-x-auto pb-1">
@@ -231,7 +252,9 @@ export default function B2BOrdersPage() {
           </div>
         </div>
 
-        {visibleOrders.length ? (
+        {loadingOrders ? (
+          <div role="status" className="p-10 text-center text-xs font-semibold text-slate-500">A atualizar o histórico de encomendas...</div>
+        ) : visibleOrders.length ? (
           <div className="divide-y divide-slate-100">
             {visibleOrders.map((order) => (
               <article key={order.id} className="p-4 transition hover:bg-slate-50/70 sm:p-5">
@@ -254,6 +277,15 @@ export default function B2BOrdersPage() {
               </article>
             ))}
           </div>
+          {meta.pageCount > 1 && (
+            <nav aria-label="Paginação das encomendas empresariais" className="flex flex-col gap-3 border-t border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-slate-500">Página <strong className="text-slate-900">{meta.page}</strong> de <strong className="text-slate-900">{meta.pageCount}</strong> · {meta.total} encomenda(s)</p>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => { setPage(Math.max(1, page - 1)); window.scrollTo({ top: 0, behavior: "smooth" }); }} disabled={page <= 1 || loadingOrders} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-40">Anterior</button>
+                <button type="button" onClick={() => { setPage(Math.min(meta.pageCount, page + 1)); window.scrollTo({ top: 0, behavior: "smooth" }); }} disabled={page >= meta.pageCount || loadingOrders} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-40">Seguinte</button>
+              </div>
+            </nav>
+          )}
         ) : (
           <div className="p-12 text-center">
             <Package size={32} className="mx-auto text-slate-300"/>
