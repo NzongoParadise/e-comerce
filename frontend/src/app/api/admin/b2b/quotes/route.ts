@@ -87,7 +87,7 @@ export async function PATCH(request: Request) {
         return { quote: updated, purchaseOrder: null };
       }
 
-      const existing = quote.purchaseOrders.find((po) => po.status !== "CANCELLED");
+      const existing = quote.purchaseOrders[0] ?? null;
       const po = existing ?? await tx.purchaseOrder.create({
         data: {
           companyId: quote.companyId,
