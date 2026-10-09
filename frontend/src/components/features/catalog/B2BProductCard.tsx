@@ -27,13 +27,16 @@ export type B2BProductCardProduct = {
   b2bPriceRules?: PriceRule[];
 };
 
-export function B2BProductCard({ product }: { product: B2BProductCardProduct }) {
-  const { market, formatPrice, eurToKz } = useMarket();
+export function B2BProductCard({ product, marketOverride }: { product: B2BProductCardProduct; marketOverride?: "AO" | "PT" }) {
+  const { market: preferredMarket } = useMarket();
+  const market = marketOverride ?? preferredMarket;
   const { addToCart } = useB2BCart();
   const { isFavorite, toggleFavorite } = useFavorites();
 
-  const euroPrice = Number(product.prices?.find((price) => price.market === "PT")?.amount ?? product.basePrice);
-  const kwanzaPrice = Number(product.prices?.find((price) => price.market === "AO")?.amount ?? eurToKz(euroPrice));
+  const euroPrice = Number(product.prices?.find((price) => price.market === "PT" && price.currency === "EUR")?.amount ?? product.basePrice);
+  const configuredKwanza = product.prices?.find((price) => price.market === "AO" && price.currency === "AOA")?.amount;
+  const kwanzaPrice = configuredKwanza === undefined ? null : Number(configuredKwanza);
+  const hasActivePrice = market === "PT" ? euroPrice > 0 : kwanzaPrice !== null && kwanzaPrice > 0;
   const favorite = isFavorite(product.id);
   const currency = market === "PT" ? "EUR" : "AOA";
   const rules = [...(product.b2bPriceRules || [])]
@@ -42,7 +45,7 @@ export function B2BProductCard({ product }: { product: B2BProductCardProduct }) 
   const bestRule = rules.length ? rules[rules.length - 1] : null;
 
   function add() {
-    if (product.stock <= 0) return;
+    if (product.stock <= 0 || (!hasActivePrice && rules.length === 0)) return;
     addToCart({
       id: String(product.id) + "-default",
       productId: product.id,
@@ -79,6 +82,8 @@ export function B2BProductCard({ product }: { product: B2BProductCardProduct }) 
             category: product.category.name,
             specs: product.description || "",
             priceEUR: euroPrice,
+            priceKZ: kwanzaPrice ?? undefined,
+            stock: product.stock,
             imageUrl: product.imageUrl || undefined,
           })}
           aria-label={favorite ? "Remover " + product.name + " dos favoritos" : "Adicionar " + product.name + " aos favoritos"}
@@ -108,8 +113,12 @@ export function B2BProductCard({ product }: { product: B2BProductCardProduct }) 
             </>
           ) : (
             <>
-              <p className="mt-1 text-lg font-black tracking-tight text-slate-950">{market === "PT" ? formatPrice(euroPrice) : "Kz " + kwanzaPrice.toLocaleString("pt-AO", { maximumFractionDigits: 0 })}</p>
-              <p className="mt-1 text-[8px] text-slate-500">Preço empresarial sob consulta</p>
+              <p className="mt-1 text-lg font-black tracking-tight text-slate-950">{market === "PT"
+                ? "€ " + euroPrice.toLocaleString("pt-PT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                : kwanzaPrice !== null && kwanzaPrice > 0
+                  ? "Kz " + kwanzaPrice.toLocaleString("pt-AO", { maximumFractionDigits: 0 })
+                  : "Preço por confirmar"}</p>
+              <p className="mt-1 text-[8px] text-slate-500">{hasActivePrice ? "Preço de referência; condições finais na cotação" : "Configure preço de mercado ou regra por volume"}</p>
             </>
           )}
         </div>
@@ -119,7 +128,7 @@ export function B2BProductCard({ product }: { product: B2BProductCardProduct }) 
             <span className={product.stock > 0 ? "font-bold text-emerald-600" : "font-bold text-rose-600"}>{product.stock > 0 ? product.stock + " em stock" : "Sem stock"}</span>
             <span className="inline-flex items-center gap-1 text-slate-400"><Truck size={11}/> {market === "PT" ? "PT" : "AO"}</span>
           </div>
-          <button type="button" onClick={add} disabled={product.stock <= 0} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-[#132238] px-3 py-2.5 text-[10px] font-black text-white transition hover:bg-[#1d6ac4] disabled:cursor-not-allowed disabled:opacity-40">
+          <button type="button" onClick={add} disabled={product.stock <= 0 || (!hasActivePrice && rules.length === 0)} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-[#132238] px-3 py-2.5 text-[10px] font-black text-white transition hover:bg-[#1d6ac4] disabled:cursor-not-allowed disabled:opacity-40">
             <ShoppingCart size={14}/> Adicionar ao pedido
           </button>
           <Link href={"/b2b/cotacoes?product=" + product.id} className="mt-2 flex items-center justify-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-[9px] font-black text-slate-600 hover:border-blue-200 hover:text-[#1d6ac4]">Solicitar cotação</Link>
