@@ -63,6 +63,29 @@ jobs:
       - name: Validate Prisma schema
         run: npx prisma validate --schema prisma/schema.prisma
 
+      - name: Audit dependency vulnerabilities (diagnostic)
+        run: |
+          npm audit --json > /tmp/npm-audit.json || true
+          node <<'NODE'
+          const fs = require("node:fs");
+          const report = JSON.parse(fs.readFileSync("/tmp/npm-audit.json", "utf8"));
+          console.log("NPM AUDIT SUMMARY", JSON.stringify(report.metadata?.vulnerabilities ?? {}, null, 2));
+          for (const [name, issue] of Object.entries(report.vulnerabilities ?? {})) {
+            console.log("NPM AUDIT DETAIL", JSON.stringify({
+              package: name,
+              severity: issue.severity,
+              direct: issue.isDirect,
+              range: issue.range,
+              fixAvailable: issue.fixAvailable,
+              advisories: (issue.via || []).map((entry) => typeof entry === "string" ? entry : ({
+                title: entry.title,
+                url: entry.url,
+                range: entry.range,
+              })),
+            }));
+          }
+          NODE
+
       - name: Apply the complete migration history to PostgreSQL
         run: npx prisma migrate deploy --schema prisma/schema.prisma
 
