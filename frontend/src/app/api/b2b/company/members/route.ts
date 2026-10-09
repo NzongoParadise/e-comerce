@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 const schema = z.object({ memberUserId: z.coerce.number().int().positive(), role: z.enum(["BUYER", "APPROVER", "OWNER"]) });
 async function context(request: Request) {
   const auth = await authenticate(request); const subject = userSubject(auth); if (!subject) return null;
-  const user = await prisma.user.findUnique({ where: { externalId: subject }, select: { id: true, accountType: true } }); if (!user) return null;
+  const user = await prisma.user.findUnique({ where: { externalId: subject }, select: { id: true, accountType: true } }); if (!user || user.accountType !== "B2B") return null;
   const membership = await prisma.companyMember.findFirst({ where: { userId: user.id, status: "ACTIVE", company: { status: "ACTIVE" } } }); return { user, membership };
 }
 export async function GET(request: Request) {
