@@ -77,6 +77,15 @@ export async function GET(request: Request) {
   const userId = await getUserId(request);
   if (!userId) return errorResponse('Authentication required', 401);
   const [resource] = segments(request);
+  if (resource === 'communication-preferences') {
+    const preferences = await prisma.communicationPreference.findUnique({
+      where: { userId },
+      select: { promotions: true, newProducts: true, orderUpdates: true, commercialUpdates: true },
+    });
+    return Response.json({
+      data: preferences ?? { promotions: true, newProducts: false, orderUpdates: true, commercialUpdates: true },
+    });
+  }
   if (resource === 'addresses') {
     return Response.json({ data: await prisma.address.findMany({ where: { userId }, orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }] }) });
   }
@@ -177,6 +186,31 @@ export async function PATCH(request: Request) {
   if (!userId) return errorResponse('Authentication required', 401);
   const [resource, value] = segments(request);
   const id = invalidId(value);
+
+  if (resource === 'communication-preferences') {
+    const schema = z.object({
+      promotions: z.boolean().optional(),
+      newProducts: z.boolean().optional(),
+      orderUpdates: z.boolean().optional(),
+      commercialUpdates: z.boolean().optional(),
+    }).strict().refine((payload) => Object.keys(payload).length > 0, "Indique pelo menos uma preferência.");
+    const parsed = schema.safeParse(await readJson(request));
+    if (!parsed.success) return errorResponse('Preferências de comunicação inválidas', 400);
+    const preferences = await prisma.communicationPreference.upsert({
+      where: { userId },
+      create: {
+        userId,
+        promotions: true,
+        newProducts: false,
+        orderUpdates: true,
+        commercialUpdates: true,
+        ...parsed.data,
+      },
+      update: parsed.data,
+      select: { promotions: true, newProducts: true, orderUpdates: true, commercialUpdates: true },
+    });
+    return Response.json({ data: preferences });
+  }
 
   if (resource === 'addresses') {
     if (!id) return errorResponse('Dados de endereço inválidos', 400);
