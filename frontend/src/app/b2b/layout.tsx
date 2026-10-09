@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2, FileText, LayoutDashboard, Package, Settings, ShoppingBag, ShoppingCart, Users, WalletCards, X } from "lucide-react";
+import { Bell, Building2, FileText, LayoutDashboard, Package, Settings, ShoppingBag, ShoppingCart, Users, WalletCards, X } from "lucide-react";
 import { B2BCartProvider } from "@/context/B2BCartContext";
 import { useEffect, useMemo, useState } from "react";
 import Header from "@/components/layout/Header";
@@ -21,6 +21,7 @@ const groups = [
     { href: "/b2b/cotacoes", label: "Cotações", Icon: FileText },
     { href: "/b2b/encomendas", label: "Encomendas", Icon: ShoppingBag },
     { href: "/b2b/financeiro", label: "Financeiro", Icon: WalletCards },
+    { href: "/b2b/notificacoes", label: "Notificações", Icon: Bell },
   ]},
   { label: "Organização", items: [
     { href: "/b2b/empresa", label: "Empresa", Icon: Building2 },
