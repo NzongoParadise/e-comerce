@@ -34,7 +34,7 @@ export async function GET(request: Request) {
   };
 
   try {
-    const [data, total, counts] = await prisma.$transaction([
+    const [data, total] = await prisma.$transaction([
       prisma.creditNote.findMany({
         where,
         include: {
@@ -49,8 +49,12 @@ export async function GET(request: Request) {
         take: pageSize,
       }),
       prisma.creditNote.count({ where }),
-      prisma.creditNote.groupBy({ by: ["status"], orderBy: { status: "asc" }, _count: { _all: true } }),
     ]);
+    const counts = await prisma.creditNote.groupBy({
+      by: ["status"],
+      orderBy: { status: "asc" },
+      _count: { _all: true },
+    });
 
     return Response.json({
       data,
