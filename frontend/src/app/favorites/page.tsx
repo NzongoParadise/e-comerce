@@ -27,13 +27,25 @@ export default function FavoritesPage() {
     });
   }, [favorites, category, sort, market]);
 
-  function shareFavorites() {
-    const shareData = { title: "Os meus favoritos RUBRICA DILIGENTE (SU), LDA", text: "Veja os produtos que guardei na RUBRICA DILIGENTE (SU), LDA.", url: window.location.href };
-    if (navigator.share) {
-      navigator.share(shareData).catch(() => undefined);
+  async function shareFavorites() {
+    if (!favorites.length) {
+      setMessage("Adicione produtos aos favoritos antes de partilhar.");
       return;
     }
-    navigator.clipboard?.writeText(window.location.href).then(() => setMessage("Link dos favoritos copiado."));
+    const lines = favorites.map((product) => product.name + " — " + new URL("/products/" + product.slug, window.location.origin).toString());
+    const text = "Produtos que recomendo da RUBRICA DILIGENTE:\n\n" + lines.join("\n");
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: "Produtos recomendados", text });
+      } else if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        setMessage("Lista de produtos e respetivos links copiada.");
+      } else {
+        setMessage("Este navegador não suporta a partilha nem a cópia automática.");
+      }
+    } catch (error) {
+      if (!(error instanceof Error) || error.name !== "AbortError") setMessage("Não foi possível partilhar a lista.");
+    }
   }
 
   function addProduct(product: typeof favorites[number]) {
@@ -60,7 +72,7 @@ export default function FavoritesPage() {
 
   return <div className="container mx-auto px-4 py-8">
     <nav className="mb-6 flex gap-1 text-xs text-gray-400"><Link href="/" className="hover:text-[#1d6ac4]">Início</Link><span>›</span><span className="font-medium text-gray-700">Lista de favoritos</span></nav>
-    <div className="mb-6 flex flex-col justify-between gap-3 sm:flex-row sm:items-end"><div><h1 className="flex items-center gap-2 text-2xl font-black text-gray-900"><Heart className="text-[#1d6ac4]" fill="currentColor" /> Lista de favoritos</h1><p className="mt-1 text-sm text-gray-500">Guarde os produtos de que mais gosta e compre mais tarde.</p></div><button type="button" onClick={shareFavorites} className="btn-secondary"><span>↗</span> Partilhar lista</button></div>
+    <div className="mb-6 flex flex-col justify-between gap-3 sm:flex-row sm:items-end"><div><h1 className="flex items-center gap-2 text-2xl font-black text-gray-900"><Heart className="text-[#1d6ac4]" fill="currentColor" /> Lista de favoritos</h1><p className="mt-1 text-sm text-gray-500">Guarde os produtos de que mais gosta e compre mais tarde.</p></div><button type="button" onClick={() => void shareFavorites()} disabled={!favorites.length} className="btn-secondary disabled:cursor-not-allowed disabled:opacity-40"><span>↗</span> Partilhar lista</button></div>
     {message && <p role="status" className="mb-4 rounded-lg bg-blue-50 px-4 py-3 text-sm text-blue-800">{message}</p>}
     <div className="grid gap-8 lg:grid-cols-[1fr_250px]">
       <main><div className="mb-5 flex items-center justify-between gap-3"><div className="flex gap-2 overflow-x-auto">{categories.map((item) => <button type="button" key={item} onClick={() => setCategory(item)} className={`whitespace-nowrap rounded-full px-3 py-2 text-xs font-bold ${category === item ? "bg-[#1d6ac4] text-white" : "text-gray-600 hover:bg-gray-100"}`}>{item}</button>)}</div><label className="hidden items-center gap-1 text-xs font-semibold text-gray-500 sm:flex"><SlidersHorizontal size={14} /><select value={sort} onChange={(event) => setSort(event.target.value as typeof sort)} className="bg-transparent outline-none"><option value="recent">Mais recente</option><option value="price-low">Preço mais baixo</option><option value="price-high">Preço mais alto</option><option value="name">Nome A-Z</option></select></label></div>
