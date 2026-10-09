@@ -74,6 +74,7 @@ export async function POST(request: Request) {
 
       const market = companyMarket(membership.company.country);
       const currency = market === "PT" ? "EUR" : "AOA";
+      if (quote.market !== market || quote.currency !== currency) throw new Error("QUOTE_MARKET_CHANGED");
       const total = quote.items.reduce((sum, item) => sum + Number(item.subtotal), 0);
 
       const requestedByProduct = new Map<number, { quantity: number; stock: number; name: string }>();
@@ -150,6 +151,7 @@ export async function POST(request: Request) {
     if (code === "PO_NOT_FOUND") return errorResponse("Purchase Order não encontrado.", 404);
     if (code === "PO_NOT_APPROVED") return errorResponse("O Purchase Order ainda não está aprovado.", 409);
     if (code === "QUOTE_REQUIRED") return errorResponse("A cotação associada não é válida.", 409);
+    if (code === "QUOTE_MARKET_CHANGED") return errorResponse("O mercado ou a moeda da empresa mudou desde a criação desta cotação. Crie uma nova cotação para evitar aplicar preços em moeda incorreta.", 409);
     if (code.startsWith("STOCK:")) return errorResponse(`Stock insuficiente: ${code.slice(6)}`, 409);
     if ((error as { code?: string })?.code === "P2034") return errorResponse("A operação concorreu com outra compra. Tente novamente.", 409);
     console.error("B2B purchase order conversion failed:", error);
