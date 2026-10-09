@@ -33,10 +33,10 @@ type WorkspaceHeaderProps = {
 const config = {
   admin: { mark: ShieldCheck, markText: "Admin", title: "RUBRICA DILIGENTE", tone: "Operação e controlo", links: [] as [string, string][] },
   account: { mark: ShoppingBag, markText: "Conta", title: "RUBRICA DILIGENTE", tone: "Conta do cliente", links: [
-    ["Comprar", "/products"], ["Encomendas", "/account/orders"], ["Favoritos", "/favorites"], ["Cupões", "/account/coupons"], ["Suporte", "/account/support"],
+    ["Comprar", "/products"], ["Encomendas", "/account/orders"], ["Favoritos", "/favorites"], ["Cupões", "/account/coupons"], ["Suporte", "/account/support"], ["Notificações", "/notifications"],
   ] as [string, string][] },
   b2b: { mark: Building2, markText: "B2B", title: "RUBRICA DILIGENTE", tone: "Conta empresarial", links: [
-    ["Catálogo", "/b2b/catalogo"], ["Carrinho", "/b2b/carrinho"], ["Cotações", "/b2b/cotacoes"], ["Encomendas", "/b2b/encomendas"], ["Financeiro", "/b2b/financeiro"], ["Empresa", "/b2b/empresa"],
+    ["Catálogo", "/b2b/catalogo"], ["Carrinho", "/b2b/carrinho"], ["Cotações", "/b2b/cotacoes"], ["Encomendas", "/b2b/encomendas"], ["Financeiro", "/b2b/financeiro"], ["Notificações", "/b2b/notificacoes"], ["Empresa", "/b2b/empresa"],
   ] as [string, string][] },
 } as const;
 
