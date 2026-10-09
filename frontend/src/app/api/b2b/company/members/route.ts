@@ -96,7 +96,7 @@ export async function DELETE(request: Request) {
       title: "Acesso empresarial atualizado",
       message: "O seu acesso à empresa foi revogado pelo proprietário. A sua conta pessoal continua disponível.",
       link: "/account",
-      dedupeKey: \`b2b:membership-revoked:\${ctx.membership.companyId}:\${outcome.userId}\`,
+      dedupeKey: "b2b:membership-revoked:" + ctx.membership.companyId + ":" + outcome.userId,
     }).catch(() => undefined);
 
     return Response.json({ data: { removed: true, memberUserId: outcome.userId } });
