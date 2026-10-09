@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/server/prisma';
 import { cancelAwaitingPaymentAndReleaseStock } from '@/lib/server/orders/inventory';
 import { multicaixaProvider } from '@/lib/server/payments/multicaixaProvider';
@@ -7,6 +8,8 @@ import { isStripeCurrencySupported, matchesStripePayment } from '@/lib/server/pa
 import { authenticate, errorResponse, readJson, userSubject } from '@/lib/server/api';
 import { setStripeDefaultPaymentMethod } from '@/lib/server/payments/stripeCustomers';
 import { createNotificationIfAllowed } from '@/lib/server/notifications';
+import { issueInvoiceForPaidOrder } from '@/lib/server/finance/issueInvoiceForPaidOrder';
+import { issueCreditNoteForSucceededRefund } from '@/lib/server/finance/issueCreditNoteForSucceededRefund';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -57,15 +60,20 @@ export async function POST(request: Request) {
   if (parsed.data.method === 'MULTICAIXA_EXPRESS' && !parsed.data.phoneNumber) return errorResponse('O telemóvel é obrigatório para MULTICAIXA Express', 400);
   const user = await prisma.user.findUnique({ where: { externalId: subject } });
   if (!user) return errorResponse('User profile not found', 401);
-  const order = await prisma.order.findFirst({ where: { id: parsed.data.orderId, userId: user.id }, include: { payment: true } });
+  const order = await prisma.order.findFirst({ where: { id: parsed.data.orderId, userId: user.id }, include: { payment: true, items: { select: { productId: true, quantity: true } } } });
   if (!order || !order.payment) return errorResponse('Encomenda ou pagamento não encontrado', 404);
   if (order.country !== 'AO' || order.currency !== 'AOA') return errorResponse('MULTICAIXA só está disponível para encomendas em Angola', 400);
   if (order.payment.status === 'PAID') return errorResponse('A encomenda já está paga', 409);
 
-  const existingAttempt = await prisma.paymentAttempt.findUnique({ where: { idempotencyKey: parsed.data.idempotencyKey } });
+  const existingAttempt = await prisma.paymentAttempt.findUnique({
+    where: { idempotencyKey: parsed.data.idempotencyKey },
+    include: { payment: true },
+  });
   if (existingAttempt) {
-    const payment = await prisma.payment.findUnique({ where: { id: existingAttempt.paymentId } });
-    return Response.json({ data: payment });
+    if (existingAttempt.payment.orderId !== order.id || existingAttempt.payment.userId !== user.id) {
+      return errorResponse("A chave de idempotência já está associada a outra encomenda.", 409);
+    }
+    return Response.json({ data: existingAttempt.payment, idempotent: true });
   }
   const attempt = await prisma.paymentAttempt.create({ data: { paymentId: order.payment.id, idempotencyKey: parsed.data.idempotencyKey, status: 'PROCESSING' } });
   try {
@@ -81,26 +89,82 @@ export async function POST(request: Request) {
     const result = parsed.data.method === 'MULTICAIXA_REFERENCE'
       ? await multicaixaProvider.createReference(input)
       : await multicaixaProvider.createExpress(input);
-    const payment = await prisma.payment.update({
-      where: { id: order.payment.id },
-      data: {
-        provider: 'multicaixa',
-        method: parsed.data.method,
-        providerPaymentId: result.providerPaymentId,
-        entity: result.entity,
-        referenceNumber: result.referenceNumber,
-        expiresAt: result.expiresAt,
-        phoneNumber: result.phoneNumber,
-        ...statusUpdates(result.status),
-      },
-    });
-    await prisma.paymentAttempt.update({ where: { id: attempt.id }, data: { providerPaymentId: result.providerPaymentId, status: result.status } });
+    const terminalFailure = ["FAILED", "EXPIRED", "CANCELLED"].includes(result.status);
+    const paymentStatus = result.status === "PAID" ? "PAID" : terminalFailure ? result.status : "AWAITING_PAYMENT";
+    const reservationExpiresAt = result.expiresAt ?? new Date(Date.now() + 30 * 60 * 1000);
+    const payment = await prisma.$transaction(async (transaction) => {
+      const saved = await transaction.payment.update({
+        where: { id: order.payment!.id },
+        data: {
+          provider: "multicaixa",
+          method: parsed.data.method,
+          providerPaymentId: result.providerPaymentId,
+          entity: result.entity,
+          referenceNumber: result.referenceNumber,
+          expiresAt: result.expiresAt ?? reservationExpiresAt,
+          phoneNumber: result.phoneNumber,
+          ...statusUpdates(paymentStatus),
+        },
+      });
+      await transaction.paymentAttempt.update({
+        where: { id: attempt.id },
+        data: { providerPaymentId: result.providerPaymentId, status: result.status },
+      });
+
+      if (result.status === "PAID") {
+        const confirmed = await transaction.order.updateMany({
+          where: { id: order.id, status: "AWAITING_PAYMENT" },
+          data: { status: "PAYMENT_CONFIRMED", inventoryReserved: false, inventoryReservationExpiresAt: null },
+        });
+        if (!confirmed.count && order.status === "CANCELLED") {
+          await transaction.order.update({
+            where: { id: order.id },
+            data: { status: "PAYMENT_REVIEW_REQUIRED", inventoryReserved: false, inventoryReservationExpiresAt: null },
+          });
+        }
+      } else if (terminalFailure) {
+        await cancelAwaitingPaymentAndReleaseStock(
+          transaction,
+          order.id,
+          order.items,
+          result.status === "EXPIRED" ? "EXPIRED" : result.status === "CANCELLED" ? "CANCELLED" : "FAILED",
+          "Encomenda cancelada após falha ao iniciar MULTICAIXA.",
+        );
+      } else {
+        await transaction.order.updateMany({
+          where: { id: order.id, status: "AWAITING_PAYMENT" },
+          data: { inventoryReservationExpiresAt: reservationExpiresAt },
+        });
+      }
+      return saved;
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5000, timeout: 10000 });
+    if (paymentStatus === "PAID") {
+      await issueInvoiceForPaidOrder(order.id).catch((error) => logger.error("Invoice issuance after direct payment confirmation failed", {
+        orderId: order.id,
+        error: error instanceof Error ? error.message : error,
+      }));
+    }
     return Response.json({ data: payment }, { status: 201 });
   } catch (error) {
-    await prisma.paymentAttempt.update({ where: { id: attempt.id }, data: { status: error instanceof Error && error.message === 'MULTICAIXA_NOT_CONFIGURED' ? 'PAYMENT_NOT_CONFIGURED' : 'FAILED' } });
-    if (error instanceof Error && error.message === 'MULTICAIXA_NOT_CONFIGURED') return errorResponse('Gateway MULTICAIXA não configurado', 503);
-    logger.error('MULTICAIXA payment error', { orderId: order.id, paymentId: order.payment.id, method: parsed.data.method, error: error instanceof Error ? error.message : error });
-    return errorResponse('Não foi possível iniciar o pagamento MULTICAIXA', 502);
+    await prisma.$transaction(async (transaction) => {
+      await transaction.paymentAttempt.updateMany({
+        where: { id: attempt.id },
+        data: { status: error instanceof Error && error.message === "MULTICAIXA_NOT_CONFIGURED" ? "PAYMENT_NOT_CONFIGURED" : "FAILED" },
+      });
+      await cancelAwaitingPaymentAndReleaseStock(
+        transaction,
+        order.id,
+        order.items,
+        "FAILED",
+        "Encomenda cancelada após erro ao iniciar o pagamento MULTICAIXA.",
+      );
+    }).catch((transactionError) => logger.error("Unable to release failed Multicaixa order reservation", {
+      orderId: order.id,
+      error: transactionError instanceof Error ? transactionError.message : transactionError,
+    }));
+    if (error instanceof Error && error.message === "MULTICAIXA_NOT_CONFIGURED") return errorResponse("Gateway MULTICAIXA não configurado", 503);
+    logger.error("MULTICAIXA payment error", { orderId: order.id, paymentId: order.payment.id, method: parsed.data.method, error: error instanceof Error ? error.message : error });
+    return errorResponse("Não foi possível iniciar o pagamento MULTICAIXA. A encomenda foi cancelada se a reserva de stock ainda estava ativa.", 502);
   }
 }
 
@@ -119,52 +183,214 @@ export async function GET(request: Request) {
 
 async function handleMulticaixaWebhook(request: Request) {
   const rawBody = Buffer.from(await request.arrayBuffer());
-  const signature = request.headers.get('x-multicaixa-signature') || undefined;
+  const signature = request.headers.get("x-multicaixa-signature") || undefined;
   if (!multicaixaProvider.verifyWebhook(rawBody, signature)) {
-    logger.warn('Rejected Multicaixa webhook signature', { hasSignature: Boolean(signature) });
-    return errorResponse('Invalid webhook signature', 401);
+    logger.warn("Rejected Multicaixa webhook signature", { hasSignature: Boolean(signature) });
+    return errorResponse("Invalid webhook signature", 401);
   }
+
   let event;
   try {
     event = multicaixaProvider.parseWebhook(rawBody);
   } catch (error) {
-    logger.warn('Invalid Multicaixa webhook payload', { error: error instanceof Error ? error.message : error });
-    return errorResponse('Invalid webhook payload', 400);
+    logger.warn("Invalid Multicaixa webhook payload", { error: error instanceof Error ? error.message : error });
+    return errorResponse("Invalid webhook payload", 400);
   }
+
   const payment = await prisma.payment.findUnique({
     where: { providerPaymentId: event.providerPaymentId },
-    include: { order: { select: { id: true, orderNumber: true, userId: true } } },
+    include: {
+      order: {
+        select: {
+          id: true,
+          orderNumber: true,
+          userId: true,
+          companyId: true,
+          status: true,
+          items: { select: { productId: true, quantity: true } },
+        },
+      },
+    },
   });
-  if (!payment) return errorResponse('Payment not found', 404);
-  if (Number(payment.amountKZ) !== event.amountKZ || payment.currency !== event.currency) return errorResponse('Payment amount or currency mismatch', 422);
+  if (!payment) return errorResponse("Payment not found", 404);
+  if (Number(payment.amountKZ) !== event.amountKZ || payment.currency !== event.currency) {
+    logger.warn("Rejected Multicaixa webhook amount/currency mismatch", {
+      paymentId: payment.id,
+      orderId: payment.orderId,
+      expectedAmount: Number(payment.amountKZ),
+      receivedAmount: event.amountKZ,
+      expectedCurrency: payment.currency,
+      receivedCurrency: event.currency,
+    });
+    return errorResponse("Payment amount or currency mismatch", 422);
+  }
+
+  let outcome = "UPDATED";
   try {
-    await prisma.$transaction(async (transaction) => {
-      await transaction.paymentEvent.create({ data: {
-        paymentId: payment.id,
-        providerEventId: event.providerEventId,
-        eventType: event.type,
-        status: event.status,
-        amountKZ: event.amountKZ,
-        currency: event.currency,
-        payload: event.payload as never,
-        processedAt: new Date(),
-      } });
-      await transaction.payment.update({ where: { id: payment.id }, data: statusUpdates(event.status) });
-      if (event.status === 'PAID') await transaction.order.update({ where: { id: payment.orderId }, data: { status: 'PAYMENT_CONFIRMED' } });
+    outcome = await prisma.$transaction(async (transaction) => {
+      const latePaidAfterCancellation =
+        event.status === "PAID" &&
+        ["CANCELLED", "PAYMENT_REVIEW_REQUIRED"].includes(payment.order.status);
+
+      await transaction.paymentEvent.create({
+        data: {
+          paymentId: payment.id,
+          providerEventId: event.providerEventId,
+          eventType: event.type,
+          status: latePaidAfterCancellation ? "PAID_REVIEW_REQUIRED" : event.status,
+          amountKZ: event.amountKZ,
+          currency: event.currency,
+          payload: event.payload as never,
+          processedAt: new Date(),
+        },
+      });
+
+      if (event.status === "PAID") {
+        if (latePaidAfterCancellation) {
+          await transaction.payment.update({
+            where: { id: payment.id },
+            data: { ...statusUpdates("PAID") },
+          });
+          if (payment.order.status === "CANCELLED") {
+            await transaction.order.update({
+              where: { id: payment.order.id },
+              data: { status: "PAYMENT_REVIEW_REQUIRED", inventoryReserved: false, inventoryReservationExpiresAt: null },
+            });
+            await transaction.trackingEvent.create({
+              data: {
+                orderId: payment.order.id,
+                status: "PAYMENT_REVIEW_REQUIRED",
+                location: "Online",
+                description: "Pagamento MULTICAIXA confirmado após cancelamento e libertação do stock. É necessária revisão manual antes do processamento.",
+              },
+            });
+          }
+          return "LATE_PAID_REVIEW";
+        }
+
+        await transaction.payment.update({
+          where: { id: payment.id },
+          data: { ...statusUpdates("PAID") },
+        });
+        const confirmed = await transaction.order.updateMany({
+          where: { id: payment.order.id, status: { in: ["PENDING", "AWAITING_PAYMENT"] } },
+          data: { status: "PAYMENT_CONFIRMED", inventoryReserved: false, inventoryReservationExpiresAt: null },
+        });
+        if (!confirmed.count && payment.order.status !== "PAYMENT_CONFIRMED" &&
+            !["PROCESSING", "SHIPPED", "DELIVERED", "COMPLETED"].includes(payment.order.status)) {
+          logger.error("Multicaixa reports paid order in an unexpected lifecycle state", {
+            paymentId: payment.id,
+            orderId: payment.order.id,
+            orderStatus: payment.order.status,
+          });
+          return "PAID_REVIEW_REQUIRED";
+        }
+        return "PAID";
+      }
+
+      if (["FAILED", "EXPIRED", "CANCELLED"].includes(event.status)) {
+        if (["PAYMENT_CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED", "COMPLETED", "REFUNDED"].includes(payment.order.status)) {
+          logger.warn("Ignoring late non-success Multicaixa event for an already paid/fulfilled order", {
+            paymentId: payment.id,
+            orderId: payment.order.id,
+            eventStatus: event.status,
+            orderStatus: payment.order.status,
+          });
+          return "LATE_FAILURE_IGNORED";
+        }
+
+        if (payment.order.status === "AWAITING_PAYMENT") {
+          const released = await cancelAwaitingPaymentAndReleaseStock(
+            transaction,
+            payment.order.id,
+            payment.order.items,
+            event.status === "EXPIRED" ? "EXPIRED" : event.status === "CANCELLED" ? "CANCELLED" : "FAILED",
+            event.status === "EXPIRED"
+              ? "Encomenda cancelada após expiração do pagamento MULTICAIXA."
+              : event.status === "CANCELLED"
+                ? "Encomenda cancelada no gateway MULTICAIXA."
+                : "Encomenda cancelada após falha do pagamento MULTICAIXA.",
+          );
+
+          if (released && payment.order.companyId) {
+            await transaction.purchaseOrder.updateMany({
+              where: { companyId: payment.order.companyId, orderId: payment.order.id, status: "CONVERTED" },
+              data: { status: "APPROVED", orderId: null, approvedBy: null, approvedAt: null },
+            });
+          }
+        } else {
+          await transaction.payment.updateMany({
+            where: { id: payment.id, status: { not: "PAID" } },
+            data: statusUpdates(event.status),
+          });
+        }
+        return "FAILED";
+      }
+
+      await transaction.payment.updateMany({
+        where: { id: payment.id, status: { not: "PAID" } },
+        data: statusUpdates(event.status),
+      });
+      return "UPDATED";
     });
   } catch (error) {
-    if (error instanceof Error && error.message.includes('Unique constraint')) return Response.json({ received: true, duplicate: true });
+    if (error instanceof Error && error.message.includes("Unique constraint")) {
+      if (event.status === "PAID") {
+        await issueInvoiceForPaidOrder(payment.order.id).catch((invoiceError) => logger.error("Invoice issuance retry after duplicate MULTICAIXA event failed", {
+          orderId: payment.order.id,
+          error: invoiceError instanceof Error ? invoiceError.message : invoiceError,
+        }));
+      }
+      return Response.json({ received: true, duplicate: true });
+    }
     throw error;
   }
-  const lifecycle = event.status === 'PAID'
-    ? { type: 'ORDER_PAYMENT_CONFIRMED', title: 'Pagamento confirmado', message: `O pagamento da encomenda ${payment.order.orderNumber} foi confirmado.` }
-    : ['FAILED', 'EXPIRED', 'CANCELLED'].includes(event.status)
-      ? { type: 'ORDER_PAYMENT_FAILED', title: 'Pagamento não concluído', message: `O pagamento da encomenda ${payment.order.orderNumber} não foi concluído.` }
-      : null;
-  if (lifecycle) {
-    await createNotificationIfAllowed({ userId: payment.order.userId, channel: 'orderUpdates', ...lifecycle, link: `/account/orders/${payment.order.id}`, dedupeKey: `order:${payment.order.id}:payment:${event.status}` })
-      .catch((error) => console.error('Unable to create Multicaixa payment notification:', error));
+
+  if (outcome === "LATE_PAID_REVIEW" || outcome === "PAID_REVIEW_REQUIRED") {
+    logger.error("Multicaixa payment requires manual reconciliation", {
+      paymentId: payment.id,
+      orderId: payment.order.id,
+      companyId: payment.order.companyId,
+      providerPaymentId: event.providerPaymentId,
+    });
+    await createNotificationIfAllowed({
+      userId: payment.order.userId,
+      channel: "orderUpdates",
+      type: "PAYMENT_REVIEW_REQUIRED",
+      title: "Pagamento em verificação",
+      message: `O pagamento da encomenda ${payment.order.orderNumber} foi recebido, mas o estado da encomenda requer revisão manual antes do processamento.`,
+      link: payment.order.companyId ? "/b2b/encomendas" : `/account/orders/${payment.order.id}`,
+      dedupeKey: `order:${payment.order.id}:payment:review-required`,
+    }).catch((error) => logger.error("Unable to notify about payment review", { orderId: payment.order.id, error: error instanceof Error ? error.message : error }));
+    return Response.json({ received: true, reviewRequired: true });
   }
+
+  if (outcome === "PAID") {
+    await createNotificationIfAllowed({
+      userId: payment.order.userId,
+      channel: "orderUpdates",
+      type: "ORDER_PAYMENT_CONFIRMED",
+      title: "Pagamento confirmado",
+      message: `O pagamento da encomenda ${payment.order.orderNumber} foi confirmado.`,
+      link: payment.order.companyId ? "/b2b/encomendas" : `/account/orders/${payment.order.id}`,
+      dedupeKey: `order:${payment.order.id}:payment:paid`,
+    }).catch((error) => logger.error("Unable to create Multicaixa payment notification", { orderId: payment.order.id, error: error instanceof Error ? error.message : error }));
+    await issueInvoiceForPaidOrder(payment.order.id).catch((error) => logger.error("Invoice issuance after MULTICAIXA confirmation failed", {
+      orderId: payment.order.id,
+      error: error instanceof Error ? error.message : error,
+    }));
+  } else if (outcome === "FAILED") {
+    await createNotificationIfAllowed({
+      userId: payment.order.userId,
+      channel: "orderUpdates",
+      type: "ORDER_PAYMENT_FAILED",
+      title: "Pagamento não concluído",
+      message: `O pagamento da encomenda ${payment.order.orderNumber} não foi concluído. Se for uma compra empresarial, volte às encomendas para gerar uma nova tentativa.`,
+      link: payment.order.companyId ? "/b2b/encomendas" : `/account/orders/${payment.order.id}`,
+      dedupeKey: `order:${payment.order.id}:payment:failed`,
+    }).catch((error) => logger.error("Unable to create Multicaixa payment failure notification", { orderId: payment.order.id, error: error instanceof Error ? error.message : error }));
+  }
+
   return Response.json({ received: true });
 }
 
@@ -267,7 +493,8 @@ async function handleStripeWebhook(request: Request) {
         ? 'FAILED'
         : 'PROCESSING';
 
-    await prisma.$transaction(async (transaction) => {
+    const completedReturn = await prisma.$transaction(async (transaction) => {
+      let completion: { id: number; requestNumber: string; userId: number; orderNumber: string } | null = null;
       await transaction.paymentEvent.create({
         data: {
           paymentId: refund.paymentId,
@@ -308,6 +535,42 @@ async function handleStripeWebhook(request: Request) {
           where: { id: refund.orderId },
           data: { status: refundedTotal + 0.000001 >= originalTotal ? 'REFUNDED' : 'PARTIALLY_REFUNDED' },
         });
+
+        if (refund.returnRequestId) {
+          const returnRequest = await transaction.returnRequest.findUnique({
+            where: { id: refund.returnRequestId },
+            include: {
+              user: { select: { id: true } },
+              order: { select: { orderNumber: true } },
+            },
+          });
+          if (
+            returnRequest &&
+            returnRequest.type === 'RETURN' &&
+            returnRequest.orderId === refund.orderId &&
+            returnRequest.status === 'REFUND_PROCESSING'
+          ) {
+            const completed = await transaction.returnRequest.update({
+              where: { id: returnRequest.id },
+              data: { status: 'COMPLETED' },
+            });
+            await transaction.returnRequestEvent.create({
+              data: {
+                returnRequestId: completed.id,
+                previousStatus: 'REFUND_PROCESSING',
+                nextStatus: 'COMPLETED',
+                actorExternalId: 'SYSTEM_STRIPE_WEBHOOK',
+                note: 'Stripe confirmou o reembolso ' + refundId + '.',
+              },
+            });
+            completion = {
+              id: completed.id,
+              requestNumber: completed.requestNumber,
+              userId: returnRequest.user.id,
+              orderNumber: returnRequest.order.orderNumber,
+            };
+          }
+        }
       }
 
       if (updated.status === 'SUCCEEDED') {
@@ -321,7 +584,24 @@ async function handleStripeWebhook(request: Request) {
           dedupeKey: `refund:${refund.id}:stripe-succeeded`,
         }).catch(() => undefined);
       }
+      return completion;
     });
+
+    if (completedReturn) {
+      await createNotificationIfAllowed({
+        userId: completedReturn.userId,
+        channel: 'orderUpdates',
+        type: 'RETURN_STATUS_CHANGED',
+        title: 'Devolução concluída',
+        message: 'A solicitação ' + completedReturn.requestNumber + ' da encomenda ' + completedReturn.orderNumber + ' foi concluída após confirmação do reembolso.',
+        link: '/account/returns',
+        dedupeKey: 'return:' + completedReturn.id + ':status:COMPLETED',
+      }).catch(() => undefined);
+    }
+
+    if (nextStatus === 'SUCCEEDED') {
+      await issueCreditNoteForSucceededRefund(internalRefundId, 'SYSTEM_STRIPE_WEBHOOK');
+    }
 
     return Response.json({ received: true });
   }
@@ -335,7 +615,7 @@ async function handleStripeWebhook(request: Request) {
   const sessionId = session.id;
   const payment = await prisma.payment.findFirst({
     where: { orderId, provider: 'stripe' },
-    include: { order: { select: { userId: true, orderNumber: true, items: { select: { productId: true, quantity: true } } } } },
+    include: { order: { select: { userId: true, orderNumber: true, companyId: true, items: { select: { productId: true, quantity: true } } } } },
   });
   if (!payment) return errorResponse('Payment not found', 404);
   if (!isStripeCurrencySupported(payment.currency)) return errorResponse('Stripe payment currency is not supported', 422);
@@ -356,7 +636,7 @@ async function handleStripeWebhook(request: Request) {
           payload: event as never,
           processedAt: new Date(),
         } });
-        await cancelAwaitingPaymentAndReleaseStock(
+        const released = await cancelAwaitingPaymentAndReleaseStock(
           transaction,
           payment.orderId,
           payment.order.items,
@@ -365,6 +645,12 @@ async function handleStripeWebhook(request: Request) {
             ? 'Encomenda cancelada após expiração da sessão de pagamento Stripe.'
             : 'Encomenda cancelada após falha do pagamento Stripe.',
         );
+        if (released && payment.order.companyId) {
+          await transaction.purchaseOrder.updateMany({
+            where: { companyId: payment.order.companyId, orderId: payment.orderId, status: 'CONVERTED' },
+            data: { status: 'APPROVED', orderId: null, approvedBy: null, approvedAt: null },
+          });
+        }
         await transaction.payment.updateMany({
           where: { id: payment.id, status: { not: 'PAID' } },
           data: { reference: sessionId },
@@ -380,7 +666,7 @@ async function handleStripeWebhook(request: Request) {
       type: 'ORDER_PAYMENT_FAILED',
       title: 'Pagamento não concluído',
       message: `O pagamento da encomenda ${payment.order.orderNumber} não foi concluído. A encomenda foi cancelada.`,
-      link: `/account/orders/${orderId}`,
+      link: payment.order.companyId ? "/b2b/encomendas" : `/account/orders/${orderId}`,
       dedupeKey: `order:${orderId}:payment:failed`,
     }).catch((error) => console.error('Unable to create Stripe payment failure notification:', error));
     await createNotificationIfAllowed({
@@ -409,12 +695,12 @@ async function handleStripeWebhook(request: Request) {
       } });
       const awaitingOrder = await transaction.order.updateMany({
         where: { id: orderId, status: 'AWAITING_PAYMENT' },
-        data: { status: 'PAYMENT_CONFIRMED' },
+        data: { status: 'PAYMENT_CONFIRMED', inventoryReserved: false, inventoryReservationExpiresAt: null },
       });
       if (!awaitingOrder.count) {
         const cancelledOrder = await transaction.order.updateMany({
           where: { id: orderId, status: 'CANCELLED' },
-          data: { status: 'PAYMENT_REVIEW_REQUIRED' },
+          data: { status: 'PAYMENT_REVIEW_REQUIRED', inventoryReserved: false, inventoryReservationExpiresAt: null },
         });
         if (cancelledOrder.count) {
           await transaction.trackingEvent.create({ data: {
@@ -428,8 +714,22 @@ async function handleStripeWebhook(request: Request) {
       await transaction.payment.update({ where: { id: payment.id }, data: { ...statusUpdates('PAID'), reference: sessionId } });
     });
   } catch (error) {
-    if (error instanceof Error && error.message.includes('Unique constraint')) return Response.json({ received: true, duplicate: true });
+    if (error instanceof Error && error.message.includes('Unique constraint')) {
+      if (successEvent && session.payment_status === 'paid') {
+        await issueInvoiceForPaidOrder(orderId).catch((invoiceError) => logger.error("Invoice issuance retry after duplicate Stripe event failed", {
+          orderId,
+          error: invoiceError instanceof Error ? invoiceError.message : invoiceError,
+        }));
+      }
+      return Response.json({ received: true, duplicate: true });
+    }
     throw error;
+  }
+  if (successEvent && session.payment_status === 'paid') {
+    await issueInvoiceForPaidOrder(orderId).catch((error) => logger.error("Invoice issuance after Stripe confirmation failed", {
+      orderId,
+      error: error instanceof Error ? error.message : error,
+    }));
   }
   return Response.json({ received: true });
 }

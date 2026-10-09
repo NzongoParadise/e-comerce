@@ -10,19 +10,36 @@ import { getPromotionalUnitPrice } from "@/lib/promotions/pricing";
 import { usePublicPromotions } from "@/lib/promotions/usePublicPromotions";
 import Link from "next/link";
 import { RecommendationRail } from "@/components/features/catalog/RecommendationRail";
-import { ShoppingCart, Heart, Package, Truck, ShieldCheck, Zap, CreditCard, Maximize2, MapPin, CheckCircle2 } from "lucide-react";
+import { ShoppingCart, Heart, Package, Truck, ShieldCheck, Zap, CreditCard, Maximize2, MapPin, CheckCircle2, Star, Send, Loader2, X } from "lucide-react";
 
 type ProductDetails = {
   id: number;
   name: string;
   slug: string;
-  description: string;
+  description: string | null;
   basePrice: string;
-  imageUrl: string;
+  imageUrl: string | null;
+  attributes?: { id: number; name: string; value: string }[];
   stock: number;
   category: { id: number; name: string; slug: string };
   brand: { id: number; name: string; slug: string };
   prices: { market: string; currency: string; amount: string }[];
+};
+type ProductReview = {
+  id: number;
+  rating: number;
+  title: string | null;
+  comment: string;
+  verifiedPurchase: boolean;
+  createdAt: string;
+  user: { name: string | null };
+};
+type ReviewOrder = {
+  id: number;
+  orderNumber: string;
+  status: string;
+  payment?: { status: string } | null;
+  items: Array<{ productId: number }>;
 };
 
 export default function ProductDetailsPage() {
@@ -38,10 +55,109 @@ export default function ProductDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
   const [cartMessage, setCartMessage] = useState("");
+  const [reviews, setReviews] = useState<ProductReview[]>([]);
+  const [reviewSummary, setReviewSummary] = useState<{ averageRating: number; count: number; distribution: Record<string, number> }>({ averageRating: 0, count: 0, distribution: {} });
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [reviewSort, setReviewSort] = useState<"recent" | "highest" | "lowest">("recent");
+  const [reviewRatingFilter, setReviewRatingFilter] = useState("ALL");
+  const [reviewPage, setReviewPage] = useState(1);
+  const [reviewPageCount, setReviewPageCount] = useState(1);
+  const [reviewOrders, setReviewOrders] = useState<ReviewOrder[]>([]);
+  const [reviewOrderId, setReviewOrderId] = useState("");
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewTitle, setReviewTitle] = useState("");
+  const [reviewComment, setReviewComment] = useState("");
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewNotice, setReviewNotice] = useState("");
+  const [reviewError, setReviewError] = useState("");
+  const [hasSession, setHasSession] = useState(false);
+  const [imageViewerOpen, setImageViewerOpen] = useState(false);
+
+  useEffect(() => {
+    if (!imageViewerOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setImageViewerOpen(false);
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [imageViewerOpen]);
 
   // The API currently does not expose product variants; do not invent selectable options in the storefront.
   const [purchaseMode, setPurchaseMode] = useState<"retail" | "wholesale">("retail");
   const [activeTab, setActiveTab] = useState("description");
+
+
+  async function loadReviews() {
+    setReviewsLoading(true);
+    try {
+      const query = new URLSearchParams({ page: String(reviewPage), pageSize: "10", sort: reviewSort });
+      if (reviewRatingFilter !== "ALL") query.set("rating", reviewRatingFilter);
+      const response = await fetchWithAuth("/api/products/" + encodeURIComponent(slug) + "/reviews?" + query.toString(), { cache: "no-store" });
+      setReviews(response.data || []);
+      setReviewSummary(response.summary || { averageRating: 0, count: 0, distribution: {} });
+      setReviewPageCount(Math.max(1, Number(response.meta?.pageCount || 1)));
+    } catch {
+      setReviews([]);
+      setReviewSummary({ averageRating: 0, count: 0, distribution: {} });
+    } finally {
+      setReviewsLoading(false);
+    }
+  }
+
+  async function loadReviewOrders() {
+    if (!localStorage.getItem("jwt_token")) return;
+    try {
+      const response = await fetchWithAuth("/api/orders", { cache: "no-store" });
+      const eligible = ((response.data || []) as ReviewOrder[]).filter((order) =>
+        order.payment?.status === "PAID" && order.items.some((item) => item.productId === product?.id)
+      );
+      setReviewOrders(eligible);
+      if (eligible[0]) setReviewOrderId(String(eligible[0].id));
+    } catch {
+      setReviewOrders([]);
+    }
+  }
+
+  async function submitReview() {
+    setReviewError("");
+    setReviewNotice("");
+    if (!localStorage.getItem("jwt_token")) {
+      router.push("/login?next=" + encodeURIComponent("/products/" + slug));
+      return;
+    }
+    if (!reviewOrderId || reviewComment.trim().length < 10) {
+      setReviewError("Selecione uma encomenda paga e escreva um comentário com pelo menos 10 caracteres.");
+      return;
+    }
+    setReviewSubmitting(true);
+    try {
+      const result = await fetchWithAuth("/api/products/" + encodeURIComponent(slug) + "/reviews", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId: Number(reviewOrderId),
+          rating: reviewRating,
+          title: reviewTitle.trim() || undefined,
+          comment: reviewComment.trim(),
+        }),
+      });
+      setReviewNotice(result.message || "Avaliação enviada para moderação.");
+      setReviewTitle("");
+      setReviewComment("");
+      setReviewRating(5);
+    } catch (error) {
+      setReviewError(error instanceof Error ? error.message : "Não foi possível enviar a avaliação.");
+    } finally {
+      setReviewSubmitting(false);
+    }
+  }
+
+  useEffect(() => { setHasSession(Boolean(localStorage.getItem("jwt_token"))); }, []);
 
   useEffect(() => {
     fetchWithAuth(`/api/products/${slug}`)
@@ -50,8 +166,11 @@ export default function ProductDetailsPage() {
       .finally(() => setLoading(false));
   }, [slug]);
 
+  useEffect(() => { void loadReviews(); }, [slug, reviewSort, reviewRatingFilter, reviewPage]);
+
   useEffect(() => {
     if (!product) return;
+    void loadReviewOrders();
     try {
       const key = "rd_recently_viewed";
       const stored = JSON.parse(localStorage.getItem(key) || "[]") as Array<{
@@ -89,13 +208,16 @@ export default function ProductDetailsPage() {
   }
 
   // Calculate prices based on backend data if available, else defaults
-  const ptPrice = product.prices.find(p => p.market === "PT")?.amount || product.basePrice;
-  const aoPrice = product.prices.find(p => p.market === "AO")?.amount || (Number(product.basePrice) * 965).toString();
+  const ptPrice = product.prices.find((p) => p.market === "PT" && p.currency === "EUR")?.amount || product.basePrice;
+  const aoPrice = product.prices.find((p) => p.market === "AO" && p.currency === "AOA")?.amount || "";
+  const hasActivePrice = market === "AO" ? Number(aoPrice) > 0 : Number(ptPrice) > 0;
   const promotionProduct = { id: product.id, categoryId: product.category.id, brandId: product.brand.id };
-  const euroOffer = getPromotionalUnitPrice(promotionProduct, "PT", Number(ptPrice), promotions);
-  const kwanzaOffer = getPromotionalUnitPrice(promotionProduct, "AO", Number(aoPrice), promotions);
+  const euroOffer = ptPrice ? getPromotionalUnitPrice(promotionProduct, "PT", Number(ptPrice), promotions) : null;
+  const kwanzaOffer = aoPrice ? getPromotionalUnitPrice(promotionProduct, "AO", Number(aoPrice), promotions) : null;
 
   const handleAddToCart = () => {
+    if (!hasActivePrice) { setCartMessage(market === "AO" ? "O preço em kwanzas ainda não está configurado para este produto." : "O preço em euros ainda não está configurado para este produto."); return; }
+    if (product.stock <= 0) { setCartMessage("Este produto está sem stock disponível."); return; }
     addToCart({
       id: `${product.id}-default`,
       productId: product.id,
@@ -104,7 +226,7 @@ export default function ProductDetailsPage() {
       priceEUR: Number(ptPrice),
       priceKZ: Number(aoPrice),
       quantity: quantity,
-      imageUrl: product.imageUrl,
+      imageUrl: product.imageUrl || undefined,
 
     });
     setCartMessage(`${product.name} foi adicionado ao carrinho.`);
@@ -117,17 +239,21 @@ export default function ProductDetailsPage() {
     name: product.name,
     slug: product.slug,
     category: product.category.name,
-    specs: product.description,
+    specs: product.description || "",
     priceEUR: Number(ptPrice),
-    imageUrl: product.imageUrl,
-  });
+    priceKZ: aoPrice ? Number(aoPrice) : undefined,
+    stock: product.stock,
+    rating: reviewSummary.averageRating,
+    reviews: reviewSummary.count,
+    imageUrl: product.imageUrl || undefined,
+  });;
 
   const handleBuyNow = () => {
     handleAddToCart();
     router.push("/cart");
   };
 
-  const activeMarketPrice = market === "AO" ? Number(aoPrice) : Number(ptPrice);
+  const activeMarketPrice = hasActivePrice ? Number(market === "AO" ? aoPrice : ptPrice) : null;
   const activeMarketOffer = market === "AO" ? kwanzaOffer : euroOffer;
   const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://e-comerce-sepia.vercel.app").replace(/\/$/, "");
   const structuredData = {
@@ -144,7 +270,7 @@ export default function ProductDetailsPage() {
       "@type": "Offer",
       url: siteUrl + "/products/" + product.slug,
       priceCurrency: market === "AO" ? "AOA" : "EUR",
-      price: String(activeMarketOffer?.promotionalPrice ?? activeMarketPrice),
+      ...(activeMarketPrice !== null ? { price: String(activeMarketOffer?.promotionalPrice ?? activeMarketPrice) } : {}),
       availability: product.stock > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
       itemCondition: "https://schema.org/NewCondition",
     },
@@ -167,25 +293,35 @@ export default function ProductDetailsPage() {
       </nav>
 
       <div className="mb-12 grid grid-cols-1 gap-6 md:grid-cols-12 lg:gap-8">
-        
-        {/* Left: Gallery */}
-        <div className="order-2 flex flex-row gap-2 overflow-x-auto md:order-1 md:col-span-1 md:flex-col">
-           {[1,2,3,4].map((i) => (
-             <button type="button" key={i} aria-label={`Selecionar vista ${i} de ${product.name}`} className={`h-16 w-16 shrink-0 overflow-hidden rounded-xl border bg-white p-1.5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm ${i===1 ? 'border-[#1d6ac4] ring-2 ring-[#1d6ac4]/10' : 'border-gray-200 hover:border-[#1d6ac4]'}`}>
-               {product.imageUrl ? <img src={product.imageUrl} alt={`${product.name} vista ${i}`} className="h-full w-full object-contain" /> : <Package size={24} className="text-gray-300" />}
-             </button>
-           ))}
-        </div>
 
-        {/* Center: Main Image */}
-          <div className="relative order-1 flex min-h-[380px] items-center justify-center overflow-hidden rounded-xl border border-gray-200 bg-white p-8 shadow-sm transition-transform duration-300 hover:-translate-y-0.5 md:order-2 md:col-span-5">
-            <span className="absolute left-5 top-5 rounded-md bg-[#1d6ac4] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white">Novo</span>
-           {product.imageUrl ? <img src={product.imageUrl} alt={product.name} className="max-h-[330px] w-full object-contain transition-transform duration-500 hover:scale-[1.02]" /> : <Package size={160} className="text-gray-200" />}
-            <button type="button" className="absolute bottom-4 right-4 rounded-lg border border-gray-200 bg-white p-2 text-gray-500 shadow-sm transition hover:border-[#1d6ac4] hover:text-[#1d6ac4]" aria-label="Ver imagem em ecrã inteiro"><Maximize2 size={16} /></button>
+        {/* Product image: render only the image actually provided by the catalogue API. */}
+        <div className="relative order-1 flex min-h-[320px] items-center justify-center overflow-hidden rounded-xl border border-gray-200 bg-white p-6 shadow-sm sm:min-h-[420px] sm:p-8 md:col-span-6">
+          {product.imageUrl ? (
+            <img
+              src={product.imageUrl}
+              alt={product.name}
+              className="max-h-[460px] w-full object-contain transition-transform duration-500 hover:scale-[1.02]"
+            />
+          ) : (
+            <div className="flex flex-col items-center gap-3 text-gray-300">
+              <Package size={112} strokeWidth={1.2} />
+              <span className="text-xs font-semibold text-gray-400">Imagem ainda não disponível</span>
+            </div>
+          )}
+          {product.imageUrl && (
+            <button
+              type="button"
+              onClick={() => setImageViewerOpen(true)}
+              className="absolute bottom-4 right-4 inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-600 shadow-sm transition hover:border-[#1d6ac4] hover:text-[#1d6ac4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1d6ac4] focus-visible:ring-offset-2"
+              aria-label="Abrir imagem do produto em ecrã inteiro"
+            >
+              <Maximize2 size={16} /> Ampliar imagem
+            </button>
+          )}
         </div>
 
         {/* Right: Product Info & Buy Panel */}
-        <div className="order-3 grid grid-cols-1 gap-8 md:col-span-6 lg:grid-cols-2">
+        <div className="order-2 grid grid-cols-1 gap-8 md:col-span-6 lg:grid-cols-2">
           {/* Info */}
           <div>
             <div className="mb-3 flex items-center justify-between gap-2 text-xs font-bold uppercase tracking-wide text-gray-500">
@@ -201,7 +337,7 @@ export default function ProductDetailsPage() {
               <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${product.stock > 0 ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>
                 {product.stock > 0 ? "Em stock" : "Indisponível"}
               </span>
-              <span className="text-xs text-slate-400">Avaliações serão apresentadas quando disponíveis no catálogo.</span>
+              {reviewSummary.count > 0 ? <span className="inline-flex items-center gap-1 text-xs text-slate-500"><Star size={13} fill="currentColor" className="text-amber-500"/> {reviewSummary.averageRating.toFixed(1)}/5 · {reviewSummary.count} avaliação(ões) verificadas</span> : <span className="text-xs text-slate-400">Ainda sem avaliações publicadas.</span>}
             </div>
 
             <div className="mb-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
@@ -223,13 +359,24 @@ export default function ProductDetailsPage() {
                  <button type="button" onClick={() => setPurchaseMode("wholesale")} className={`flex-1 rounded-lg py-2 text-xs font-bold transition ${purchaseMode === "wholesale" ? "bg-white text-[#1d6ac4] shadow-sm" : "text-gray-500"}`}>Compra grossista</button>
                </div>
 
-               {(() => {
+               {purchaseMode === "wholesale" ? (
+                 <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50/60 p-4">
+                   <p className="text-[10px] font-black uppercase tracking-wide text-blue-700">Condições empresariais</p>
+                   <p className="mt-1 text-sm font-bold text-slate-900">Preço por volume e cotação</p>
+                   <p className="mt-1 text-[10px] leading-5 text-slate-600">Solicite uma cotação para consultar as condições disponíveis para a sua empresa.</p>
+                 </div>
+               ) : !hasActivePrice ? (
+                 <div role="alert" className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
+                   <p className="text-sm font-black text-amber-900">Preço não configurado</p>
+                   <p className="mt-1 text-xs leading-5 text-amber-800">Este produto ainda não tem preço válido para {market === "AO" ? "Angola" : "Portugal"}.</p>
+                 </div>
+               ) : (() => {
                  const isAO = market === "AO";
                  const regular = isAO ? Number(aoPrice) : Number(ptPrice);
                  const offer = isAO ? kwanzaOffer : euroOffer;
                  const format = (amount: number) => isAO
-                   ? `Kz ${amount.toLocaleString("pt-AO")}`
-                   : `€ ${amount.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}`;
+                   ? "Kz " + amount.toLocaleString("pt-AO")
+                   : "€ " + amount.toLocaleString("pt-PT", { minimumFractionDigits: 2 });
                  return offer
                    ? <div className="mb-1 flex flex-wrap items-baseline gap-2"><del className="text-sm text-gray-400">{format(regular)}</del><strong className="text-3xl font-black tracking-tight text-red-700">{format(offer.promotionalPrice)}</strong></div>
                    : <div className="mb-1 text-3xl font-black tracking-tight text-gray-950">{format(regular)}</div>;
@@ -243,20 +390,29 @@ export default function ProductDetailsPage() {
 
                {purchaseMode === "wholesale" && <p className="mb-4 rounded-lg bg-blue-50 px-3 py-2 text-xs font-semibold text-[#1d6ac4]">Preços para empresas disponíveis por cotação.</p>}
 
-               <div className="mb-4 flex items-center gap-3">
-                 <div className="flex items-center border border-gray-300 rounded-lg">
-                   <button onClick={() => setQuantity(Math.max(1, quantity - 1))} className="px-3 py-2 text-gray-500 hover:bg-gray-50 rounded-l-lg">−</button>
-                   <span className="px-4 py-2 text-sm font-bold border-x border-gray-300">{quantity}</span>
-                   <button onClick={() => setQuantity(quantity + 1)} className="px-3 py-2 text-gray-500 hover:bg-gray-50 rounded-r-lg">+</button>
+               {purchaseMode === "retail" ? (
+                 <div className="mb-4 flex items-center gap-3">
+                   <div className="flex items-center rounded-lg border border-gray-300">
+                     <button type="button" onClick={() => setQuantity(Math.max(1, quantity - 1))} className="rounded-l-lg px-3 py-2 text-gray-500 hover:bg-gray-50" aria-label="Diminuir quantidade">−</button>
+                     <span className="border-x border-gray-300 px-4 py-2 text-sm font-bold">{quantity}</span>
+                     <button type="button" onClick={() => setQuantity(Math.min(product.stock, quantity + 1))} disabled={quantity >= product.stock} className="rounded-r-lg px-3 py-2 text-gray-500 hover:bg-gray-50 disabled:opacity-40" aria-label="Aumentar quantidade">+</button>
+                   </div>
+                   <button type="button" onClick={handleAddToCart} disabled={!hasActivePrice || product.stock <= 0} className="btn-primary flex-1 gap-2 py-3 text-base disabled:cursor-not-allowed disabled:opacity-50">
+                     <ShoppingCart size={18} strokeWidth={2.5} aria-hidden="true" />
+                     Adicionar ao carrinho
+                   </button>
                  </div>
-                 <button onClick={handleAddToCart} className="btn-primary flex-1 py-3 text-base gap-2">
-                   <ShoppingCart size={18} strokeWidth={2.5} aria-hidden="true" />
-                   Adicionar ao carrinho
-                 </button>
-               </div>
+               ) : (
+                 <div className="mb-4">
+                   <button type="button" onClick={() => router.push("/b2b/cotacoes?product=" + product.id)} className="btn-primary flex w-full items-center justify-center gap-2 py-3 text-sm">
+                     <Package size={16}/> Solicitar cotação empresarial
+                   </button>
+                   <p className="mt-2 text-[10px] leading-5 text-slate-500">A cotação é gerida na área empresarial e não será adicionada ao carrinho de retalho.</p>
+                 </div>
+               )}
                {cartMessage && <div role="status" aria-live="polite" className="mb-3 flex items-start gap-2 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2.5 text-xs font-semibold text-emerald-800"><CheckCircle2 size={15} className="mt-0.5 shrink-0" />{cartMessage}</div>}
 
-               <button onClick={handleBuyNow} className="mb-3 w-full btn-secondary py-3 text-sm border-gray-300 text-gray-700 hover:bg-gray-50 gap-2">
+               <button onClick={handleBuyNow} disabled={purchaseMode !== "retail" || !hasActivePrice || product.stock <= 0} className="mb-3 w-full btn-secondary py-3 text-sm border-gray-300 text-gray-700 hover:bg-gray-50 gap-2 disabled:cursor-not-allowed disabled:opacity-50">
                  <Zap size={16} strokeWidth={2} aria-hidden="true" />
                  Comprar agora
                </button>
@@ -267,14 +423,14 @@ export default function ProductDetailsPage() {
                    <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-green-50 text-green-600"><MapPin size={14} /></span>
                    <div>
                      <div className="text-xs font-bold text-gray-900">Entrega em Angola</div>
-                     <div className="text-[10px] text-gray-500">Grátis a partir de Kz 200.000</div>
+                     <div className="text-[10px] text-gray-500">Custo e prazo apresentados no checkout.</div>
                    </div>
                  </div>
                  <div className="flex items-start gap-3">
                    <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-50 text-[#1d6ac4]"><MapPin size={14} /></span>
                    <div>
                      <div className="text-xs font-bold text-gray-900">Entrega em Portugal</div>
-                     <div className="text-[10px] text-gray-500">Grátis a partir de € 100</div>
+                     <div className="text-[10px] text-gray-500">Custo e prazo apresentados no checkout.</div>
                    </div>
                  </div>
                </div>
@@ -303,7 +459,7 @@ export default function ProductDetailsPage() {
               {[
                 ["description", "Descrição"],
                 ["specs", "Especificações"],
-                ["reviews", "Avaliações", "124"],
+                ["reviews", "Avaliações", String(reviewSummary.count)],
                 ["delivery", "Entrega e Garantia"],
                 ["support", "Suporte"],
               ].map(([id, label, count]) => (
@@ -331,15 +487,73 @@ export default function ProductDetailsPage() {
             </div>
           </nav>
           <div className="min-h-[190px] p-5 sm:p-6" role="tabpanel">
-            {activeTab === "description" && <div><h2 className="mb-3 text-lg font-bold text-gray-900">Desempenho que leva mais longe.</h2><p className="max-w-3xl text-sm leading-6 text-gray-600">{product.description} Com desempenho excepcional, design elegante e componentes cuidadosamente selecionados para profissionais e criadores.</p><ul className="mt-4 grid gap-2 text-xs text-gray-600 sm:grid-cols-2"><li>● Desempenho rápido e consistente</li><li>● Ecrã de alta resolução</li><li>● Até 22 horas de autonomia</li><li>● Design elegante e resistente</li></ul></div>}
-            {activeTab === "specs" && <div className="grid gap-3 text-sm text-gray-600 sm:grid-cols-2"><InfoLine label="Marca" value={product.brand.name} /><InfoLine label="Categoria" value={product.category.name} /><InfoLine label="Stock" value={`${product.stock} unidades`} /><InfoLine label="Mercado" value={market === "AO" ? "Angola · Kz" : "Portugal · €"} /></div>}
-            {activeTab === "reviews" && <div><h2 className="font-bold text-gray-900">Avaliações dos clientes</h2><p className="mt-2 text-sm text-gray-600">Este produto tem classificação média de 4,8 em 5, com 124 avaliações verificadas.</p></div>}
-            {activeTab === "delivery" && <div><h2 className="font-bold text-gray-900">Entrega e garantia</h2><p className="mt-2 text-sm leading-6 text-gray-600">Entrega em Angola e Portugal em 1-3 dias úteis. Todos os produtos têm garantia e apoio especializado.</p></div>}
+            {activeTab === "description" && <div><h2 className="mb-3 text-lg font-bold text-gray-900">Descrição do produto</h2><p className="max-w-3xl whitespace-pre-wrap text-sm leading-6 text-gray-600">{product.description || "O catálogo ainda não disponibilizou uma descrição detalhada para este produto."}</p></div>}
+            {activeTab === "specs" && <div className="grid gap-3 text-sm text-gray-600 sm:grid-cols-2"><InfoLine label="Marca" value={product.brand.name} /><InfoLine label="Categoria" value={product.category.name} /><InfoLine label="Stock" value={`${product.stock} unidades`} /><InfoLine label="Mercado" value={market === "AO" ? "Angola · Kz" : "Portugal · €"} />{(product.attributes || []).map((attribute) => <InfoLine key={attribute.id} label={attribute.name} value={attribute.value} />)}</div>}
+            {activeTab === "reviews" && <div className="space-y-6">
+              <div className="grid gap-5 md:grid-cols-[200px_minmax(0,1fr)]">
+                <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 text-center">
+                  <p className="text-4xl font-black text-slate-950">{reviewSummary.averageRating.toFixed(1)}</p>
+                  <p className="mt-1 text-lg tracking-wide text-amber-500">{Array.from({ length: 5 }, (_, index) => index < Math.round(reviewSummary.averageRating) ? "★" : "☆").join("")}</p>
+                  <p className="mt-1 text-[10px] text-slate-500">{reviewSummary.count} avaliação(ões) publicadas</p>
+                </div>
+                <div className="space-y-2">
+                  {[5,4,3,2,1].map((rating) => {
+                    const count = Number(reviewSummary.distribution[String(rating)] || 0);
+                    const percent = reviewSummary.count ? count / reviewSummary.count * 100 : 0;
+                    return <button key={rating} type="button" onClick={() => { setReviewRatingFilter(reviewRatingFilter === String(rating) ? "ALL" : String(rating)); setReviewPage(1); }} className="flex w-full items-center gap-2 text-left text-[10px]">
+                      <span className="w-12 shrink-0 font-bold text-slate-600">{rating} estrela(s)</span>
+                      <span className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100"><span className="block h-full rounded-full bg-amber-400" style={{ width: percent + "%" }}/></span>
+                      <span className="w-8 text-right text-slate-400">{count}</span>
+                    </button>;
+                  })}
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-y border-slate-100 py-3">
+                <div><h3 className="text-sm font-black text-slate-900">Opiniões dos clientes</h3><p className="mt-1 text-[10px] text-slate-500">Apenas avaliações aprovadas são apresentadas publicamente.</p></div>
+                <div className="flex flex-wrap gap-2">
+                  <select value={reviewRatingFilter} onChange={(event) => { setReviewRatingFilter(event.target.value); setReviewPage(1); }} className="settings-input w-auto"><option value="ALL">Todas as estrelas</option>{[5,4,3,2,1].map((rating) => <option key={rating} value={rating}>{rating} estrela(s)</option>)}</select>
+                  <select value={reviewSort} onChange={(event) => { setReviewSort(event.target.value as typeof reviewSort); setReviewPage(1); }} className="settings-input w-auto"><option value="recent">Mais recentes</option><option value="highest">Maior classificação</option><option value="lowest">Menor classificação</option></select>
+                </div>
+              </div>
+              {reviewsLoading ? <div className="space-y-3">{[1,2,3].map((id) => <div key={id} className="h-20 animate-pulse rounded-xl bg-slate-50"/>)}</div> : reviews.length ? <div className="divide-y divide-slate-100">{reviews.map((review) => <article key={review.id} className="py-4">
+                <div className="flex flex-wrap items-center gap-2"><strong className="text-xs font-black text-slate-900">{review.user.name || "Cliente verificado"}</strong>{review.verifiedPurchase && <span className="rounded-full bg-emerald-50 px-2 py-1 text-[9px] font-black text-emerald-700">Compra verificada</span>}<time className="text-[9px] text-slate-400">{new Date(review.createdAt).toLocaleDateString("pt-PT")}</time></div>
+                <p className="mt-1 text-sm tracking-wide text-amber-500">{Array.from({ length: 5 }, (_, index) => index < review.rating ? "★" : "☆").join("")}</p>
+                {review.title && <h4 className="mt-2 text-xs font-black text-slate-800">{review.title}</h4>}
+                <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-slate-600">{review.comment}</p>
+              </article>)}</div> : <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center"><Star size={25} className="mx-auto text-slate-300"/><p className="mt-2 text-xs font-bold text-slate-800">Ainda não há avaliações publicadas</p><p className="mt-1 text-[10px] text-slate-500">Depois da compra, pode partilhar a sua experiência com outros clientes.</p></div>}
+              {reviewPageCount > 1 && (
+                <nav aria-label="Paginação de avaliações" className="flex flex-col gap-3 rounded-xl border border-slate-100 bg-slate-50/60 p-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-[10px] text-slate-500">Página <strong className="text-slate-800">{reviewPage}</strong> de <strong className="text-slate-800">{reviewPageCount}</strong></p>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => setReviewPage((page) => Math.max(1, page - 1))} disabled={reviewPage <= 1 || reviewsLoading} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-black text-slate-700 disabled:cursor-not-allowed disabled:opacity-40">Anterior</button>
+                    <button type="button" onClick={() => setReviewPage((page) => Math.min(reviewPageCount, page + 1))} disabled={reviewPage >= reviewPageCount || reviewsLoading} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-black text-slate-700 disabled:cursor-not-allowed disabled:opacity-40">Seguinte</button>
+                  </div>
+                </nav>
+              )}
+              <div className="rounded-xl border border-slate-200 p-4">
+                <h3 className="text-sm font-black text-slate-950">Avaliar este produto</h3>
+                <p className="mt-1 text-[10px] leading-5 text-slate-500">Só são aceites avaliações associadas a uma encomenda sua com pagamento confirmado. A publicação depende de moderação.</p>
+                {hasSession && reviewOrders.length > 0 ? <div className="mt-4 space-y-3">
+                  <label className="block text-[10px] font-bold text-slate-600">Encomenda paga<select value={reviewOrderId} onChange={(event) => setReviewOrderId(event.target.value)} className="settings-input mt-1.5">{reviewOrders.map((order) => <option key={order.id} value={order.id}>{order.orderNumber}</option>)}</select></label>
+                  <div><p className="mb-1.5 text-[10px] font-bold text-slate-600">Classificação</p><div className="flex gap-1">{[1,2,3,4,5].map((rating) => <button key={rating} type="button" onClick={() => setReviewRating(rating)} aria-label={rating + " estrelas"} className={"text-2xl " + (rating <= reviewRating ? "text-amber-500" : "text-slate-300")}>★</button>)}</div></div>
+                  <label className="block text-[10px] font-bold text-slate-600">Título (opcional)<input value={reviewTitle} onChange={(event) => setReviewTitle(event.target.value)} maxLength={120} className="settings-input mt-1.5" placeholder="Resuma a sua experiência"/></label>
+                  <label className="block text-[10px] font-bold text-slate-600">Comentário<textarea value={reviewComment} onChange={(event) => setReviewComment(event.target.value)} maxLength={2000} rows={4} className="settings-input mt-1.5" placeholder="Conte como foi a utilização do produto."/></label>
+                  {reviewNotice && <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-[10px] font-semibold text-emerald-800">{reviewNotice}</p>}
+                  {reviewError && <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-[10px] font-semibold text-rose-800">{reviewError}</p>}
+                  <button type="button" onClick={() => void submitReview()} disabled={reviewSubmitting} className="btn-primary disabled:opacity-50">{reviewSubmitting ? <Loader2 size={14} className="animate-spin"/> : <Send size={14}/>} Enviar avaliação</button>
+                </div> : <div className="mt-3 rounded-lg bg-slate-50 p-3 text-[10px] leading-5 text-slate-600">{hasSession ? "Não encontramos uma encomenda paga deste produto na sua conta." : <span>Inicie sessão e tenha comprado este produto para poder avaliá-lo. <Link href={"/login?next=" + encodeURIComponent("/products/" + slug)} className="font-black text-blue-700 hover:underline">Iniciar sessão</Link></span>}</div>}
+              </div>
+            </div>}
+            {activeTab === "delivery" && <div><h2 className="font-bold text-gray-900">Entrega e garantia</h2><p className="mt-2 text-sm leading-6 text-gray-600">O custo e o prazo são calculados com base no destino e no método selecionado no checkout. Consulte as condições de garantia aplicáveis ao produto antes de concluir a compra.</p></div>}
             {activeTab === "support" && <div><h2 className="font-bold text-gray-900">Precisa de ajuda?</h2><p className="mt-2 text-sm text-gray-600">A nossa equipa está disponível para esclarecer dúvidas sobre este produto.</p><Link href="/account/support" className="mt-4 inline-flex text-sm font-bold text-[#1d6ac4] hover:underline">Contactar suporte →</Link></div>}
           </div>
         </section>
 
-        <aside className="card p-5"><div className="mb-4 flex items-center justify-between"><h2 className="font-bold text-gray-900">Também pode gostar</h2><Link href="/products" className="text-xs font-bold text-[#1d6ac4]">Ver mais →</Link></div><div className="grid grid-cols-2 gap-3 lg:grid-cols-1">{[{ name: "MacBook Air M2 13\"", price: 1299, image: "/Apple.jpg" }, { name: "Magic Mouse", price: 99, image: "/ASUS.jpg" }].map((item) => <div key={item.name} className="rounded-lg border border-gray-100 p-2"><div className="flex h-24 items-center justify-center rounded bg-gray-50"><img src={item.image} alt="" className="h-full w-full object-contain" /></div><p className="mt-2 line-clamp-1 text-xs font-bold text-gray-900">{item.name}</p><p className="text-xs font-black text-gray-900">€ {item.price.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}</p></div>)}</div></aside>
+        <aside className="card p-5">
+          <h2 className="font-bold text-gray-900">Descubra mais produtos</h2>
+          <p className="mt-2 text-xs leading-5 text-gray-500">Explore o catálogo completo e compare opções disponíveis para o seu mercado.</p>
+          <Link href="/products" className="mt-4 inline-flex text-xs font-bold text-[#1d6ac4] hover:underline">Explorar catálogo →</Link>
+        </aside>
       </div>
 
       <section className="relative mt-6 min-h-[150px] overflow-hidden rounded-lg bg-[#06233d] text-white">

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/server/prisma";
 import { authenticate, errorResponse, isAdmin, readJson } from "@/lib/server/api";
 import { z } from "zod";
+import { createNotificationIfAllowed } from "@/lib/server/notifications";
 
 export const runtime = "nodejs";
 
@@ -8,6 +9,10 @@ const updateSchema = z.object({
   quoteId: z.coerce.number().int().positive(),
   action: z.enum(["APPROVE", "REJECT"]),
   note: z.string().trim().max(1000).optional(),
+}).superRefine((data, context) => {
+  if (data.action === "REJECT" && (!data.note || data.note.trim().length < 5)) {
+    context.addIssue({ code: "custom", path: ["note"], message: "Indique o motivo da rejeição (mínimo 5 caracteres)." });
+  }
 });
 
 async function requireAdmin(request: Request) {
@@ -67,6 +72,7 @@ export async function PATCH(request: Request) {
           company: true,
           items: true,
           purchaseOrders: true,
+          user: { select: { id: true } },
         },
       });
       if (!quote) throw new Error("QUOTE_NOT_FOUND");
@@ -81,30 +87,28 @@ export async function PATCH(request: Request) {
         return { quote: updated, purchaseOrder: null };
       }
 
-      const existing = quote.purchaseOrders.find((po) => po.status !== "CANCELLED");
-      const po = existing ?? await tx.purchaseOrder.create({
-        data: {
-          companyId: quote.companyId,
-          quoteId: quote.id,
-          poNumber: `PO-${new Date().getFullYear()}-${String(quote.id).padStart(6, "0")}`,
-          status: "APPROVED",
-          approvedBy: auth.user!.id,
-          approvedAt: new Date(),
-          notes: note || null,
-        },
-      });
-
-      if (existing) {
-        await tx.purchaseOrder.update({
-          where: { id: existing.id },
-          data: { status: "APPROVED", approvedBy: auth.user!.id, approvedAt: new Date(), notes: note || existing.notes },
-        });
-      }
-
-      await tx.company.update({
-        where: { id: quote.companyId },
-        data: { status: "ACTIVE" },
-      });
+      const existing = quote.purchaseOrders[0] ?? null;
+      const po = existing
+        ? await tx.purchaseOrder.update({
+            where: { id: existing.id },
+            data: {
+              status: "APPROVED",
+              approvedBy: auth.user!.id,
+              approvedAt: new Date(),
+              notes: note || existing.notes,
+            },
+          })
+        : await tx.purchaseOrder.create({
+            data: {
+              companyId: quote.companyId,
+              quoteId: quote.id,
+              poNumber: `PO-${new Date().getFullYear()}-${String(quote.id).padStart(6, "0")}`,
+              status: "APPROVED",
+              approvedBy: auth.user!.id,
+              approvedAt: new Date(),
+              notes: note || null,
+            },
+          });
 
       const updated = await tx.quote.update({
         where: { id: quote.id },
@@ -113,6 +117,18 @@ export async function PATCH(request: Request) {
 
       return { quote: updated, purchaseOrder: po };
     });
+
+    await createNotificationIfAllowed({
+      userId: result.quote.userId,
+      channel: "orderUpdates",
+      type: action === "APPROVE" ? "QUOTE_APPROVED" : "QUOTE_REJECTED",
+      title: action === "APPROVE" ? "Cotação aprovada" : "Cotação rejeitada",
+      message: action === "APPROVE"
+        ? `A cotação ${result.quote.quoteNumber} foi aprovada. Já pode consultar o Purchase Order associado.`
+        : `A cotação ${result.quote.quoteNumber} foi rejeitada. Motivo: ${note!.trim()}`,
+      link: "/b2b/cotacoes",
+      dedupeKey: `quote:${result.quote.id}:decision:${result.quote.status}`,
+    }).catch(() => undefined);
 
     return Response.json({
       data: {

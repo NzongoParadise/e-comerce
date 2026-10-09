@@ -74,14 +74,27 @@ test('matches reconciled Stripe sessions to both order references', () => {
 
 test('releases reserved stock only once when cancellation is repeated', async () => {
   let orderStatus = 'AWAITING_PAYMENT';
+  let inventoryReserved = true;
   let paymentStatus = 'REQUIRES_PAYMENT';
   let stock = 2;
   const transaction = {
-    order: { updateMany: async ({ where, data }: { where: { status: string }; data: { status: string } }) => {
-      if (orderStatus !== where.status) return { count: 0 };
-      orderStatus = data.status;
-      return { count: 1 };
-    } },
+    order: {
+      findUnique: async () => ({
+        id: 42,
+        status: orderStatus,
+        inventoryReserved,
+        payment: { id: 99, status: paymentStatus },
+      }),
+      updateMany: async ({ where, data }: {
+        where: { status: string; inventoryReserved: boolean };
+        data: { status: string; inventoryReserved: boolean; inventoryReservationExpiresAt: Date | null };
+      }) => {
+        if (orderStatus !== where.status || inventoryReserved !== where.inventoryReserved) return { count: 0 };
+        orderStatus = data.status;
+        inventoryReserved = data.inventoryReserved;
+        return { count: 1 };
+      },
+    },
     payment: { updateMany: async ({ where, data }: { where: { status: { not: string } }; data: { status: string } }) => {
       if (paymentStatus === where.status.not) return { count: 0 };
       paymentStatus = data.status;
@@ -99,6 +112,7 @@ test('releases reserved stock only once when cancellation is repeated', async ()
   assert.equal(cancelled, true);
   assert.equal(duplicate, false);
   assert.equal(orderStatus, 'CANCELLED');
+  assert.equal(inventoryReserved, false);
   assert.equal(paymentStatus, 'EXPIRED');
   assert.equal(stock, 5);
 });

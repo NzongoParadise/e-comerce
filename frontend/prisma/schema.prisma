@@ -75,6 +75,45 @@ model Product {
   attributes  ProductAttribute[]
   promotionProducts PromotionProduct[]
   b2bPriceRules B2BPriceRule[]
+  favorites UserFavorite[]
+  reviews ProductReview[]
+}
+
+model UserFavorite {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  productId Int
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  @@unique([userId, productId])
+  @@index([userId, createdAt])
+  @@index([productId])
+}
+
+model ProductReview {
+  id               Int      @id @default(autoincrement())
+  productId        Int
+  userId           Int
+  orderId          Int
+  rating           Int
+  title            String?
+  comment          String
+  status           String   @default("PENDING")
+  verifiedPurchase Boolean  @default(true)
+  helpfulCount     Int      @default(0)
+  moderatedBy      String?
+  moderatedAt      DateTime?
+  moderationNote   String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  product          Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  order            Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  @@unique([userId, productId])
+  @@index([productId, status, createdAt])
+  @@index([userId, createdAt])
+  @@index([orderId])
 }
 
 model ProductAttribute {
@@ -117,7 +156,31 @@ model Company {
   orders Order[]
   priceRules B2BPriceRule[]
   purchaseOrders PurchaseOrder[]
+  invitations B2BInvitation[]
+  invoices Invoice[]
+  creditNotes CreditNote[]
   @@index([status])
+}
+
+model B2BInvitation {
+  id Int @id @default(autoincrement())
+  companyId Int
+  email String
+  role String @default("BUYER")
+  status String @default("PENDING")
+  tokenHash String @unique
+  invitedByUserId Int
+  acceptedByUserId Int?
+  expiresAt DateTime
+  acceptedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  invitedBy User @relation("B2BInvitationSender", fields: [invitedByUserId], references: [id], onDelete: Cascade)
+  acceptedBy User? @relation("B2BInvitationAcceptor", fields: [acceptedByUserId], references: [id], onDelete: SetNull)
+  @@index([companyId, status, expiresAt])
+  @@index([email, status, expiresAt])
+  @@index([companyId, email])
 }
 
 model CompanyMember {
@@ -207,6 +270,12 @@ model User {
   supportMessages SupportMessage[]
   company Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
   companyMemberships CompanyMember[]
+  b2bInvitationsSent B2BInvitation[] @relation("B2BInvitationSender")
+  b2bInvitationsAccepted B2BInvitation[] @relation("B2BInvitationAcceptor")
+  invoices Invoice[]
+  creditNotes CreditNote[]
+  favorites UserFavorite[]
+  reviewsWritten ProductReview[]
 }
 
 model Address {
@@ -324,7 +393,10 @@ model Order {
   totalEUR       Decimal     @db.Decimal(10,2)
   totalKZ        Decimal     @db.Decimal(12,2)
   createdAt      DateTime    @default(now())
+  inventoryReserved Boolean  @default(false)
+  inventoryReservationExpiresAt DateTime?
   items          OrderItem[]
+  productReviews ProductReview[]
   payment        Payment?
   trackingEvents TrackingEvent[]
   returnRequests ReturnRequest[]
@@ -336,7 +408,78 @@ model Order {
   purchaseOrders PurchaseOrder[]
   discountTotalEUR Decimal @default(0) @db.Decimal(10,2)
   discountTotalKZ  Decimal @default(0) @db.Decimal(12,2)
+  invoice Invoice?
+  creditNotes CreditNote[]
 }
+
+model Invoice {
+  id                Int      @id @default(autoincrement())
+  invoiceNumber     String   @unique
+  verificationCode  String   @unique
+  orderId           Int      @unique
+  userId            Int
+  companyId         Int?
+  status            String   @default("ISSUED")
+  currency          String
+  totalEUR          Decimal  @db.Decimal(10,2)
+  totalKZ           Decimal  @db.Decimal(12,2)
+  discountTotalEUR  Decimal  @default(0) @db.Decimal(10,2)
+  discountTotalKZ   Decimal  @default(0) @db.Decimal(12,2)
+  sellerName        String
+  sellerTaxId       String?
+  sellerAddress     String?
+  buyerName         String?
+  buyerEmail        String?
+  buyerTaxId        String?
+  buyerAddress      String?
+  issuedBy          String
+  issuedAt          DateTime @default(now())
+  voidedAt          DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  order             Order    @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  user              User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  company           Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  creditNotes       CreditNote[]
+  @@index([companyId, issuedAt])
+  @@index([userId, issuedAt])
+  @@index([status, issuedAt])
+}
+
+model CreditNote {
+  id               Int      @id @default(autoincrement())
+  creditNoteNumber String   @unique
+  verificationCode String   @unique
+  invoiceId        Int
+  orderId          Int
+  refundId         Int      @unique
+  userId           Int
+  companyId        Int?
+  status           String   @default("ISSUED")
+  currency         String
+  amountEUR        Decimal  @db.Decimal(10,2)
+  amountKZ         Decimal  @db.Decimal(12,2)
+  reason           String
+  sellerName       String
+  sellerTaxId      String?
+  sellerAddress    String?
+  buyerName        String?
+  buyerTaxId       String?
+  buyerAddress     String?
+  issuedBy         String
+  issuedAt         DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  invoice          Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  order            Order    @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  refund           Refund   @relation(fields: [refundId], references: [id], onDelete: Restrict)
+  user             User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  company          Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  @@index([companyId, issuedAt])
+  @@index([userId, issuedAt])
+  @@index([invoiceId, issuedAt])
+}
+
 
 model SystemSetting {
   id             String   @id @default("global")
@@ -430,6 +573,8 @@ model Quote {
   quoteNumber String   @unique
   userId      Int
   status      String   @default("SUBMITTED")
+  market      String   @default("AO")
+  currency    String   @default("AOA")
   companyName String
   companyNif  String
   address     String?
@@ -471,6 +616,22 @@ model ReturnRequest {
   updatedAt     DateTime @updatedAt
   order         Order    @relation(fields: [orderId], references: [id])
   user          User     @relation(fields: [userId], references: [id])
+  events        ReturnRequestEvent[]
+  refunds       Refund[]
+  @@index([status, createdAt])
+  @@index([userId, createdAt])
+}
+
+model ReturnRequestEvent {
+  id              Int      @id @default(autoincrement())
+  returnRequestId Int
+  previousStatus  String?
+  nextStatus      String
+  actorExternalId String
+  note            String?
+  createdAt       DateTime @default(now())
+  returnRequest   ReturnRequest @relation(fields: [returnRequestId], references: [id], onDelete: Cascade)
+  @@index([returnRequestId, createdAt])
 }
 
 
@@ -677,6 +838,7 @@ model CommunicationPreference {
   promotions   Boolean  @default(true)
   newProducts  Boolean  @default(false)
   orderUpdates Boolean  @default(true)
+  commercialUpdates Boolean @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -711,6 +873,7 @@ model Refund {
   reason           String
   status           String   @default("REQUESTED")
   providerRefundId String?  @unique
+  idempotencyKey   String?  @unique
   provider         String
   requestedBy      String?
   processedBy      String?
@@ -720,6 +883,9 @@ model Refund {
   order            Order   @relation(fields: [orderId], references: [id])
   payment          Payment @relation(fields: [paymentId], references: [id])
   user             User    @relation(fields: [userId], references: [id])
+  returnRequestId  Int?
+  returnRequest    ReturnRequest? @relation(fields: [returnRequestId], references: [id], onDelete: SetNull)
+  creditNote       CreditNote?
   @@index([orderId, createdAt])
   @@index([paymentId, status])
   @@index([userId, createdAt])

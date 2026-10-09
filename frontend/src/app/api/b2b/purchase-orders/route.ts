@@ -21,7 +21,7 @@ export async function GET(request: Request) {
     where: { companyId: membership.companyId },
     include: {
       quote: { select: { quoteNumber: true, status: true, items: true } },
-      order: { select: { id: true, orderNumber: true, status: true, totalEUR: true } },
+      order: { select: { id: true, orderNumber: true, status: true, country: true, currency: true, totalEUR: true, totalKZ: true, payment: { select: { id: true, status: true, method: true, currency: true, amountEUR: true, amountKZ: true, entity: true, referenceNumber: true, expiresAt: true, paidAt: true } } } },
     },
     orderBy: { createdAt: "desc" },
     take: 100,

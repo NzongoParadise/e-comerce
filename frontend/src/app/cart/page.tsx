@@ -1,24 +1,29 @@
 "use client";
 
-import { useCart } from "@/context/CartContext";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { Heart, ShoppingCart, ArrowLeft, Trash2, X, ShieldCheck, Truck } from "lucide-react";
+import { ArrowLeft, Check, Heart, ShieldCheck, ShoppingCart, Trash2, Truck, X } from "lucide-react";
+import { useCart } from "@/context/CartContext";
+import { useFavorites } from "@/context/FavoritesContext";
 import { useMarket } from "@/context/MarketContext";
 import { calculatePortugalShipping, estimateCartWeightKg } from "@/lib/shipping";
 import { RecommendationRail } from "@/components/features/catalog/RecommendationRail";
 
-
 export default function CartPage() {
   const { items, updateQuantity, removeFromCart, clearCart, cartTotalEUR } = useCart();
   const { market, formatPrice, eurToKz } = useMarket();
+  const { isFavorite, toggleFavorite } = useFavorites();
   const router = useRouter();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [feedback, setFeedback] = useState("");
 
   const estimatedWeightKg = estimateCartWeightKg(items);
   const standardShippingEUR = market === "PT" ? calculatePortugalShipping(estimatedWeightKg, false) : 0;
   const allSelected = items.length > 0 && items.every((item) => selectedIds.includes(item.id));
+  const selectedCount = selectedIds.length;
+
+  const totalItems = useMemo(() => items.reduce((sum, item) => sum + item.quantity, 0), [items]);
 
   function toggleSelected(id: string) {
     setSelectedIds((current) => current.includes(id) ? current.filter((itemId) => itemId !== id) : [...current, id]);
@@ -31,219 +36,163 @@ export default function CartPage() {
   function removeSelected() {
     selectedIds.forEach((id) => removeFromCart(id));
     setSelectedIds([]);
+    setFeedback(selectedCount + (selectedCount === 1 ? " item removido." : " itens removidos."));
   }
 
-
+  function saveSelectedToFavorites() {
+    const selected = items.filter((item) => selectedIds.includes(item.id));
+    let added = 0;
+    selected.forEach((item) => {
+      if (!isFavorite(item.productId)) {
+        toggleFavorite({
+          id: item.productId,
+          name: item.name,
+          slug: item.slug,
+          category: "",
+          specs: [item.variant?.storage, item.variant?.ram, item.variant?.color].filter(Boolean).join(" · "),
+          priceEUR: item.priceEUR,
+          imageUrl: item.imageUrl,
+        });
+        added += 1;
+      }
+    });
+    setSelectedIds([]);
+    setFeedback(added ? added + (added === 1 ? " produto adicionado aos favoritos." : " produtos adicionados aos favoritos.") : "Os produtos selecionados já estavam nos favoritos.");
+  }
 
   if (items.length === 0) {
     return (
-      <div className="container mx-auto px-4 py-24 text-center">
-        <ShoppingCart size={56} className="mx-auto mb-6 text-gray-300" strokeWidth={1.5} aria-hidden="true" />
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">O seu carrinho está vazio</h1>
-        <p className="text-gray-500 mb-8">Navegue pelas nossas categorias e descubra os melhores produtos.</p>
-        <Link href="/products" className="btn-primary">
-          Começar a comprar
-        </Link>
-      </div>
+      <main className="container mx-auto px-4 py-20 sm:py-28">
+        <section className="mx-auto max-w-lg text-center">
+          <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100 text-slate-400"><ShoppingCart size={30}/></span>
+          <p className="section-kicker mt-6">Carrinho</p>
+          <h1 className="mt-2 text-2xl font-black tracking-tight text-slate-950">O seu carrinho está vazio</h1>
+          <p className="mt-2 text-sm leading-6 text-slate-500">Explore o catálogo e encontre produtos para a sua próxima compra.</p>
+          <Link href="/products" className="btn-primary mt-6">Começar a comprar <ArrowLeft size={15} className="rotate-180"/></Link>
+        </section>
+      </main>
     );
   }
 
   return (
-    <div className="container mx-auto animate-fade-in-up px-4 py-8">
-      <div className="mb-6 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Carrinho de compras</h1>
-          <p className="text-sm text-gray-500">Revise os seus produtos e finalize a compra com segurança.</p>
+    <main className="min-h-screen bg-[#f7f8fb]">
+      <div className="border-b border-slate-200 bg-white">
+        <div className="container mx-auto flex items-center gap-2 px-4 py-3 text-xs text-slate-500">
+          <Link href="/" className="hover:text-[#1d6ac4]">Início</Link><span>›</span><span className="font-bold text-slate-800">Carrinho</span>
         </div>
-        <Link href="/products" className="inline-flex items-center gap-1 text-xs font-bold text-primary hover:underline"><ArrowLeft size={14} /> Continuar a comprar</Link>
       </div>
 
-      <div className="mb-6 grid gap-3 sm:grid-cols-2">
-        <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 p-4">
-          <div className="flex items-start gap-3">
-            <Truck size={19} className="mt-0.5 shrink-0 text-emerald-700" />
-            <div>
-              <p className="text-xs font-black text-emerald-900">{market === "AO" ? "Entrega padrão em Angola" : "Entrega em Portugal"}</p>
-              <p className="mt-1 text-[11px] leading-5 text-emerald-800">{market === "AO" ? "O método padrão é gratuito. A entrega expressa é calculada no checkout." : "O custo é calculado automaticamente pelo peso e pelo método escolhido."}</p>
-            </div>
+      <div className="container mx-auto px-4 py-6 sm:py-8">
+        <header className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="section-kicker">Compra segura</p>
+            <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">Carrinho de compras</h1>
+            <p className="mt-1 text-sm text-slate-500">{totalItems} {totalItems === 1 ? "produto" : "produtos"} selecionados para revisão.</p>
           </div>
-        </div>
-        <div className="rounded-xl border border-blue-100 bg-blue-50/70 p-4">
-          <div className="flex items-start gap-3">
-            <ShieldCheck size={19} className="mt-0.5 shrink-0 text-[#1d6ac4]" />
-            <div>
-              <p className="text-xs font-black text-blue-950">Preço e promoções</p>
-              <p className="mt-1 text-[11px] leading-5 text-blue-800">As condições elegíveis são recalculadas no checkout antes da confirmação.</p>
-            </div>
-          </div>
-        </div>
-      </div>
+          <Link href="/products" className="inline-flex items-center gap-1 text-xs font-black text-[#1d6ac4] hover:underline"><ArrowLeft size={14}/> Continuar a comprar</Link>
+        </header>
 
-      {/* Stepper (Visual only for now) */}
-      <div className="flex w-full min-w-0 max-w-full items-center gap-4 text-sm font-semibold mb-8 border-b border-gray-200 pb-4 overflow-x-auto">
-        <div className="flex items-center gap-2 text-primary">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-white">1</span>
-          Carrinho
-        </div>
-        <div className="h-px w-8 bg-gray-300 hidden sm:block" />
-        <div className="flex items-center gap-2 text-gray-400">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gray-200">2</span>
-          Entrega
-        </div>
-        <div className="h-px w-8 bg-gray-300 hidden sm:block" />
-        <div className="flex items-center gap-2 text-gray-400">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gray-200">3</span>
-          Pagamento
-        </div>
-        <div className="h-px w-8 bg-gray-300 hidden sm:block" />
-        <div className="flex items-center gap-2 text-gray-400">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gray-200">4</span>
-          Confirmação
-        </div>
-      </div>
+        <nav aria-label="Progresso da compra" className="mb-6 flex items-center gap-3 overflow-x-auto border-b border-slate-200 pb-4">
+          <Step active number="1" label="Carrinho"/><span className="h-px w-8 shrink-0 bg-slate-200"/><Step number="2" label="Entrega"/><span className="h-px w-8 shrink-0 bg-slate-200"/><Step number="3" label="Pagamento"/><span className="h-px w-8 shrink-0 bg-slate-200"/><Step number="4" label="Confirmação"/>
+        </nav>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Left: Cart Items */}
-        <div className="lg:col-span-8">
-          <div className="card p-0 overflow-hidden">
-            <div className="hidden bg-gray-50 p-4 border-b border-gray-200 grid-cols-12 text-xs font-bold text-gray-500 uppercase tracking-wide sm:grid">
-              <label className="col-span-6 flex items-center gap-2"><input type="checkbox" checked={allSelected} onChange={toggleAll} className="accent-primary" /> Produtos ({items.length})</label>
-              <div className="col-span-2 text-center">Preço unitário</div>
-              <div className="col-span-2 text-center">Quantidade</div>
-              <div className="col-span-2 text-right">Subtotal</div>
+        {feedback && <div role="status" className="mb-5 flex items-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs font-bold text-blue-800"><Check size={14}/>{feedback}</div>}
+
+        <section className="mb-5 grid gap-3 sm:grid-cols-2">
+          <InfoStrip icon={Truck} title={market === "AO" ? "Entrega padrão em Angola" : "Entrega em Portugal"} detail={market === "AO" ? "Entrega padrão gratuita. O método express pode ter custo adicional." : "O valor padrão é calculado automaticamente pelo peso."} tone="green"/>
+          <InfoStrip icon={ShieldCheck} title="Preço validado no checkout" detail="Promoções e custos finais são recalculados antes da confirmação." tone="blue"/>
+        </section>
+
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
+          <section className="card overflow-hidden">
+            <div className="hidden border-b border-slate-100 bg-slate-50 px-4 py-3 text-[9px] font-black uppercase tracking-[0.08em] text-slate-500 sm:grid sm:grid-cols-[minmax(0,1fr)_110px_130px_110px] sm:items-center sm:gap-4">
+              <label className="flex items-center gap-2"><input type="checkbox" checked={allSelected} onChange={toggleAll} className="accent-[#1d6ac4]"/> Produtos ({items.length})</label>
+              <span className="text-center">Preço</span><span className="text-center">Quantidade</span><span className="text-right">Subtotal</span>
             </div>
 
-            <div className="divide-y divide-gray-100">
+            <div className="divide-y divide-slate-100">
               {items.map((item) => (
-                <div key={item.id} className="grid grid-cols-12 items-center gap-4 p-4 transition-all duration-200 hover:bg-slate-50/80">
-                  <div className="col-span-12 flex items-center gap-3 sm:col-span-6">
-                    <input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => toggleSelected(item.id)} className="accent-primary" aria-label={`Selecionar ${item.name}`} />
-                    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg border border-gray-100 bg-gray-50">
-                      {item.imageUrl ? <img src={item.imageUrl} alt="" className="h-full w-full rounded-lg object-contain" /> : <ShoppingCart size={24} className="text-gray-300" aria-hidden="true" />}
-                    </div>
-                    <div>
-                      <Link href={`/products/${item.slug}`} className="font-bold text-sm text-gray-900 hover:text-primary transition-colors line-clamp-1">
-                        {item.name}
-                      </Link>
-                      {item.variant && (
-                        <div className="text-[11px] text-gray-500 mt-0.5">
-                          {item.variant.storage && `${item.variant.storage} | `}
-                          {item.variant.ram && `${item.variant.ram} | `}
-                          {item.variant.color}
-                        </div>
-                      )}
-                      <div className="text-[10px] font-bold text-green-600 mt-1">● Em stock</div>
+                <article key={item.id} className="grid gap-4 p-4 transition hover:bg-slate-50/60 sm:grid-cols-[minmax(0,1fr)_110px_130px_110px] sm:items-center sm:gap-4">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => toggleSelected(item.id)} className="mt-2 accent-[#1d6ac4]" aria-label={"Selecionar " + item.name}/>
+                    <Link href={"/products/" + item.slug} className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-100 bg-slate-50">
+                      {item.imageUrl ? <img src={item.imageUrl} alt="" className="h-full w-full object-contain" /> : <ShoppingCart size={22} className="text-slate-300"/>}
+                    </Link>
+                    <div className="min-w-0 flex-1">
+                      <Link href={"/products/" + item.slug} className="line-clamp-2 text-xs font-black leading-5 text-slate-950 hover:text-[#1d6ac4]">{item.name}</Link>
+                      {item.variant && <p className="mt-1 text-[10px] text-slate-500">{[item.variant.storage, item.variant.ram, item.variant.color].filter(Boolean).join(" · ")}</p>}
+                      <p className="mt-1 text-[10px] font-bold text-emerald-600">Em stock</p>
                     </div>
                   </div>
-                  
-                  <div className="col-span-6 text-left sm:col-span-2 sm:text-center">
-                    <div className="text-sm font-bold text-gray-900">{formatPrice(item.priceEUR)}</div>
-                    <div className="text-[10px] text-gray-400 mt-0.5">
-                      {market === "PT"
-                        ? `Kz ${eurToKz(item.priceEUR).toLocaleString("pt-AO")}`
-                        : `€ ${item.priceEUR.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}`
-                      }
+
+                  <div className="flex items-center justify-between sm:block sm:text-center">
+                    <span className="text-[10px] font-semibold text-slate-400 sm:hidden">Preço unitário</span>
+                    <div><p className="text-xs font-black text-slate-900">{formatPrice(item.priceEUR)}</p><p className="mt-0.5 text-[9px] text-slate-400">{market === "PT" ? "Kz " + eurToKz(item.priceEUR).toLocaleString("pt-AO") : "€ " + item.priceEUR.toFixed(2)}</p></div>
+                  </div>
+
+                  <div className="flex items-center justify-between sm:justify-center">
+                    <span className="text-[10px] font-semibold text-slate-400 sm:hidden">Quantidade</span>
+                    <div className="inline-flex items-center overflow-hidden rounded-lg border border-slate-200 bg-white">
+                      <button type="button" onClick={() => updateQuantity(item.id, item.quantity - 1)} className="h-8 w-8 text-slate-500 hover:bg-slate-50" aria-label="Diminuir quantidade">−</button>
+                      <span className="grid h-8 w-9 place-items-center border-x border-slate-200 text-xs font-black text-slate-900">{item.quantity}</span>
+                      <button type="button" onClick={() => updateQuantity(item.id, item.quantity + 1)} className="h-8 w-8 text-slate-500 hover:bg-slate-50" aria-label="Aumentar quantidade">+</button>
                     </div>
                   </div>
-                  
-                  <div className="col-span-6 flex justify-end sm:col-span-2 sm:justify-center">
-                    <div className="flex items-center border border-gray-300 rounded-lg max-w-25">
-                      <button onClick={() => updateQuantity(item.id, item.quantity - 1)} className="px-2 py-1 text-gray-500 hover:bg-gray-50 rounded-l-lg">−</button>
-                      <span className="px-2 py-1 text-xs font-bold border-x border-gray-300 text-center w-8">{item.quantity}</span>
-                      <button onClick={() => updateQuantity(item.id, item.quantity + 1)} className="px-2 py-1 text-gray-500 hover:bg-gray-50 rounded-r-lg">+</button>
-                    </div>
+
+                  <div className="flex items-center justify-between sm:block sm:text-right">
+                    <span className="text-[10px] font-semibold text-slate-400 sm:hidden">Subtotal</span>
+                    <div><p className="text-xs font-black text-slate-950">{formatPrice(item.priceEUR * item.quantity)}</p><p className="mt-0.5 text-[9px] text-slate-400">{market === "PT" ? "Kz " + eurToKz(item.priceEUR * item.quantity).toLocaleString("pt-AO") : "€ " + (item.priceEUR * item.quantity).toFixed(2)}</p></div>
+                    <button type="button" onClick={() => removeFromCart(item.id)} className="mt-2 inline-flex items-center gap-1 text-[9px] font-bold text-slate-400 hover:text-rose-600"><Trash2 size={13}/> Remover</button>
                   </div>
-                  
-                  <div className="col-span-12 flex flex-row items-center justify-between border-t border-gray-100 pt-3 sm:col-span-2 sm:flex-col sm:items-end sm:justify-center sm:border-0 sm:pt-0">
-                    <div className="text-sm font-bold text-gray-900">{formatPrice(item.priceEUR * item.quantity)}</div>
-                    <div className="text-[10px] text-gray-400 mt-0.5 mb-2">
-                      {market === "PT"
-                        ? `Kz ${eurToKz(item.priceEUR * item.quantity).toLocaleString("pt-AO")}`
-                        : `€ ${(item.priceEUR * item.quantity).toLocaleString("pt-PT", { minimumFractionDigits: 2 })}`
-                      }
-                    </div>
-                    <button onClick={() => removeFromCart(item.id)} className="text-gray-400 hover:text-red-500 transition-colors" aria-label={`Remover ${item.name}`}>
-                      <Trash2 size={16} strokeWidth={2} aria-hidden="true" />
-                    </button>
-                  </div>
-                </div>
+                </article>
               ))}
             </div>
-            
-            <div className="bg-gray-50 p-4 border-t border-gray-200 flex flex-wrap justify-between gap-3 items-center">
+
+            <div className="flex flex-col gap-3 border-t border-slate-100 bg-slate-50 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex flex-wrap gap-2">
-                <button onClick={removeSelected} disabled={!selectedIds.length} className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-2 text-xs font-bold text-gray-600 hover:border-red-300 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"><Trash2 size={13} /> Remover selecionados</button>
-                <button onClick={() => setSelectedIds([])} disabled={!selectedIds.length} className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-2 text-xs font-bold text-gray-600 disabled:cursor-not-allowed disabled:opacity-40"><Heart size={13} /> Adicionar aos favoritos</button>
+                <button type="button" onClick={removeSelected} disabled={!selectedIds.length} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-black text-slate-600 hover:border-rose-200 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-40"><Trash2 size={13}/> Remover selecionados</button>
+                <button type="button" onClick={saveSelectedToFavorites} disabled={!selectedIds.length} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-black text-slate-600 hover:border-blue-200 hover:text-[#1d6ac4] disabled:cursor-not-allowed disabled:opacity-40"><Heart size={13}/> Guardar nos favoritos</button>
               </div>
-              <button onClick={() => { clearCart(); setSelectedIds([]); }} className="inline-flex items-center gap-1 text-xs font-bold text-gray-500 hover:text-red-600"><X size={14} /> Limpar carrinho</button>
+              <button type="button" onClick={() => { clearCart(); setSelectedIds([]); setFeedback("Carrinho limpo."); }} className="inline-flex items-center gap-1 text-[10px] font-black text-slate-500 hover:text-rose-600"><X size={14}/> Limpar carrinho</button>
             </div>
-          </div>
+          </section>
+
+          <aside className="lg:sticky lg:top-28 lg:self-start">
+            <section className="card p-5 sm:p-6">
+              <div className="flex items-center justify-between gap-3"><div><p className="section-kicker">Resumo</p><h2 className="mt-1 text-base font-black text-slate-950">Resumo da encomenda</h2></div><span className="rounded-full bg-slate-100 px-2.5 py-1 text-[9px] font-black text-slate-600">{totalItems} itens</span></div>
+
+              <div className="mt-5 space-y-3 border-b border-slate-100 pb-5 text-xs">
+                <SummaryRow label="Subtotal" value={formatPrice(cartTotalEUR)} />
+                <SummaryRow label="Desconto" value={formatPrice(0)} valueClass="text-emerald-700"/>
+                <SummaryRow label="Entrega padrão" value={market === "PT" ? formatPrice(standardShippingEUR) : "Grátis"} valueClass={market === "AO" ? "text-emerald-700" : ""}/>
+              </div>
+
+              <div className="mt-5 rounded-xl bg-slate-50 p-4">
+                <div className="flex items-end justify-between gap-3"><span className="text-xs font-black text-slate-800">Total estimado</span><span className="text-xl font-black tracking-tight text-slate-950">{formatPrice(cartTotalEUR + (market === "PT" ? standardShippingEUR : 0))}</span></div>
+                <p className="mt-1 text-right text-[9px] text-slate-400">O total final é confirmado no checkout.</p>
+              </div>
+
+              <button type="button" onClick={() => router.push("/checkout")} className="btn-primary mt-5 w-full py-3.5">Avançar para checkout <ArrowLeft size={15} className="rotate-180"/></button>
+
+              <div className="mt-4 flex items-start gap-2 rounded-xl border border-emerald-100 bg-emerald-50 p-3 text-[10px] leading-4 text-emerald-800"><ShieldCheck size={14} className="mt-0.5 shrink-0"/> Pagamento protegido e validação de condições antes da confirmação.</div>
+            </section>
+          </aside>
         </div>
 
-        {/* Right: Summary */}
-        <div className="lg:col-span-4">
-          <div className="card sticky top-32 bg-white p-6 shadow-[0_22px_50px_rgba(15,23,42,0.08)] transition-all duration-300 hover:-translate-y-0.5">
-            <h2 className="text-lg font-bold text-gray-900 mb-6">Resumo da encomenda</h2>
-            
-            <div className="space-y-3 text-sm mb-6 border-b border-gray-100 pb-6">
-                <div className="flex justify-between">
-                <span className="text-gray-500">Subtotal ({items.reduce((s,i)=>s+i.quantity,0)} itens)</span>
-                <div className="text-right">
-                  <div className="font-semibold text-gray-900">{formatPrice(cartTotalEUR)}</div>
-                  <div className="text-[10px] text-gray-400">
-                    {market === "PT"
-                      ? `Kz ${eurToKz(cartTotalEUR).toLocaleString("pt-AO")}`
-                      : `€ ${cartTotalEUR.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}`
-                    }
-                  </div>
-                </div>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Desconto</span>
-                <span className="font-semibold text-emerald-700">{formatPrice(0)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Entrega</span>
-                <span className="text-primary text-xs font-semibold">
-                  {market === "PT"
-                    ? `${formatPrice(standardShippingEUR)} (padrão)`
-                    : "Grátis"}
-                </span>
-              </div>
-            </div>
-
-            <div className="flex justify-between items-end mb-6">
-              <span className="font-bold text-gray-900">Total estimado</span>
-              <div className="text-right">
-                <div className="text-2xl font-black text-gray-900">{formatPrice(cartTotalEUR + (market === "PT" ? standardShippingEUR : 0))}</div>
-                <div className="text-xs font-bold text-warning">
-                  {market === "PT"
-                    ? `Kz ${eurToKz(cartTotalEUR + standardShippingEUR).toLocaleString("pt-AO")}`
-                    : `€ ${cartTotalEUR.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}`
-                  }
-                </div>
-              </div>
-            </div>
-
-            <button onClick={() => router.push('/checkout')} className="btn-primary w-full py-3 mb-6">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-              Avançar para o checkout →
-            </button>
-
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">Promoções</p>
-              <p className="mt-1 text-xs leading-5 text-slate-600">As campanhas e condições elegíveis são aplicadas e validadas no processo de checkout.</p>
-            </div>
-          </div>
-        </div>
+        <RecommendationRail title="Pode complementar a sua compra" description="Sugestões reais do catálogo disponíveis neste momento." limit={4}/>
       </div>
-
-      <RecommendationRail
-        title="Pode complementar a sua compra"
-        description="Sugestões reais do catálogo disponíveis neste momento."
-        limit={4}
-      />
-    </div>
+    </main>
   );
 }
 
+function Step({ active = false, number, label }: { active?: boolean; number: string; label: string }) {
+  return <span className={"flex shrink-0 items-center gap-2 text-[10px] font-black " + (active ? "text-[#1d6ac4]" : "text-slate-400")}><span className={"grid h-6 w-6 place-items-center rounded-full text-[9px] " + (active ? "bg-[#1d6ac4] text-white" : "bg-slate-100 text-slate-500")}>{number}</span>{label}</span>;
+}
+
+function InfoStrip({ icon: Icon, title, detail, tone }: { icon: typeof Truck; title: string; detail: string; tone: "green" | "blue" }) {
+  return <div className={"rounded-xl border p-4 " + (tone === "green" ? "border-emerald-100 bg-emerald-50/60" : "border-blue-100 bg-blue-50/60")}><div className="flex gap-3"><Icon size={18} className={"mt-0.5 shrink-0 " + (tone === "green" ? "text-emerald-700" : "text-[#1d6ac4]")}/><div><p className="text-xs font-black text-slate-900">{title}</p><p className="mt-1 text-[10px] leading-4 text-slate-600">{detail}</p></div></div></div>;
+}
+
+function SummaryRow({ label, value, valueClass = "text-slate-900" }: { label: string; value: string; valueClass?: string }) {
+  return <div className="flex items-center justify-between gap-4"><span className="text-slate-500">{label}</span><span className={"font-bold " + valueClass}>{value}</span></div>;
+}

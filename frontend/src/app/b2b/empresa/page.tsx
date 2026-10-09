@@ -13,13 +13,14 @@ type CompanyForm = {
   province: string;
   city: string;
   address: string;
+  country: "Angola" | "Portugal";
 };
 
 type Company = CompanyForm & { id: number; status: string; createdAt?: string; updatedAt?: string };
-type CompanyResponse = { data: Company | null; role?: string };
+type CompanyResponse = { data: Company | null; role?: string; revalidationRequired?: boolean };
 
 const emptyForm: CompanyForm = {
-  legalName: "", tradeName: "", nif: "", email: "", phone: "", province: "", city: "", address: "",
+  legalName: "", tradeName: "", nif: "", email: "", phone: "", province: "", city: "", address: "", country: "Angola",
 };
 
 const statusStyle: Record<string, string> = {
@@ -37,7 +38,7 @@ function toForm(company: Company): CompanyForm {
   return {
     legalName: company.legalName || "", tradeName: company.tradeName || "", nif: company.nif || "",
     email: company.email || "", phone: company.phone || "", province: company.province || "",
-    city: company.city || "", address: company.address || "",
+    city: company.city || "", address: company.address || "", country: company.country === "Portugal" ? "Portugal" : "Angola",
   };
 }
 
@@ -98,7 +99,7 @@ export default function B2BCompanyPage() {
       setCompany(response.data);
       setRole(response.role || (company ? role : "OWNER"));
       setForm(toForm(response.data));
-      setNotice(company ? "Dados da empresa atualizados." : "Empresa registada. Aguardamos a validação da equipa.");
+      setNotice(response.revalidationRequired ? "O país da empresa foi alterado. O perfil voltou para validação; compras empresariais serão reativadas após homologação." : company ? "Dados da empresa atualizados." : "Empresa registada. Aguardamos a validação da equipa.");
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Não foi possível guardar os dados da empresa.");
     } finally {
@@ -141,6 +142,7 @@ export default function B2BCompanyPage() {
                 <Field label="Razão social" name="legalName" value={form.legalName} onChange={updateField} required disabled={!canEdit} />
                 <Field label="Nome comercial" name="tradeName" value={form.tradeName} onChange={updateField} disabled={!canEdit} />
                 <Field label="NIF" name="nif" value={form.nif} onChange={updateField} required disabled={!canEdit || Boolean(company)} />
+                <label className="block text-xs font-bold text-slate-600">País de operação<span className="ml-1 text-rose-500">*</span><select value={form.country} required disabled={!canEdit} onChange={(event) => updateField("country", event.target.value as "Angola" | "Portugal")} className="mt-2 h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-50 disabled:bg-slate-50 disabled:text-slate-500"><option value="Angola">Angola · AOA / MULTICAIXA</option><option value="Portugal">Portugal · EUR / Stripe</option></select></label>
                 <Field label="Email comercial" name="email" value={form.email} onChange={updateField} type="email" disabled={!canEdit} />
                 <Field label="Telefone" name="phone" value={form.phone} onChange={updateField} type="tel" disabled={!canEdit} />
               </div>

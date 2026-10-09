@@ -39,7 +39,7 @@ export default function AccountOverviewPage() {
   const [quotes, setQuotes] = useState<AccountQuote[]>([]);
   const { favorites } = useFavorites();
   const { addToCart } = useCart();
-  const { eurToKz } = useMarket();
+  const { eurToKz, market } = useMarket();
 
   useEffect(() => {
     fetchWithAuth("/api/auth/me")
@@ -49,7 +49,7 @@ export default function AccountOverviewPage() {
     fetchWithAuth("/api/orders")
       .then((response) => {
         const data = response.data ?? [];
-        const mapped = data.slice(0, 3).map((order: {
+        const mapped = data.map((order: {
           id: number;
           orderNumber: string;
           createdAt: string;
@@ -126,22 +126,216 @@ export default function AccountOverviewPage() {
       .catch(() => setQuotes([]));
   }, [eurToKz]);
 
-  const customerName = profile?.name || "João da Silva";
-  const initials = customerName.split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase();
-
+  const customerName = profile?.name || "Cliente";
+  
   function addRecommendation(item: AccountRecommendation) {
     const priceEUR = Number(item.price.replace("€", "").replace(".", "").replace(",", "."));
     addToCart({ id: `account-${item.id}`, productId: item.id, name: item.name, slug: item.slug, priceEUR, priceKZ: eurToKz(priceEUR), quantity: 1, imageUrl: item.image });
   }
 
-  return profile?.accountType === "B2B" ? <CorporateDashboard profile={profile} orders={orders} quotes={quotes} /> : <div className="account-shell animate-fade-in-up space-y-5 pb-8"><div className="group rounded-[28px] border border-sky-100 bg-[linear-gradient(135deg,#eff6ff_0%,#ffffff_38%,#f8fafc_100%)] p-4 shadow-[0_18px_40px_rgba(15,23,42,0.06)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_24px_54px_rgba(15,23,42,0.08)] sm:p-5"><div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center"><div className="flex items-center gap-3"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#1d6ac4] text-sm font-black text-white shadow-lg shadow-[#1d6ac4]/20 transition-transform duration-300 group-hover:scale-105">{initials}</div><div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#1d6ac4]">Minha conta</p><h1 className="mt-1 text-2xl font-black text-gray-900">Olá, {customerName}! <span aria-hidden="true">👋</span></h1></div></div><Link href="/account/profile" className="btn-secondary px-3 py-2 text-[10px] transition-transform duration-200 hover:-translate-y-0.5"><Pencil size={13} /> Editar perfil</Link></div><p className="mt-4 max-w-2xl text-sm text-gray-600">Bem-vindo à sua conta RUBRICA DILIGENTE (SU), LDA. Aqui pode gerir as suas encomendas, dados e preferências.</p></div><div className="grid grid-cols-2 gap-3 xl:grid-cols-4"><Metric icon={Package} value={String(orderCount)} label="Encomendas" href="/account/orders" /><Metric icon={Heart} value={String(favorites.length)} label="Produtos favoritos" href="/favorites" tone="pink" /><Metric icon={MapPin} value={String(addressCount)} label="Endereços" href="/account/addresses" /><Metric icon={CreditCard} value={String(paymentMethodCount)} label="Métodos de pagamento" href="/account/payment" /></div><div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_230px]"><main className="min-w-0 space-y-5"><section className="animate-fade-in-up"><div className="mb-3 flex items-center justify-between"><h2 className="text-sm font-black text-gray-900">As minhas encomendas</h2><Link href="/account/orders" className="text-[10px] font-bold text-[#1555d8]">Ver todas <ArrowRight size={11} className="inline" /></Link></div><div className="card divide-y divide-gray-100">{orders.map((order) => <div key={order.number} className="flex items-center gap-3 p-4"><div className="min-w-0 flex-1"><p className="text-[10px] font-black text-gray-900">{order.number}</p><p className="text-[9px] text-gray-500">{order.date}</p></div><div className="hidden items-center gap-1 sm:flex">{order.images.map((image) => <img key={image} src={image} alt="" className="h-8 w-8 rounded bg-gray-50 object-contain" />)}</div><div className="hidden text-[9px] text-gray-500 md:block">{order.products.join(" | ")}</div><div className="text-right"><span className={`rounded-full px-2 py-1 text-[9px] font-bold ${order.status === "Entregue" ? "bg-emerald-50 text-emerald-700" : order.status === "Cancelada" ? "bg-gray-100 text-gray-500" : "bg-blue-50 text-blue-700"}`}>{order.status}</span><p className="mt-1 text-[10px] font-black text-gray-900">{order.total}</p><p className="text-[9px] text-gray-500">{order.detail}</p></div><Link href="/account/orders" aria-label={`Ver ${order.number}`} className="text-[#1555d8]"><ChevronRightIcon /></Link></div>)}</div></section><section><div className="mb-3 flex items-center justify-between"><h2 className="text-sm font-black text-gray-900">Produtos que talvez goste</h2><Link href="/products" className="text-[10px] font-bold text-[#1555d8]">Ver mais <ArrowRight size={11} className="inline" /></Link></div><div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{recommendations.map((item) => <article key={item.name} className="card relative p-3"><Heart size={13} className="absolute right-2 top-2 text-gray-400" /><div className="flex h-24 items-center justify-center rounded bg-gray-50"><img src={item.image} alt={item.name} className="h-full w-full object-contain" /></div><p className="mt-2 line-clamp-1 text-[10px] font-bold text-gray-900">{item.name}</p><p className="mt-1 text-[10px] text-amber-500">★★★★★</p><p className="text-xs font-black text-gray-900">{item.price}</p><p className="text-[9px] text-gray-500">{item.kz}</p><button type="button" onClick={() => addRecommendation(item)} className="mt-2 flex w-full items-center justify-center gap-1 rounded bg-[#1555d8] px-2 py-2 text-[9px] font-bold text-white"><ShoppingCart size={12} /> Adicionar</button></article>)}</div></section></main><aside className="space-y-4"><section className="card p-4"><div className="flex items-center justify-between"><h2 className="text-sm font-black text-gray-900">Os meus dados</h2><Link href="/account/profile" className="text-[9px] font-bold text-[#1555d8]">Editar</Link></div><div className="mt-4 space-y-3 text-[10px] text-gray-700"><DataRow icon={UserRound} label="Nome" value={customerName} /><DataRow icon={Bell} label="E-mail" value={profile?.email || "joao.silva@email.com"} /><DataRow icon={Phone} label="Telefone" value="+244 923 000 000" /><DataRow icon={MapPin} label="País" value="Angola (Kz)" /></div></section><section className="card p-4"><div className="flex items-center justify-between"><h2 className="text-sm font-black text-gray-900">Métodos de pagamento</h2><Link href="/account/settings" className="text-[9px] font-bold text-[#1555d8]">Gerir</Link></div><div className="mt-3 space-y-3"><p className="flex items-center justify-between text-[10px] font-semibold"><span>▣ &nbsp; •••• •••• 0045</span><span className="text-xs text-orange-500">●●</span></p><p className="flex items-center justify-between text-[10px] font-semibold"><span>▣ &nbsp; •••• •••• 1234</span><b className="text-blue-600">VISA</b></p><Link href="/account/settings" className="mt-2 block rounded bg-blue-50 py-2 text-center text-[10px] font-bold text-[#1555d8]">＋ Adicionar método de pagamento</Link></div></section><section className="card bg-blue-50 p-4"><HeadsetIcon /><h2 className="mt-2 text-sm font-black text-gray-900">Precisa de ajuda?</h2><p className="mt-1 text-[10px] text-gray-600">A nossa equipa está sempre disponível para si.</p><div className="mt-3 grid grid-cols-2 gap-2"><Link href="/account/support" className="btn-primary px-2 py-2 text-[9px]"><Phone size={12} /> Ligar agora</Link><Link href="/account/support" className="btn-secondary px-2 py-2 text-[9px]">Centro de ajuda</Link></div></section><section className="card p-4"><div className="flex items-center gap-2"><Bell size={15} className="text-[#1555d8]" /><h2 className="text-xs font-black text-gray-900">Receba as nossas novidades</h2></div><p className="mt-1 text-[10px] text-gray-500">Promoções, lançamentos e ofertas exclusivas.</p><div className="mt-3 flex"><input placeholder="O seu e-mail" className="min-w-0 flex-1 rounded-l border border-gray-200 px-2 py-2 text-[9px]" /><button type="button" className="rounded-r bg-[#1555d8] px-2 text-[9px] font-bold text-white">Subscrever</button></div></section></aside></div></div>;
+  return profile?.accountType === "B2B"
+    ? <CorporateDashboard profile={profile} orders={orders} quotes={quotes} />
+    : <RetailDashboard
+        profile={profile}
+        orders={orders}
+        recommendations={recommendations}
+        favoritesCount={favorites.length}
+        orderCount={orderCount}
+        addressCount={addressCount}
+        paymentMethodCount={paymentMethodCount}
+        market={market}
+        eurToKz={eurToKz}
+        addToCart={addToCart}
+      />;
+}
+
+function RetailDashboard({
+  profile,
+  orders,
+  recommendations,
+  favoritesCount,
+  orderCount,
+  addressCount,
+  paymentMethodCount,
+  market,
+  eurToKz,
+  addToCart,
+}: {
+  profile: Profile | null;
+  orders: AccountOrder[];
+  recommendations: AccountRecommendation[];
+  favoritesCount: number;
+  orderCount: number;
+  addressCount: number;
+  paymentMethodCount: number;
+  market: "AO" | "PT";
+  eurToKz: (value: number) => number;
+  addToCart: ReturnType<typeof useCart>["addToCart"];
+}) {
+  const customerName = profile?.name || "Cliente";
+
+  function addRecommendation(item: AccountRecommendation) {
+    const priceEUR = Number(item.price.replace("€", "").replace(".", "").replace(",", "."));
+    addToCart({
+      id: `account-${item.id}`,
+      productId: item.id,
+      name: item.name,
+      slug: item.slug,
+      priceEUR,
+      priceKZ: eurToKz(priceEUR),
+      quantity: 1,
+      imageUrl: item.image,
+    });
+  }
+
+  return (
+    <div className="account-shell animate-fade-in-up space-y-5 pb-8">
+      <section className="rounded-2xl border border-sky-100 bg-[linear-gradient(135deg,#eff6ff_0%,#ffffff_45%,#f8fafc_100%)] p-5 shadow-[0_18px_40px_rgba(15,23,42,0.06)] sm:p-6">
+        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#1d6ac4]">Minha conta</p>
+            <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-950">Olá, {customerName}!</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">Gira as suas encomendas, dados pessoais, endereços, favoritos e preferências num único espaço.</p>
+          </div>
+          <Link href="/account/profile" className="btn-secondary inline-flex w-fit items-center gap-2 px-3 py-2 text-[10px]">
+            <Pencil size={13} /> Editar perfil
+          </Link>
+        </div>
+      </section>
+
+      <section className="grid grid-cols-2 gap-3 xl:grid-cols-4" aria-label="Resumo da conta">
+        <Metric icon={Package} value={String(orderCount)} label="Encomendas" href="/account/orders" />
+        <Metric icon={Heart} value={String(favoritesCount)} label="Produtos favoritos" href="/favorites" tone="pink" />
+        <Metric icon={MapPin} value={String(addressCount)} label="Endereços" href="/account/addresses" />
+        <Metric icon={CreditCard} value={String(paymentMethodCount)} label="Métodos de pagamento" href="/account/payment" />
+      </section>
+
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_250px]">
+        <main className="min-w-0 space-y-5">
+          <section>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h2 className="text-sm font-black text-slate-950">As minhas encomendas</h2>
+              <Link href="/account/orders" className="text-[10px] font-bold text-[#1555d8]">Ver todas <ArrowRight size={11} className="inline" /></Link>
+            </div>
+            <div className="card divide-y divide-gray-100 overflow-hidden">
+              {orders.slice(0, 3).map((order) => (
+                <Link key={order.number} href="/account/orders" className="flex items-center gap-3 p-4 transition hover:bg-slate-50">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] font-black text-slate-900">{order.number}</p>
+                    <p className="text-[9px] text-slate-500">{order.date}</p>
+                  </div>
+                  <div className="hidden items-center gap-1 sm:flex">
+                    {order.images.map((image) => <img key={image} src={image} alt="" className="h-8 w-8 rounded bg-slate-50 object-contain" />)}
+                  </div>
+                  <div className="hidden text-[9px] text-slate-500 md:block">{order.products.join(" | ")}</div>
+                  <div className="text-right">
+                    <span className={`rounded-full px-2 py-1 text-[9px] font-bold ${
+                      order.status === "Entregue"
+                        ? "bg-emerald-50 text-emerald-700"
+                        : order.status === "Cancelada"
+                          ? "bg-gray-100 text-gray-500"
+                          : "bg-blue-50 text-blue-700"
+                    }`}>{order.status}</span>
+                    <p className="mt-1 text-[10px] font-black text-slate-900">{order.total}</p>
+                  </div>
+                  <ChevronRightIcon />
+                </Link>
+              ))}
+              {!orders.length && (
+                <div className="px-5 py-10 text-center">
+                  <Package size={24} className="mx-auto text-slate-300" />
+                  <p className="mt-2 text-xs font-bold text-slate-700">Ainda não existem encomendas.</p>
+                  <p className="mt-1 text-[10px] text-slate-500">As suas compras aparecerão aqui depois do checkout.</p>
+                </div>
+              )}
+            </div>
+          </section>
+
+          <section>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h2 className="text-sm font-black text-slate-950">Produtos que talvez goste</h2>
+              <Link href="/products" className="text-[10px] font-bold text-[#1555d8]">Ver mais <ArrowRight size={11} className="inline" /></Link>
+            </div>
+            {recommendations.length ? (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {recommendations.map((item) => (
+                  <article key={item.id} className="card relative overflow-hidden p-3">
+                    <Link href={`/products/${item.slug}`} className="flex h-28 items-center justify-center rounded-xl bg-slate-50">
+                      <img src={item.image} alt={item.name} className="h-full w-full object-contain" />
+                    </Link>
+                    <p className="mt-2 line-clamp-2 text-[10px] font-bold text-slate-900">{item.name}</p>
+                    <p className="mt-1 text-xs font-black text-slate-950">{item.price}</p>
+                    <p className="text-[9px] text-slate-500">{item.kz}</p>
+                    <button type="button" onClick={() => addRecommendation(item)} className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg bg-[#1555d8] px-2 py-2 text-[9px] font-bold text-white hover:bg-[#1248b8]">
+                      <ShoppingCart size={12} /> Adicionar
+                    </button>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="card border-dashed p-8 text-center">
+                <Package size={24} className="mx-auto text-slate-300" />
+                <p className="mt-2 text-xs font-bold text-slate-700">Ainda não há recomendações.</p>
+                <Link href="/products" className="mt-3 inline-flex text-[10px] font-bold text-[#1555d8]">Explorar catálogo</Link>
+              </div>
+            )}
+          </section>
+        </main>
+
+        <aside className="space-y-4">
+          <section className="card p-4">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-sm font-black text-slate-950">Os meus dados</h2>
+              <Link href="/account/profile" className="text-[9px] font-bold text-[#1555d8]">Editar</Link>
+            </div>
+            <div className="mt-4 space-y-3 text-[10px] text-slate-700">
+              <DataRow icon={UserRound} label="Nome" value={customerName} />
+              <DataRow icon={Bell} label="E-mail" value={profile?.email || "Não informado"} />
+              <DataRow icon={Phone} label="Telefone" value="Não informado" />
+              <DataRow icon={MapPin} label="Mercado" value={market === "AO" ? "Angola · Kz" : "Portugal · €"} />
+            </div>
+          </section>
+
+          <section className="card p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-black text-slate-950">Métodos de pagamento</h2>
+                <p className="mt-0.5 text-[10px] text-slate-500">{paymentMethodCount} método(s) configurado(s).</p>
+              </div>
+              <Link href="/account/payment" className="text-[9px] font-bold text-[#1555d8]">Gerir</Link>
+            </div>
+            <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs font-semibold text-slate-700">
+                {paymentMethodCount > 0
+                  ? "Os seus métodos estão disponíveis na área segura de pagamentos."
+                  : "Ainda não existem métodos de pagamento guardados."}
+              </p>
+              <Link href="/account/payment" className="mt-3 inline-flex rounded-lg bg-blue-50 px-3 py-2 text-[10px] font-bold text-[#1555d8]">Abrir pagamentos</Link>
+            </div>
+          </section>
+
+          <section className="card bg-blue-50 p-4">
+            <HeadsetIcon />
+            <h2 className="mt-2 text-sm font-black text-slate-950">Precisa de ajuda?</h2>
+            <p className="mt-1 text-[10px] text-slate-600">A nossa equipa está disponível para apoiar as suas compras.</p>
+            <Link href="/account/support" className="btn-primary mt-3 inline-flex w-full justify-center px-3 py-2 text-[10px]">Abrir suporte</Link>
+          </section>
+
+          <section className="card p-4">
+            <div className="flex items-center gap-2"><Bell size={15} className="text-[#1555d8]" /><h2 className="text-xs font-black text-slate-950">Preferências de comunicação</h2></div>
+            <p className="mt-1 text-[10px] leading-4 text-slate-500">Escolha como pretende receber novidades, ofertas e atualizações da sua conta.</p>
+            <Link href="/account/settings" className="mt-3 inline-flex w-full items-center justify-center rounded-lg bg-blue-50 px-3 py-2.5 text-[10px] font-bold text-[#1555d8]">Gerir preferências</Link>
+          </section>
+        </aside>
+      </div>
+    </div>
+  );
 }
 
 function CorporateDashboard({ profile, orders, quotes }: { profile: Profile; orders: AccountOrder[]; quotes: AccountQuote[] }) {
   const companyName = profile.accountName || profile.name || "RUBRICA DILIGENTE (SU), LDA";
   const businessOrders = orders.slice(0, 5).map((order) => [order.number, order.date, order.status, order.total]);
   const businessQuotes = quotes.slice(0, 3).map((quote) => [quote.quoteNumber, quote.createdAt ? new Date(quote.createdAt).toLocaleDateString("pt-PT") : "Sem data", quote.status, quote.total ? String(quote.total) : "Kz 0,00"]);
-  const bars = [42, 54, 48, 70, 80, 88];
   const totalPurchase = orders.reduce((sum, order) => {
     const numeric = Number(String(order.total).replace(/[^\d,.-]/g, "").replace(".", "").replace(",", "."));
     return sum + (Number.isFinite(numeric) ? numeric : 0);
@@ -151,11 +345,26 @@ function CorporateDashboard({ profile, orders, quotes }: { profile: Profile; ord
     return sum + (Number.isFinite(numeric) ? numeric : 0);
   }, 0);
 
-  return <div className="account-shell animate-fade-in-up space-y-5 pb-8"><div className="group flex flex-col justify-between gap-3 rounded-[28px] border border-sky-100 bg-[linear-gradient(135deg,#eff6ff_0%,#ffffff_40%,#f8fafc_100%)] p-4 shadow-[0_18px_40px_rgba(15,23,42,0.06)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_25px_60px_rgba(15,23,42,0.08)] sm:flex-row sm:items-end sm:p-5"><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-[#1d6ac4]">Conta empresarial (B2B)</p><h1 className="mt-2 text-2xl font-black text-gray-900">Olá, {companyName}! <span aria-hidden="true">👋</span></h1><p className="mt-1 text-sm text-gray-600">Aqui tem um resumo da sua atividade, encomendas, cotações e oportunidades exclusivas para empresas.</p></div><div className="flex gap-2"><button className="btn-secondary px-3 py-2 text-[10px] transition-transform duration-200 hover:-translate-y-0.5"><span>01 Set 2026 - 30 Set 2026</span></button><button className="btn-primary px-3 py-2 text-[10px] transition-transform duration-200 hover:-translate-y-0.5"><FileText size={13} /> Exportar relatório</button></div></div><div className="grid grid-cols-2 gap-3 xl:grid-cols-4"><BusinessMetric icon={BarChart3} title="Total de compras" value={`Kz ${totalPurchase.toLocaleString("pt-AO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} growth="32%" tone="blue" /><BusinessMetric icon={ShoppingCart} title="Encomendas" value={String(orders.length)} growth="60%" tone="green" /><BusinessMetric icon={FileText} title="Cotações solicitadas" value={String(quotes.length)} growth="50%" tone="violet" /><BusinessMetric icon={Heart} title="A poupar" value={`Kz ${quoteTotal.toLocaleString("pt-AO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} growth="18%" tone="amber" /></div><div className="grid gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(260px,0.7fr)]"><section className="card p-4"><div className="mb-3 flex items-center justify-between"><h2 className="text-sm font-black text-gray-900">Evolução de compras</h2><select className="rounded border border-gray-200 px-2 py-1 text-[9px] font-semibold"><option>Últimos 6 meses</option></select></div><div className="flex h-36 items-end gap-3 border-b border-l border-gray-200 px-4 pb-5 pt-3">{bars.map((height, index) => <div key={index} className="flex flex-1 items-end justify-center gap-1"><i style={{ height: `${height}%` }} className="w-3 rounded-t bg-[#0d2f70]" /><i style={{ height: `${height * 0.65}%` }} className="w-3 rounded-t bg-[#2878ec]" /></div>)}</div><div className="mt-2 flex justify-around text-[9px] text-gray-500">{["Abr", "Mai", "Jun", "Jul", "Ago", "Set"].map((month) => <span key={month}>{month}</span>)}</div><div className="mt-3 flex justify-center gap-4 text-[9px] font-semibold text-gray-500"><span><i className="mr-1 inline-block h-2 w-2 rounded bg-[#0d2f70]" />Compras (Kz)</span><span><i className="mr-1 inline-block h-2 w-2 rounded bg-[#2878ec]" />Encomendas</span></div></section><section className="relative overflow-hidden rounded-lg bg-[#06233d] p-5 text-white"><img src="/ChatGPT Image 23 de set. de 2026, 10_10_30.png" alt="Soluções empresariais" className="absolute inset-0 h-full w-full object-cover opacity-35" /><div className="relative"><h2 className="text-lg font-black leading-tight">Soluções empresariais<br />para o seu crescimento</h2><p className="mt-3 max-w-[190px] text-[10px] text-blue-100">Equipamento, implementação e suporte dedicado para o seu negócio.</p><Link href="/account/quotes" className="mt-5 inline-flex items-center gap-2 rounded bg-white px-3 py-2 text-[10px] font-bold text-[#06233d]">Solicitar cotação <ArrowRight size={12} /></Link></div></section></div><div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]"><BusinessTable title="Últimas encomendas" action="Ver todas" rows={businessOrders} order /><BusinessTable title="Cotações em aberto" action="Ver todas" rows={businessQuotes} /></div><section className="card p-4"><div className="mb-4 flex items-center justify-between"><h2 className="text-sm font-black text-gray-900">Categorias mais adquiridas</h2><Link href="/products" className="text-[10px] font-bold text-[#1555d8]">Ver produtos <ArrowRight size={11} className="inline" /></Link></div><div className="grid grid-cols-3 gap-3 sm:grid-cols-6">{[["Computadores", "35%", "▰"], ["Smartphones", "25%", "▯"], ["Acessórios", "18%", "◉"], ["Componentes", "12%", "▦"], ["Impressão", "8%", "▤"], ["Redes", "2%", "⌁"]].map(([label, percent, icon]) => <Link href="/products" key={label} className="text-center"><span className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-lg text-[#06233d]">{icon}</span><p className="mt-2 text-[9px] font-bold text-gray-700">{label}</p><p className="text-[9px] text-gray-500">{percent}</p></Link>)}</div></section><section className="flex items-center justify-between rounded-lg bg-blue-50 p-4"><div><h2 className="text-sm font-black text-gray-900">Precisa de algo específico?</h2><p className="text-[10px] text-gray-600">A nossa equipa comercial está pronta para ajudar com soluções personalizadas.</p></div><Link href="/account/support" className="btn-primary px-4 py-2 text-[10px]">Falar com vendas <ArrowRight size={12} /></Link></section></div>;
+  return <div className="account-shell animate-fade-in-up space-y-5 pb-8"><div className="group flex flex-col justify-between gap-3 rounded-[28px] border border-sky-100 bg-[linear-gradient(135deg,#eff6ff_0%,#ffffff_40%,#f8fafc_100%)] p-4 shadow-[0_18px_40px_rgba(15,23,42,0.06)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_25px_60px_rgba(15,23,42,0.08)] sm:flex-row sm:items-end sm:p-5"><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-[#1d6ac4]">Conta empresarial (B2B)</p><h1 className="mt-2 text-2xl font-black text-gray-900">Olá, {companyName}! <span aria-hidden="true">👋</span></h1><p className="mt-1 text-sm text-gray-600">Aqui tem um resumo da sua atividade, encomendas, cotações e oportunidades exclusivas para empresas.</p></div><div className="flex gap-2"><span className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-bold text-slate-500">Dados atuais da conta</span><Link href="/b2b/empresa" className="btn-primary px-3 py-2 text-[10px] transition-transform duration-200 hover:-translate-y-0.5"><Building2 size={13} /> Gerir empresa</Link></div></div><div className="grid grid-cols-2 gap-3 xl:grid-cols-4"><BusinessMetric icon={BarChart3} title="Total de compras" value={`Kz ${totalPurchase.toLocaleString("pt-AO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} tone="blue" /><BusinessMetric icon={ShoppingCart} title="Encomendas" value={String(orders.length)} tone="green" /><BusinessMetric icon={FileText} title="Cotações solicitadas" value={String(quotes.length)} tone="violet" /><BusinessMetric icon={Heart} title="Valor das cotações" value={`Kz ${quoteTotal.toLocaleString("pt-AO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} tone="amber" /></div><div className="grid gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(260px,0.7fr)]">
+<section className="card p-4">
+  <div className="mb-4 flex items-center justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#1d6ac4]">Dados operacionais</p><h2 className="mt-1 text-sm font-black text-gray-900">Compras recentes</h2><p className="mt-1 text-[10px] text-gray-500">Valores calculados a partir das encomendas carregadas na sua conta.</p></div><span className="rounded-full bg-slate-100 px-2.5 py-1 text-[9px] font-bold text-slate-500">{orders.length} encomenda(s)</span></div>
+  <div className="space-y-3">
+    {orders.slice(0, 5).map((order) => {
+      const numeric = Number(String(order.total).replace(/[^\d,.-]/g, "").replace(".", "").replace(",", "."));
+      const width = Math.min(100, Math.max(4, totalPurchase > 0 ? (Math.max(0, numeric) / totalPurchase) * 100 : 4));
+      return <div key={order.id}>
+        <div className="mb-1 flex items-center justify-between gap-3 text-[10px]"><span className="min-w-0 truncate font-bold text-slate-700">{order.number}</span><strong className="shrink-0 text-slate-900">{order.total}</strong></div>
+        <div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-[#1d6ac4]" style={{ width: `${width}%` }} /></div>
+      </div>;
+    })}
+    {!orders.length && <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-6 text-center text-xs text-gray-500">Ainda não existem encomendas para apresentar.</div>}
+  </div>
+</section>
+<section className="relative overflow-hidden rounded-2xl bg-[#06233d] p-5 text-white"><img src="/ChatGPT Image 23 de set. de 2026, 10_10_30.png" alt="Soluções empresariais" className="absolute inset-0 h-full w-full object-cover opacity-35" /><div className="relative"><h2 className="text-lg font-black leading-tight">Soluções empresariais<br />para o seu crescimento</h2><p className="mt-3 max-w-[190px] text-[10px] text-blue-100">Equipamento, implementação e suporte dedicado para o seu negócio.</p><Link href="/b2b/cotacoes" className="mt-5 inline-flex items-center gap-2 rounded bg-white px-3 py-2 text-[10px] font-bold text-[#06233d]">Solicitar cotação <ArrowRight size={12} /></Link></div></section></div><div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]"><BusinessTable title="Últimas encomendas" action="Ver todas" rows={businessOrders} order /><BusinessTable title="Cotações em aberto" action="Ver todas" rows={businessQuotes} /></div><section className="card p-4"><div className="mb-4 flex items-center justify-between gap-3"><div><h2 className="text-sm font-black text-gray-900">Ações rápidas</h2><p className="mt-1 text-[10px] text-gray-500">Aceda diretamente às operações mais usadas.</p></div></div><div className="grid gap-2 sm:grid-cols-3"><Link href="/b2b/catalogo" className="rounded-xl border border-gray-200 bg-gray-50 p-4 transition hover:border-blue-200 hover:bg-blue-50"><Package size={18} className="text-[#1d6ac4]" /><p className="mt-3 text-xs font-black text-gray-900">Abrir catálogo</p><p className="mt-1 text-[10px] text-gray-500">Consultar produtos e condições comerciais.</p></Link><Link href="/b2b/cotacoes" className="rounded-xl border border-gray-200 bg-gray-50 p-4 transition hover:border-blue-200 hover:bg-blue-50"><FileText size={18} className="text-[#1d6ac4]" /><p className="mt-3 text-xs font-black text-gray-900">Solicitar cotação</p><p className="mt-1 text-[10px] text-gray-500">Enviar uma necessidade para a equipa comercial.</p></Link><Link href="/account/support" className="rounded-xl border border-gray-200 bg-gray-50 p-4 transition hover:border-blue-200 hover:bg-blue-50"><Phone size={18} className="text-[#1d6ac4]" /><p className="mt-3 text-xs font-black text-gray-900">Falar com vendas</p><p className="mt-1 text-[10px] text-gray-500">Obter apoio para uma compra empresarial.</p></Link></div></section><section className="flex items-center justify-between rounded-lg bg-blue-50 p-4"><div><h2 className="text-sm font-black text-gray-900">Precisa de algo específico?</h2><p className="text-[10px] text-gray-600">A nossa equipa comercial está pronta para ajudar com soluções personalizadas.</p></div><Link href="/account/support" className="btn-primary px-4 py-2 text-[10px]">Falar com vendas <ArrowRight size={12} /></Link></section></div>;
 }
 
-function BusinessMetric({ icon: Icon, title, value, growth, tone }: { icon: typeof Package; title: string; value: string; growth: string; tone: "blue" | "green" | "violet" | "amber" }) {
+function BusinessMetric({ icon: Icon, title, value, tone }: { icon: typeof Package; title: string; value: string; tone: "blue" | "green" | "violet" | "amber" }) {
   const tones = { blue: "bg-blue-50 text-blue-600", green: "bg-emerald-50 text-emerald-600", violet: "bg-violet-50 text-violet-600", amber: "bg-amber-50 text-amber-600" };
-  return <div className="animate-fade-in-up rounded-2xl border border-gray-200 bg-white p-4 shadow-[0_12px_28px_rgba(15,23,42,0.04)] transition hover:-translate-y-0.5 hover:shadow-[0_18px_32px_rgba(15,23,42,0.08)]" style={{ animationDelay: "120ms" }}><span className={`flex h-9 w-9 items-center justify-center rounded-xl ${tones[tone]}`}><Icon size={17} /></span><p className="mt-3 text-[10px] font-semibold text-gray-500">{title}</p><strong className="mt-1 block text-lg font-black text-gray-900">{value}</strong><p className="mt-1 text-[9px] font-bold text-emerald-600">↑ {growth} <span className="font-normal text-gray-400">vs. mês anterior</span></p></div>;
+  return <div className="animate-fade-in-up rounded-2xl border border-gray-200 bg-white p-4 shadow-[0_12px_28px_rgba(15,23,42,0.04)] transition hover:-translate-y-0.5 hover:shadow-[0_18px_32px_rgba(15,23,42,0.08)]" style={{ animationDelay: "120ms" }}><span className={`flex h-9 w-9 items-center justify-center rounded-xl ${tones[tone]}`}><Icon size={17} /></span><p className="mt-3 text-[10px] font-semibold text-gray-500">{title}</p><strong className="mt-1 block text-lg font-black text-gray-900">{value}</strong><p className="mt-1 text-[9px] font-medium text-gray-400">Dados reais da conta</p></div>;
 }
 function BusinessTable({ title, action, rows, order = false }: { title: string; action: string; rows: string[][]; order?: boolean }) { return <section className="card animate-fade-in-up overflow-hidden" style={{ animationDelay: "180ms" }}><div className="flex items-center justify-between border-b border-gray-100 px-4 py-3"><h2 className="text-sm font-black text-gray-900">{title}</h2><Link href={order ? "/account/orders" : "/account/quotes"} className="text-[10px] font-bold text-[#1555d8]">{action} <ArrowRight size={11} className="inline" /></Link></div><div className="divide-y divide-gray-100">{rows.map((row) => <div key={row[0]} className="grid grid-cols-[1.4fr_0.8fr_1fr_1.1fr_20px] items-center gap-2 px-4 py-2.5 text-[9px]"><strong className="text-gray-800">{row[0]}</strong><span className="text-gray-500">{row[1]}</span><span className={`w-fit rounded-full px-2 py-1 font-bold ${row[2] === "Entregue" ? "bg-emerald-50 text-emerald-700" : row[2] === "Cancelada" ? "bg-red-50 text-red-600" : "bg-blue-50 text-blue-700"}`}>{row[2]}</span><strong className="text-right text-gray-800">{row[3]}</strong><ArrowRight size={12} className="text-[#1555d8]" /></div>)}</div></section>; }

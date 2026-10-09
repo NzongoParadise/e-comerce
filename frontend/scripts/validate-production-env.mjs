@@ -4,6 +4,7 @@ const required = [
   'DATABASE_URL',
   'JWT_SECRET',
   'FRONTEND_URL',
+  'CRON_SECRET',
 ];
 
 // The app's own login issues HS256 tokens with JWT_SECRET. These settings are
@@ -36,6 +37,12 @@ if (configuredExternalAuth.length > 0 && configuredExternalAuth.length < externa
 const envFile = '.env.production';
 if (!existsSync(envFile)) {
   console.warn('No local .env.production file found. This is expected on managed hosts that inject env vars at runtime.');
+}
+
+const sellerTaxId = process.env.SELLER_TAX_ID?.trim() || process.env.COMPANY_NIF?.trim();
+const sellerAddress = process.env.SELLER_ADDRESS?.trim();
+if (!sellerTaxId || !sellerAddress) {
+  console.warn('Commercial invoice issuance will remain blocked until SELLER_TAX_ID (or COMPANY_NIF) and SELLER_ADDRESS are configured with the seller’s real fiscal data.');
 }
 
 console.log('Production environment validation passed.');

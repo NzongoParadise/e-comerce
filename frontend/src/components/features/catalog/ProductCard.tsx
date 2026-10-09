@@ -20,23 +20,30 @@ export type CatalogProduct = {
   stock: number;
   category: { id: number; name: string; slug: string };
   brand: { id: number; name: string; slug: string };
-  prices?: { market: string; amount: string | number }[];
+  prices?: { market: string; currency?: string; amount: string | number }[];
+  rating?: number;
+  reviews?: number;
 };
 
 export function ProductCard({ product }: { product: CatalogProduct }) {
   const router = useRouter();
-  const { market, eurToKz } = useMarket();
+  const { market } = useMarket();
   const { addToCart } = useCart();
   const { isFavorite, toggleFavorite } = useFavorites();
   const promotions = usePublicPromotions();
 
-  const eur = Number(product.prices?.find((price) => price.market === "PT")?.amount ?? product.basePrice);
-  const aoa = Number(product.prices?.find((price) => price.market === "AO")?.amount ?? eurToKz(eur));
+  const eurPrice = product.prices?.find((price) => price.market === "PT" && (!price.currency || price.currency === "EUR"));
+  const aoaPrice = product.prices?.find((price) => price.market === "AO" && (!price.currency || price.currency === "AOA"));
+  const eur = Number(eurPrice?.amount ?? product.basePrice);
+  const aoa = aoaPrice ? Number(aoaPrice.amount) : null;
+  const hasActivePrice = market === "PT"
+    ? Number.isFinite(eur) && eur > 0
+    : aoa !== null && Number.isFinite(aoa) && aoa > 0;
   const pricedProduct = { id: product.id, categoryId: product.category.id, brandId: product.brand.id };
-  const euroOffer = getPromotionalUnitPrice(pricedProduct, "PT", eur, promotions);
-  const kwanzaOffer = getPromotionalUnitPrice(pricedProduct, "AO", aoa, promotions);
+  const euroOffer = eur > 0 ? getPromotionalUnitPrice(pricedProduct, "PT", eur, promotions) : null;
+  const kwanzaOffer = aoa !== null && aoa > 0 ? getPromotionalUnitPrice(pricedProduct, "AO", aoa, promotions) : null;
   const marketPrice = market === "AO" ? aoa : eur;
-  const marketOffer = market === "AO" ? kwanzaOffer : euroOffer;
+  const marketOffer = hasActivePrice ? (market === "AO" ? kwanzaOffer : euroOffer) : null;
   const favorite = isFavorite(product.id);
 
   const formatMarketPrice = (amount: number) =>
@@ -44,18 +51,19 @@ export function ProductCard({ product }: { product: CatalogProduct }) {
       ? `Kz ${amount.toLocaleString("pt-AO", { maximumFractionDigits: 2 })}`
       : `€ ${amount.toLocaleString("pt-PT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-  const discountPercent = marketOffer && marketPrice > 0
+  const discountPercent = marketOffer && marketPrice !== null && marketPrice > 0
     ? Math.max(0, Math.round((1 - marketOffer.promotionalPrice / marketPrice) * 100))
     : 0;
 
   function addProduct() {
+    if (!hasActivePrice || marketPrice === null || (market === "AO" && aoa === null)) return;
     addToCart({
       id: `${product.id}-default`,
       productId: product.id,
       name: product.name,
       slug: product.slug,
       priceEUR: eur,
-      priceKZ: aoa,
+      priceKZ: aoa ?? 0,
       quantity: 1,
       imageUrl: product.imageUrl || undefined,
     });
@@ -86,6 +94,10 @@ export function ProductCard({ product }: { product: CatalogProduct }) {
               category: product.category.name,
               specs: product.description || "",
               priceEUR: eur,
+              priceKZ: aoa ?? undefined,
+              stock: product.stock,
+              rating: product.rating,
+              reviews: product.reviews,
               imageUrl: product.imageUrl || undefined,
             })
           }
@@ -133,12 +145,24 @@ export function ProductCard({ product }: { product: CatalogProduct }) {
           <span aria-hidden="true">·</span>
           <span>{product.stock > 0 ? "Disponível" : "Indisponível"}</span>
         </div>
+        <div className="mt-1 flex min-h-4 items-center gap-1.5 text-[9px]">
+          {Number(product.reviews) > 0 ? (
+            <>
+              <span className="tracking-wide text-amber-500" aria-label={"Classificação " + Number(product.rating || 0).toFixed(1) + " em 5"}>
+                {Array.from({ length: 5 }, (_, index) => index < Math.round(Number(product.rating || 0)) ? "★" : "☆").join("")}
+              </span>
+              <span className="text-slate-400">{Number(product.reviews)} avaliação(ões)</span>
+            </>
+          ) : <span className="text-slate-400">Sem avaliações publicadas</span>}
+        </div>
 
         <div className="mt-auto pt-3">
-          {marketOffer ? (
+          {!hasActivePrice ? (
+            <p className="text-sm font-black text-amber-800">Preço por confirmar</p>
+          ) : marketOffer ? (
             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
               <del className="storefront-old-price text-[10px]">
-                {formatMarketPrice(marketPrice)}
+                {formatMarketPrice(marketPrice as number)}
               </del>
               <strong className="storefront-price text-lg font-black">
                 {formatMarketPrice(marketOffer.promotionalPrice)}
@@ -146,7 +170,7 @@ export function ProductCard({ product }: { product: CatalogProduct }) {
             </div>
           ) : (
             <strong className="storefront-price text-lg font-black text-slate-950">
-              {formatMarketPrice(marketPrice)}
+              {formatMarketPrice(marketPrice as number)}
             </strong>
           )}
 
@@ -155,12 +179,12 @@ export function ProductCard({ product }: { product: CatalogProduct }) {
               {marketOffer.promotion.name}
             </p>
           ) : (
-            <p className="mt-1 text-[9px] text-slate-400">Preço final conforme o mercado selecionado</p>
+            <p className="mt-1 text-[9px] text-slate-400">{hasActivePrice ? "Preço válido para o mercado selecionado" : "A compra será ativada quando o preço for configurado"}</p>
           )}
 
           <div className="mt-2 flex items-center justify-between gap-2 text-[9px]">
-            <span className={product.stock > 0 ? "font-bold text-emerald-600" : "font-bold text-red-600"}>
-              {product.stock > 0 ? `${product.stock} em stock` : "Sem stock"}
+            <span className={product.stock > 0 && hasActivePrice ? "font-bold text-emerald-600" : "font-bold text-red-600"}>
+              {product.stock <= 0 ? "Sem stock" : !hasActivePrice ? "Preço por confirmar" : `${product.stock} em stock`}
             </span>
             <span className="inline-flex items-center gap-1 text-slate-400">
               <Truck size={11} />
@@ -170,9 +194,10 @@ export function ProductCard({ product }: { product: CatalogProduct }) {
 
           <button
             type="button"
-            disabled={product.stock <= 0}
+            disabled={product.stock <= 0 || !hasActivePrice}
             onClick={addProduct}
-            className="storefront-cta mt-3 flex w-full items-center justify-center gap-2 px-3"
+            title={!hasActivePrice ? "Preço não configurado para o mercado selecionado" : undefined}
+            className="storefront-cta mt-3 flex w-full items-center justify-center gap-2 px-3 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <ShoppingCart size={14} strokeWidth={2.4} />
             Comprar agora

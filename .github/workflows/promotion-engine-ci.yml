@@ -5,6 +5,7 @@ on:
     branches: [master]
     paths:
       - "frontend/**"
+      - ".github/workflows/**"
   push:
     branches: [feat/promotion-engine-omnichannel]
 
@@ -27,3 +28,9 @@ jobs:
       - run: npx prisma validate --schema prisma/schema.prisma
       - run: npm run prisma:generate
       - run: npx tsc --noEmit
+      - name: Build application
+        run: npm run build:ci
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ecommerce_ci
+          JWT_SECRET: ci-build-secret
+          FRONTEND_URL: http://localhost:3000

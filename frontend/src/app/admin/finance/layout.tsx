@@ -2,13 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CreditCard, FileDown, LayoutDashboard, RefreshCcw, RotateCcw, ShieldCheck, Wallet } from "lucide-react";
+import { CreditCard, FileCheck2, FileDown, LayoutDashboard, RefreshCcw, RotateCcw, ShieldCheck, Wallet } from "lucide-react";
 
 const items = [
   { label: "Visão geral", href: "/admin/finance", Icon: LayoutDashboard },
   { label: "Pagamentos", href: "/admin/finance/payments", Icon: CreditCard },
   { label: "Revisão", href: "/admin/finance/review", Icon: ShieldCheck },
   { label: "Reembolsos", href: "/admin/finance/refunds", Icon: RotateCcw },
+  { label: "Faturas", href: "/admin/finance/invoices", Icon: FileCheck2 },
+  { label: "Notas de crédito", href: "/admin/finance/credit-notes", Icon: FileCheck2 },
   { label: "Conciliação", href: "/admin/finance/reconciliation", Icon: RefreshCcw },
   { label: "Relatórios", href: "/admin/finance/reports", Icon: FileDown },
 ];

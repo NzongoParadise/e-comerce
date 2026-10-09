@@ -284,9 +284,14 @@ export async function POST(request: Request) {
       const product = productMap.get(item.productId);
       if (!product || product.slug !== item.slug) throw new Error('PRODUCT_MISMATCH');
       if (item.quantity > product.stock) throw new Error(`STOCK:${product.name}`);
-      const eurPrice = product.prices.find((price) => price.market === 'PT')?.amount ?? product.basePrice;
-      const aoPrice = product.prices.find((price) => price.market === 'AO')?.amount ?? product.basePrice;
-      if (Math.abs(Number(eurPrice) - item.priceEUR) > 0.01 || Math.abs(Number(aoPrice) - item.priceKZ) > 0.01) throw new Error('PRICE_CHANGED');
+      const eurPrice = product.prices.find((price) => price.market === 'PT' && price.currency === 'EUR')?.amount ?? product.basePrice;
+      const configuredAoPrice = product.prices.find((price) => price.market === 'AO' && price.currency === 'AOA')?.amount;
+      if (parsed.data.country === 'AO' && (configuredAoPrice === undefined || Number(configuredAoPrice) <= 0)) throw new Error('PRICE_NOT_CONFIGURED');
+      if (parsed.data.country === 'PT' && Number(eurPrice) <= 0) throw new Error('PRICE_NOT_CONFIGURED');
+      const aoPrice = configuredAoPrice ?? 0;
+      const serverSelectedPrice = parsed.data.country === 'PT' ? Number(eurPrice) : Number(aoPrice);
+      const clientSelectedPrice = parsed.data.country === 'PT' ? item.priceEUR : item.priceKZ;
+      if (Math.abs(serverSelectedPrice - clientSelectedPrice) > 0.01) throw new Error('PRICE_CHANGED');
       return { item, product, eurPrice: Number(eurPrice), aoPrice: Number(aoPrice), categoryId: product.categoryId, brandId: product.brandId };
     });
     const estimatedCartWeightKg = estimateCartWeightKg(calculatedItems.map(({ item, product }) => ({
@@ -334,9 +339,11 @@ export async function POST(request: Request) {
     const totalEUR = Math.max(0, productTotalEUR - (parsed.data.country === 'PT' ? promoDiscount : 0) + (parsed.data.country === 'PT' ? finalShipping : 0));
     const totalKZ = Math.max(0, productTotalKZ - (parsed.data.country === 'AO' ? promoDiscount : 0) + (parsed.data.country === 'AO' ? finalShipping : 0));
     const isStripePayment = parsed.data.paymentMethod === 'card' || parsed.data.paymentMethod === 'mbway';
+    const requiresOnlinePayment = ['card', 'mbway', 'multicaixa_reference', 'multicaixa_express', 'multicaixa'].includes(parsed.data.paymentMethod);
     if (isStripePayment && !isStripeCurrencySupported(currency)) return errorResponse('Pagamentos por cartão e MB WAY não estão disponíveis para encomendas em AOA. Selecione MULTICAIXA.', 400);
     if (isStripePayment && !process.env.STRIPE_SECRET_KEY) return errorResponse('Pagamentos por cartão não estão configurados', 503);
     const stripeExpiresAt = isStripePayment ? new Date(Date.now() + 60 * 60 * 1000) : undefined;
+    const inventoryReservationExpiresAt = requiresOnlinePayment ? (stripeExpiresAt ?? new Date(Date.now() + 30 * 60 * 1000)) : null;
     const orderNumber = `TG${new Date().getFullYear()}${String(Date.now()).slice(-8)}`;
     const order = await prisma.$transaction(async (transaction) => {
       for (const entry of calculatedItems) {
@@ -350,7 +357,9 @@ export async function POST(request: Request) {
         data: {
           orderNumber,
           idempotencyKey,
-          status: ['card', 'mbway', 'multicaixa_reference', 'multicaixa_express', 'multicaixa'].includes(parsed.data.paymentMethod) ? 'AWAITING_PAYMENT' : 'PROCESSING',
+          status: requiresOnlinePayment ? 'AWAITING_PAYMENT' : 'PROCESSING',
+          inventoryReserved: requiresOnlinePayment,
+          inventoryReservationExpiresAt,
           userId: user.id,
           deliveryMode: parsed.data.deliveryMode,
           shippingMethod: parsed.data.shippingMethod,
@@ -471,6 +480,7 @@ export async function POST(request: Request) {
     if (error instanceof Error && error.message.startsWith('STOCK:')) return errorResponse(`Stock insuficiente: ${error.message.slice(6)}`, 409);
     if (error instanceof Error && error.message === 'PRODUCT_MISMATCH') return errorResponse('Os dados do produto não correspondem ao catálogo atual', 400);
     if (error instanceof Error && error.message === 'PRICE_CHANGED') return errorResponse('O preço de um produto foi atualizado. Reveja o carrinho.', 409);
+    if (error instanceof Error && error.message === 'PRICE_NOT_CONFIGURED') return errorResponse('Um produto ainda não tem um preço positivo configurado para o mercado selecionado. Reveja o carrinho ou contacte o suporte.', 422);
     if (error instanceof Error && ['PROMOTION_CHANGED', 'PROMOTION_LIMIT', 'PROMOTION_CUSTOMER_LIMIT'].includes(error.message)) return errorResponse('A promoção já não está disponível. Atualize o carrinho e tente novamente.', 409);
     if ((error as Prisma.PrismaClientKnownRequestError)?.code === 'P2034') return errorResponse('A operação concorreu com outra compra. Tente novamente.', 409);
     logger.error('Error creating order', { error: error instanceof Error ? error.message : error });
@@ -483,7 +493,7 @@ export async function GET(request: Request) {
   if (!subject) return errorResponse('Authentication required', 401);
   const parts = segments(request);
   if (!parts.length) {
-    const orders = await prisma.order.findMany({ where: { user: { externalId: subject } }, include: { items: true }, orderBy: { createdAt: 'desc' } });
+    const orders = await prisma.order.findMany({ where: { user: { externalId: subject } }, include: { items: true, payment: { select: { status: true } } }, orderBy: { createdAt: 'desc' } });
     return Response.json({ data: orders });
   }
 

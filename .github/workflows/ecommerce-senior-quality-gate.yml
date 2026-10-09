@@ -1,0 +1,128 @@
+name: Ecommerce Senior Quality Gate
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/**"
+  push:
+    branches:
+      - feat/senior-commerce-experience
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ecommerce-quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Prisma migrations, TypeScript, tests and production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ecommerce_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d ecommerce_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ecommerce_ci
+      JWT_SECRET: ci-build-secret-at-least-thirty-two-characters
+      FRONTEND_URL: http://localhost:3000
+      APP_URL: http://localhost:3000
+      ALLOW_INSECURE_AUTH: "false"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Validate Prisma schema
+        run: npx prisma validate --schema prisma/schema.prisma
+
+      - name: Audit dependency vulnerabilities (diagnostic)
+        run: |
+          npm audit --json > /tmp/npm-audit.json || true
+          node <<'NODE'
+          const fs = require("node:fs");
+          const report = JSON.parse(fs.readFileSync("/tmp/npm-audit.json", "utf8"));
+          console.log("NPM AUDIT SUMMARY", JSON.stringify(report.metadata?.vulnerabilities ?? {}, null, 2));
+          for (const [name, issue] of Object.entries(report.vulnerabilities ?? {})) {
+            console.log("NPM AUDIT DETAIL", JSON.stringify({
+              package: name,
+              severity: issue.severity,
+              direct: issue.isDirect,
+              range: issue.range,
+              fixAvailable: issue.fixAvailable,
+              advisories: (issue.via || []).map((entry) => typeof entry === "string" ? entry : ({
+                title: entry.title,
+                url: entry.url,
+                range: entry.range,
+              })),
+            }));
+          }
+          NODE
+
+      - name: Apply the complete migration history to PostgreSQL
+        run: npx prisma migrate deploy --schema prisma/schema.prisma
+
+      - name: Generate Prisma Client
+        run: npm run prisma:generate
+
+      - name: Type-check TypeScript
+        run: npx tsc --noEmit
+
+      - name: Run automated unit tests
+        run: npm test
+
+      - name: Build Next.js application
+        run: npm run build:ci
+
+      - name: Start built Next.js server for black-box E2E smoke
+        run: |
+          PORT=3000 npm run start -- --hostname 127.0.0.1 > /tmp/next-e2e.log 2>&1 &
+          echo $! > /tmp/next-e2e.pid
+          for attempt in $(seq 1 45); do
+            if curl --silent --fail "http://127.0.0.1:3000/api/products?page=1&pageSize=1&market=PT" > /dev/null; then
+              echo "Next.js is responding to HTTP requests."
+              exit 0
+            fi
+            sleep 2
+          done
+          cat /tmp/next-e2e.log
+          exit 1
+
+      - name: Run black-box HTTP E2E smoke tests
+        env:
+          E2E_BASE_URL: http://127.0.0.1:3000
+        run: npm run test:e2e:smoke
+
+      - name: Stop Next.js smoke server
+        if: always()
+        run: |
+          if [ -f /tmp/next-e2e.pid ]; then
+            kill "$(cat /tmp/next-e2e.pid)" || true
+          fi
