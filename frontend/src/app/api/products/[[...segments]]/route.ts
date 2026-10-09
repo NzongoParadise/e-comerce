@@ -182,6 +182,27 @@ export async function GET(request: Request) {
       ];
     }
 
+    const selectedAttributes = new Map<string, Set<string>>();
+    for (const raw of new URL(request.url).searchParams.getAll('attribute')) {
+      try {
+        const parsedAttribute = z.tuple([z.string().trim().min(1).max(80), z.string().trim().min(1).max(160)]).safeParse(JSON.parse(raw));
+        if (!parsedAttribute.success) continue;
+        const [name, value] = parsedAttribute.data;
+        const values = selectedAttributes.get(name) || new Set<string>();
+        values.add(value);
+        selectedAttributes.set(name, values);
+      } catch {
+        continue;
+      }
+    }
+    if (selectedAttributes.size) {
+      where.AND = [
+        ...Array.from(selectedAttributes.entries()).map(([name, values]) => ({
+          attributes: { some: { name, value: { in: Array.from(values) } } },
+        })),
+      ];
+    }
+
     const activeMarket = market || 'PT';
     const currency = activeMarket === 'PT' ? 'EUR' : 'AOA';
     if (minPrice !== undefined || maxPrice !== undefined) {
@@ -236,7 +257,6 @@ export async function GET(request: Request) {
           brand: true,
           prices: market ? { where: { market, currency } } : true,
           attributes: true,
-          _count: { select: { reviews: { where: { status: 'APPROVED' } } } },
         },
       }),
       prisma.product.count({ where: { stock: { gt: lowStockThreshold } } }),
