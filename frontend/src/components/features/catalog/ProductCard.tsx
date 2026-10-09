@@ -27,7 +27,7 @@ export type CatalogProduct = {
 
 export function ProductCard({ product }: { product: CatalogProduct }) {
   const router = useRouter();
-  const { market, eurToKz } = useMarket();
+  const { market } = useMarket();
   const { addToCart } = useCart();
   const { isFavorite, toggleFavorite } = useFavorites();
   const promotions = usePublicPromotions();
@@ -94,6 +94,10 @@ export function ProductCard({ product }: { product: CatalogProduct }) {
               category: product.category.name,
               specs: product.description || "",
               priceEUR: eur,
+              priceKZ: aoa ?? undefined,
+              stock: product.stock,
+              rating: product.rating,
+              reviews: product.reviews,
               imageUrl: product.imageUrl || undefined,
             })
           }
