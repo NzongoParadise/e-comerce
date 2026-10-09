@@ -355,28 +355,28 @@ export async function POST(request: Request) {
 }
 
 
-const manualRefundUpdateSchema = z.object({
-  refundId: z.number().int().positive(),
-  status: z.enum(["SUCCEEDED", "FAILED"]),
-  note: z.string().trim().max(500).optional(),
-}).superRefine((value, context) => {
-  if (value.status === "FAILED" && (!value.note || value.note.length < 5)) {
-    context.addIssue({ code: "custom", path: ["note"], message: "Indique o motivo da falha." });
-  }
-});
-
 export async function PATCH(request: Request) {
   const auth = await admin(request);
   if (auth.error) return auth.error;
 
-  const parsed = manualRefundUpdateSchema.safeParse(await readJson(request));
-  if (!parsed.success) return errorResponse("Dados de processamento de reembolso inválidos.", 400, parsed.error.flatten().fieldErrors);
+  const parsed = manualReconciliationSchema.safeParse(await readJson(request));
+  if (!parsed.success) return errorResponse("Dados de reconciliação inválidos.", 400, parsed.error.flatten().fieldErrors);
+
+  const actor = userSubject(auth.user) || "admin";
+  const succeeded = parsed.data.action === "CONFIRM_SUCCEEDED";
+  const providerReference = parsed.data.providerReference?.trim();
 
   const existing = await prisma.refund.findUnique({
     where: { id: parsed.data.refundId },
     include: {
       order: { select: { id: true, orderNumber: true, status: true, companyId: true } },
       payment: { select: { id: true, amountEUR: true, amountKZ: true, currency: true, provider: true, status: true } },
+      returnRequest: {
+        include: {
+          user: { select: { id: true } },
+          order: { select: { orderNumber: true } },
+        },
+      },
     },
   });
   if (!existing) return errorResponse("Reembolso não encontrado.", 404);
@@ -385,8 +385,7 @@ export async function PATCH(request: Request) {
     return errorResponse("Este reembolso já foi processado e não aceita novas transições.", 409);
   }
 
-  const actor = userSubject(auth.user) || "admin";
-  if (parsed.data.status === "SUCCEEDED") {
+  if (succeeded) {
     try {
       const invoice = await issueInvoiceForPaidOrder(existing.orderId, actor);
       if (!invoice) return errorResponse("A encomenda não está num estado válido para processar o reembolso. Reveja a reconciliação.", 409);
@@ -400,20 +399,20 @@ export async function PATCH(request: Request) {
     }
   }
 
-  let updated;
   try {
-    updated = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       const saved = await tx.refund.update({
         where: { id: existing.id },
         data: {
-          status: parsed.data.status,
+          status: succeeded ? "SUCCEEDED" : "FAILED",
+          providerRefundId: succeeded ? providerReference! : null,
           processedBy: actor,
-          processedAt: parsed.data.status === "SUCCEEDED" ? new Date() : null,
-          failureReason: parsed.data.status === "FAILED" ? parsed.data.note!.trim() : null,
+          processedAt: new Date(),
+          failureReason: succeeded ? null : parsed.data.note.trim(),
         },
       });
 
-      if (parsed.data.status === "SUCCEEDED") {
+      if (succeeded) {
         const totals = await tx.refund.aggregate({
           where: { paymentId: existing.paymentId, status: "SUCCEEDED" },
           _sum: { amountEUR: true, amountKZ: true },
@@ -429,49 +428,93 @@ export async function PATCH(request: Request) {
           data: { status: refundedTotal + 0.000001 >= originalTotal ? "REFUNDED" : "PARTIALLY_REFUNDED" },
         });
       }
-      return saved;
+
+      let completedReturn: { id: number; requestNumber: string; userId: number; orderNumber: string } | null = null;
+      if (succeeded && existing.returnRequestId) {
+        const returnRequest = await tx.returnRequest.findUnique({
+          where: { id: existing.returnRequestId },
+          include: {
+            user: { select: { id: true } },
+            order: { select: { orderNumber: true } },
+          },
+        });
+        if (returnRequest && returnRequest.type === "RETURN" && returnRequest.orderId === existing.orderId && returnRequest.status === "REFUND_PROCESSING") {
+          const completed = await tx.returnRequest.update({
+            where: { id: returnRequest.id },
+            data: { status: "COMPLETED" },
+          });
+          await tx.returnRequestEvent.create({
+            data: {
+              returnRequestId: completed.id,
+              previousStatus: "REFUND_PROCESSING",
+              nextStatus: "COMPLETED",
+              actorExternalId: actor,
+              note: "Reembolso externo confirmado. Referência: " + providerReference + ". " + parsed.data.note.trim(),
+            },
+          });
+          completedReturn = {
+            id: completed.id,
+            requestNumber: completed.requestNumber,
+            userId: returnRequest.user.id,
+            orderNumber: returnRequest.order.orderNumber,
+          };
+        }
+      }
+
+      return { refund: saved, completedReturn };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5000, timeout: 10000 });
-  } catch (error) {
-    if ((error as { code?: string })?.code === "P2034") {
-      return errorResponse("O estado do reembolso mudou em paralelo. Atualize a lista antes de tentar novamente.", 409);
+
+    let creditNotePending = false;
+    if (succeeded) {
+      try {
+        await issueCreditNoteForSucceededRefund(result.refund.id, actor);
+      } catch (error) {
+        creditNotePending = true;
+        logger.error("Manual refund succeeded but credit note issuance is pending", {
+          refundId: result.refund.id,
+          orderId: existing.orderId,
+          error: error instanceof Error ? error.message : error,
+        });
+      }
+      await notifyRefund({
+        userId: existing.userId,
+        orderId: existing.orderId,
+        orderNumber: existing.order.orderNumber,
+        refundId: result.refund.id,
+        status: "SUCCEEDED",
+      });
+    } else {
+      await createNotificationIfAllowed({
+        userId: existing.userId,
+        channel: "orderUpdates",
+        type: "REFUND_FAILED",
+        title: "Reembolso não concluído",
+        message: "O reembolso da encomenda " + existing.order.orderNumber + " foi marcado como falhado. Motivo: " + parsed.data.note.trim(),
+        link: existing.order.companyId ? "/b2b/financeiro" : "/account/invoices",
+        dedupeKey: "refund:" + result.refund.id + ":status:FAILED",
+      }).catch(() => undefined);
     }
-    logger.error("Unable to update manual refund status", {
+
+    if (result.completedReturn) {
+      await createNotificationIfAllowed({
+        userId: result.completedReturn.userId,
+        channel: "orderUpdates",
+        type: "RETURN_STATUS_CHANGED",
+        title: "Devolução concluída",
+        message: "A solicitação " + result.completedReturn.requestNumber + " da encomenda " + result.completedReturn.orderNumber + " foi concluída após confirmação do reembolso.",
+        link: "/account/returns",
+        dedupeKey: "return:" + result.completedReturn.id + ":status:COMPLETED",
+      }).catch(() => undefined);
+    }
+
+    return Response.json({ data: result.refund, creditNotePending, returnCompleted: Boolean(result.completedReturn) });
+  } catch (error) {
+    if ((error as { code?: string })?.code === "P2002") return errorResponse("A referência externa já está associada a outro reembolso.", 409);
+    if ((error as { code?: string })?.code === "P2034") return errorResponse("O estado do reembolso mudou em paralelo. Atualize a lista antes de tentar novamente.", 409);
+    logger.error("Manual refund reconciliation failed", {
       refundId: existing.id,
       error: error instanceof Error ? error.message : error,
     });
-    return errorResponse("Não foi possível atualizar o reembolso.", 503);
+    return errorResponse("Não foi possível reconciliar o reembolso.", 503);
   }
-
-  let creditNotePending = false;
-  if (updated.status === "SUCCEEDED") {
-    try {
-      await issueCreditNoteForSucceededRefund(updated.id, actor);
-    } catch (error) {
-      creditNotePending = true;
-      logger.error("Manual refund succeeded but credit note issuance is pending", {
-        refundId: updated.id,
-        orderId: existing.orderId,
-        error: error instanceof Error ? error.message : error,
-      });
-    }
-    await notifyRefund({
-      userId: existing.userId,
-      orderId: existing.orderId,
-      orderNumber: existing.order.orderNumber,
-      refundId: updated.id,
-      status: "SUCCEEDED",
-    });
-  } else {
-    await createNotificationIfAllowed({
-      userId: existing.userId,
-      channel: "orderUpdates",
-      type: "REFUND_FAILED",
-      title: "Reembolso não concluído",
-      message: "O reembolso da encomenda " + existing.order.orderNumber + " foi marcado como falhado. Motivo: " + parsed.data.note!.trim(),
-      link: existing.order.companyId ? "/b2b/financeiro" : "/account/invoices",
-      dedupeKey: "refund:" + updated.id + ":status:FAILED",
-    }).catch(() => undefined);
-  }
-
-  return Response.json({ data: updated, creditNotePending });
 }
