@@ -41,6 +41,8 @@ export default function B2BUsersPage() {
   const [inviteRole, setInviteRole] = useState<Invitation["role"]>("BUYER");
   const [inviting, setInviting] = useState(false);
   const [cancellingId, setCancellingId] = useState<number | null>(null);
+  const [removingId, setRemovingId] = useState<number | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const [currentRole, setCurrentRole] = useState<Member["role"] | "">("");
   const [draftRoles, setDraftRoles] = useState<Record<number, Member["role"]>>({});
   const [loading, setLoading] = useState(true);
@@ -59,6 +61,7 @@ export default function B2BUsersPage() {
       const data = (memberResponse.data || []) as Member[];
       setMembers(data);
       setInvitations((invitationResponse.data || []) as Invitation[]);
+      setCurrentUserId(Number(memberResponse.currentUserId) || null);
       setCurrentRole(memberResponse.currentRole || invitationResponse.currentRole || "");
       setDraftRoles(Object.fromEntries(data.map((member) => [member.user.id, member.role])));
     } catch (loadError) {
@@ -115,6 +118,32 @@ export default function B2BUsersPage() {
       setError(inviteError instanceof Error ? inviteError.message : "Não foi possível enviar o convite.");
     } finally {
       setInviting(false);
+    }
+  }
+
+  async function removeMember(member: Member) {
+    if (member.user.id === currentUserId) {
+      setError("Não pode remover o seu próprio acesso empresarial.");
+      return;
+    }
+    const name = member.user.name || member.user.email || "este membro";
+    if (!window.confirm("Revogar o acesso empresarial de " + name + "? O histórico de compras será preservado.")) return;
+
+    setRemovingId(member.user.id);
+    setError("");
+    setMessage("");
+    try {
+      await fetchWithAuth("/api/b2b/company/members", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ memberUserId: member.user.id }),
+      });
+      setMessage("Acesso revogado para " + name + ". O histórico e as encomendas foram preservados.");
+      await load();
+    } catch (removeError) {
+      setError(removeError instanceof Error ? removeError.message : "Não foi possível revogar o acesso.");
+    } finally {
+      setRemovingId(null);
     }
   }
 
@@ -248,9 +277,10 @@ export default function B2BUsersPage() {
                     </select>
                     <p className="mt-1 text-[9px] leading-4 text-slate-400">{roleDescriptions[draftRoles[member.user.id] || member.role]}</p>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-[9px] font-black text-emerald-700"><ShieldCheck size={12} /> Ativo</span>
-                    {editable && draftRoles[member.user.id] !== member.role && <button type="button" onClick={() => void saveRole(member)} disabled={savingId === member.user.id} className="btn-primary px-3 py-2 text-[9px]">{savingId === member.user.id ? "A guardar..." : "Guardar"}</button>}
+                    {editable && draftRoles[member.user.id] !== member.role && <button type="button" onClick={() => void saveRole(member)} disabled={savingId === member.user.id} className="btn-primary px-3 py-2 text-[9px]">{savingId === member.user.id ? "A guardar..." : "Guardar função"}</button>}
+                    {owner && member.user.id !== currentUserId && <button type="button" onClick={() => void removeMember(member)} disabled={removingId === member.user.id || savingId === member.user.id} className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 px-3 py-2 text-[9px] font-black text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50">{removingId === member.user.id ? <Loader2 size={12} className="animate-spin"/> : <XCircle size={12}/>} Revogar acesso</button>}
                   </div>
                 </div>
               </article>
