@@ -76,12 +76,17 @@ export async function POST(request: Request) {
       const currency = market === "PT" ? "EUR" : "AOA";
       const total = quote.items.reduce((sum, item) => sum + Number(item.subtotal), 0);
 
+      const requestedByProduct = new Map<number, { quantity: number; stock: number; name: string }>();
       for (const item of quote.items) {
-        const updated = await tx.product.updateMany({
-          where: { id: item.productId, stock: { gte: item.quantity } },
-          data: { stock: { decrement: item.quantity } },
+        const current = requestedByProduct.get(item.productId);
+        requestedByProduct.set(item.productId, {
+          quantity: (current?.quantity ?? 0) + item.quantity,
+          stock: item.product.stock,
+          name: item.product.name,
         });
-        if (updated.count !== 1) throw new Error(`STOCK:${item.product.name}`);
+      }
+      for (const requested of requestedByProduct.values()) {
+        if (requested.quantity > requested.stock) throw new Error(`STOCK:${requested.name}`);
       }
 
       const orderNumber = `B2B-${new Date().getFullYear()}-${String(po.id).padStart(6, "0")}-${Date.now().toString(36).toUpperCase()}`;
@@ -91,6 +96,8 @@ export async function POST(request: Request) {
           userId: quote.userId,
           companyId: membership.companyId,
           status: "PENDING",
+          inventoryReserved: false,
+          inventoryReservationExpiresAt: null,
           deliveryMode: "DELIVERY",
           shippingMethod: "STANDARD",
           paymentMethod: market === "PT" ? "STRIPE" : "TRANSFER",
