@@ -52,7 +52,7 @@ export function B2BProductCard({ product, marketOverride }: { product: B2BProduc
       name: product.name,
       slug: product.slug,
       priceEUR: euroPrice,
-      priceKZ: kwanzaPrice,
+      priceKZ: kwanzaPrice ?? 0,
       quantity: 1,
       imageUrl: product.imageUrl || undefined,
       stock: product.stock,
