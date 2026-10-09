@@ -487,7 +487,7 @@ async function handleStripeWebhook(request: Request) {
   const sessionId = session.id;
   const payment = await prisma.payment.findFirst({
     where: { orderId, provider: 'stripe' },
-    include: { order: { select: { userId: true, orderNumber: true, items: { select: { productId: true, quantity: true } } } } },
+    include: { order: { select: { userId: true, orderNumber: true, companyId: true, items: { select: { productId: true, quantity: true } } } } },
   });
   if (!payment) return errorResponse('Payment not found', 404);
   if (!isStripeCurrencySupported(payment.currency)) return errorResponse('Stripe payment currency is not supported', 422);
@@ -508,7 +508,7 @@ async function handleStripeWebhook(request: Request) {
           payload: event as never,
           processedAt: new Date(),
         } });
-        await cancelAwaitingPaymentAndReleaseStock(
+        const released = await cancelAwaitingPaymentAndReleaseStock(
           transaction,
           payment.orderId,
           payment.order.items,
@@ -517,6 +517,12 @@ async function handleStripeWebhook(request: Request) {
             ? 'Encomenda cancelada após expiração da sessão de pagamento Stripe.'
             : 'Encomenda cancelada após falha do pagamento Stripe.',
         );
+        if (released && payment.order.companyId) {
+          await transaction.purchaseOrder.updateMany({
+            where: { companyId: payment.order.companyId, orderId: payment.orderId, status: 'CONVERTED' },
+            data: { status: 'APPROVED', orderId: null, approvedBy: null, approvedAt: null },
+          });
+        }
         await transaction.payment.updateMany({
           where: { id: payment.id, status: { not: 'PAID' } },
           data: { reference: sessionId },
@@ -532,7 +538,7 @@ async function handleStripeWebhook(request: Request) {
       type: 'ORDER_PAYMENT_FAILED',
       title: 'Pagamento não concluído',
       message: `O pagamento da encomenda ${payment.order.orderNumber} não foi concluído. A encomenda foi cancelada.`,
-      link: `/account/orders/${orderId}`,
+      link: payment.order.companyId ? "/b2b/encomendas" : `/account/orders/${orderId}`,
       dedupeKey: `order:${orderId}:payment:failed`,
     }).catch((error) => console.error('Unable to create Stripe payment failure notification:', error));
     await createNotificationIfAllowed({
