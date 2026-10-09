@@ -22,6 +22,19 @@ export async function issueInvoiceForPaidOrder(orderId: number, issuedBy = "SYST
   const existing = await prisma.invoice.findUnique({ where: { orderId: order.id } });
   if (existing) return { invoice: existing, created: false };
 
+  const sellerName = process.env.SELLER_NAME?.trim() || "RUBRICA DILIGENTE (SU), LDA";
+  const sellerTaxId = process.env.SELLER_TAX_ID?.trim() || process.env.COMPANY_NIF?.trim() || null;
+  const sellerAddress = process.env.SELLER_ADDRESS?.trim() || null;
+  const isProduction = process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production";
+  if (isProduction && (!sellerTaxId || !sellerAddress)) {
+    logger.error("Commercial invoice is blocked because the seller fiscal profile is incomplete", {
+      orderId: order.id,
+      missingSellerTaxId: !sellerTaxId,
+      missingSellerAddress: !sellerAddress,
+    });
+    throw new Error("SELLER_FISCAL_PROFILE_INCOMPLETE");
+  }
+
   const invoiceNumber = "FT-" + new Date().getFullYear() + "-" + String(order.id).padStart(8, "0");
   const verificationCode = crypto.randomBytes(12).toString("base64url");
 
@@ -39,9 +52,9 @@ export async function issueInvoiceForPaidOrder(orderId: number, issuedBy = "SYST
         totalKZ: order.totalKZ,
         discountTotalEUR: order.discountTotalEUR,
         discountTotalKZ: order.discountTotalKZ,
-        sellerName: process.env.SELLER_NAME?.trim() || "RUBRICA DILIGENTE (SU), LDA",
-        sellerTaxId: process.env.SELLER_TAX_ID?.trim() || process.env.COMPANY_NIF?.trim() || null,
-        sellerAddress: process.env.SELLER_ADDRESS?.trim() || null,
+        sellerName,
+        sellerTaxId,
+        sellerAddress,
         buyerName: order.billingName || order.company?.legalName || order.user.name || null,
         buyerEmail: order.billingEmail || order.company?.email || order.user.email || null,
         buyerTaxId: order.billingTaxId || order.company?.nif || null,
