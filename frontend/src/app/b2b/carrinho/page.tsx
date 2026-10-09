@@ -103,11 +103,11 @@ export default function B2BCartPage() {
                 return (
                   <article key={item.id} className="p-4 sm:p-5">
                     <div className="flex gap-4">
-                      <Link href={"/products/" + item.slug} className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl bg-slate-50 p-2 sm:h-24 sm:w-24">
+                      <Link href="/b2b/catalogo" className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl bg-slate-50 p-2 sm:h-24 sm:w-24">
                         {item.imageUrl ? <img src={item.imageUrl} alt={item.name} className="h-full w-full object-contain"/> : <ShoppingBag size={25} className="text-slate-300"/>}
                       </Link>
                       <div className="min-w-0 flex-1">
-                        <Link href={"/products/" + item.slug} className="line-clamp-2 text-sm font-black text-slate-900 hover:text-blue-700">{item.name}</Link>
+                        <Link href="/b2b/catalogo" className="line-clamp-2 text-sm font-black text-slate-900 hover:text-blue-700">{item.name}</Link>
                         <p className="mt-1 text-[10px] text-slate-400">Stock atual: {item.stock}</p>
                         {item.b2bPriceRules.length > 0 && <p className="mt-1 text-[10px] font-bold text-blue-700">{item.b2bPriceRules.length} nível(is) de preço por volume</p>}
                         <div className="mt-3 flex flex-wrap items-center gap-2">
