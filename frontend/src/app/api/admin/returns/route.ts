@@ -2,6 +2,7 @@ import { prisma } from "@/lib/server/prisma";
 import { authenticate, errorResponse, isAdmin, readJson, userSubject } from "@/lib/server/api";
 import { createNotificationIfAllowed } from "@/lib/server/notifications";
 import { z } from "zod";
+import { requiresConfirmedRefundForCompletion, validateReturnTransition } from "@/lib/server/returns/lifecycle";
 
 export const runtime = "nodejs";
 
@@ -27,17 +28,7 @@ const updateSchema = z.object({
   }
 });
 
-const transitions: Record<string, string[]> = {
-  RECEIVED: ["UNDER_REVIEW"],
-  UNDER_REVIEW: ["APPROVED", "REJECTED"],
-  APPROVED: ["WAITING_FOR_RETURN", "REFUND_PROCESSING", "EXCHANGE_PROCESSING"],
-  WAITING_FOR_RETURN: ["ITEM_RECEIVED"],
-  ITEM_RECEIVED: ["REFUND_PROCESSING", "EXCHANGE_PROCESSING"],
-  REFUND_PROCESSING: ["COMPLETED"],
-  EXCHANGE_PROCESSING: ["COMPLETED"],
-  REJECTED: [],
-  COMPLETED: [],
-};
+
 
 export async function GET(request: Request) {
   const auth = await authenticate(request);
@@ -100,19 +91,14 @@ export async function PATCH(request: Request) {
           idempotent: true,
         };
       }
-      const allowedTransition = (transitions[current.status] || []).includes(parsed.data.status) ||
-        (current.type === "COMPLAINT" && current.status === "APPROVED" && parsed.data.status === "COMPLETED");
-      if (!allowedTransition) throw new Error("INVALID_TRANSITION");
-      if (current.type === "COMPLAINT" && ["WAITING_FOR_RETURN", "ITEM_RECEIVED", "REFUND_PROCESSING", "EXCHANGE_PROCESSING"].includes(parsed.data.status)) {
-        throw new Error("RETURN_TYPE_TRANSITION_MISMATCH");
-      }
-      if (current.type === "RETURN" && parsed.data.status === "EXCHANGE_PROCESSING") throw new Error("RETURN_TYPE_TRANSITION_MISMATCH");
-      if (current.type === "EXCHANGE" && parsed.data.status === "REFUND_PROCESSING") throw new Error("RETURN_TYPE_TRANSITION_MISMATCH");
-      if (current.type === "RETURN" && parsed.data.status === "REFUND_PROCESSING" && current.status !== "ITEM_RECEIVED") {
-        throw new Error("RETURN_ITEM_NOT_RECEIVED");
-      }
+      const transitionError = validateReturnTransition(
+        current.type as "RETURN" | "EXCHANGE" | "COMPLAINT",
+        current.status,
+        parsed.data.status,
+      );
+      if (transitionError) throw new Error(transitionError);
 
-      if (parsed.data.status === "COMPLETED" && current.status === "REFUND_PROCESSING" && current.type === "RETURN") {
+      if (requiresConfirmedRefundForCompletion(current.type as "RETURN" | "EXCHANGE" | "COMPLAINT", current.status, parsed.data.status)) {
         const refund = await tx.refund.findFirst({
           where: { returnRequestId: current.id, status: "SUCCEEDED" },
           select: { id: true },
