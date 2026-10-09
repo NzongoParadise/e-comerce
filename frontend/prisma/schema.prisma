@@ -77,6 +77,18 @@ model Product {
   b2bPriceRules B2BPriceRule[]
 }
 
+model UserFavorite {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  productId Int
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  @@unique([userId, productId])
+  @@index([userId, createdAt])
+  @@index([productId])
+}
+
 model ProductAttribute {
   id        Int      @id @default(autoincrement())
   productId Int
