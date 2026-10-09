@@ -255,6 +255,7 @@ export default function B2BOrdersPage() {
         {loadingOrders ? (
           <div role="status" className="p-10 text-center text-xs font-semibold text-slate-500">A atualizar o histórico de encomendas...</div>
         ) : visibleOrders.length ? (
+          <>
           <div className="divide-y divide-slate-100">
             {visibleOrders.map((order) => (
               <article key={order.id} className="p-4 transition hover:bg-slate-50/70 sm:p-5">
@@ -286,6 +287,7 @@ export default function B2BOrdersPage() {
               </div>
             </nav>
           )}
+          </>
         ) : (
           <div className="p-12 text-center">
             <Package size={32} className="mx-auto text-slate-300"/>
