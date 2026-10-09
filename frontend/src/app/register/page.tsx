@@ -35,7 +35,9 @@ export default function RegisterPage() {
       if (!response.ok) throw new Error(data.error || "Não foi possível criar a conta.");
 
       localStorage.setItem("jwt_token", data.token);
-      router.push("/account");
+      const next = new URLSearchParams(window.location.search).get("next");
+      const destination = next && /^\/convite-empresa(?:\?.*)?$/.test(next) ? next : "/account";
+      router.push(destination);
     } catch (error) {
       setMessage(
         error instanceof TypeError
