@@ -10,7 +10,7 @@ import { getPromotionalUnitPrice } from "@/lib/promotions/pricing";
 import { usePublicPromotions } from "@/lib/promotions/usePublicPromotions";
 import Link from "next/link";
 import { RecommendationRail } from "@/components/features/catalog/RecommendationRail";
-import { ShoppingCart, Heart, Package, Truck, ShieldCheck, Zap, CreditCard, Maximize2, MapPin, CheckCircle2 } from "lucide-react";
+import { ShoppingCart, Heart, Package, Truck, ShieldCheck, Zap, CreditCard, Maximize2, MapPin, CheckCircle2, Star, Send, Loader2 } from "lucide-react";
 
 type ProductDetails = {
   id: number;
@@ -23,6 +23,22 @@ type ProductDetails = {
   category: { id: number; name: string; slug: string };
   brand: { id: number; name: string; slug: string };
   prices: { market: string; currency: string; amount: string }[];
+};
+type ProductReview = {
+  id: number;
+  rating: number;
+  title: string | null;
+  comment: string;
+  verifiedPurchase: boolean;
+  createdAt: string;
+  user: { name: string | null };
+};
+type ReviewOrder = {
+  id: number;
+  orderNumber: string;
+  status: string;
+  payment?: { status: string } | null;
+  items: Array<{ productId: number }>;
 };
 
 export default function ProductDetailsPage() {
@@ -38,10 +54,88 @@ export default function ProductDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
   const [cartMessage, setCartMessage] = useState("");
+  const [reviews, setReviews] = useState<ProductReview[]>([]);
+  const [reviewSummary, setReviewSummary] = useState<{ averageRating: number; count: number; distribution: Record<string, number> }>({ averageRating: 0, count: 0, distribution: {} });
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [reviewSort, setReviewSort] = useState<"recent" | "highest" | "lowest">("recent");
+  const [reviewRatingFilter, setReviewRatingFilter] = useState("ALL");
+  const [reviewOrders, setReviewOrders] = useState<ReviewOrder[]>([]);
+  const [reviewOrderId, setReviewOrderId] = useState("");
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewTitle, setReviewTitle] = useState("");
+  const [reviewComment, setReviewComment] = useState("");
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewNotice, setReviewNotice] = useState("");
+  const [reviewError, setReviewError] = useState("");
 
   // The API currently does not expose product variants; do not invent selectable options in the storefront.
   const [purchaseMode, setPurchaseMode] = useState<"retail" | "wholesale">("retail");
   const [activeTab, setActiveTab] = useState("description");
+
+
+  async function loadReviews() {
+    setReviewsLoading(true);
+    try {
+      const query = new URLSearchParams({ page: "1", pageSize: "10", sort: reviewSort });
+      if (reviewRatingFilter !== "ALL") query.set("rating", reviewRatingFilter);
+      const response = await fetchWithAuth("/api/products/" + encodeURIComponent(slug) + "/reviews?" + query.toString(), { cache: "no-store" });
+      setReviews(response.data || []);
+      setReviewSummary(response.summary || { averageRating: 0, count: 0, distribution: {} });
+    } catch {
+      setReviews([]);
+      setReviewSummary({ averageRating: 0, count: 0, distribution: {} });
+    } finally {
+      setReviewsLoading(false);
+    }
+  }
+
+  async function loadReviewOrders() {
+    if (!localStorage.getItem("jwt_token")) return;
+    try {
+      const response = await fetchWithAuth("/api/orders", { cache: "no-store" });
+      const eligible = ((response.data || []) as ReviewOrder[]).filter((order) =>
+        order.payment?.status === "PAID" && order.items.some((item) => item.productId === product?.id)
+      );
+      setReviewOrders(eligible);
+      if (eligible[0]) setReviewOrderId(String(eligible[0].id));
+    } catch {
+      setReviewOrders([]);
+    }
+  }
+
+  async function submitReview() {
+    setReviewError("");
+    setReviewNotice("");
+    if (!localStorage.getItem("jwt_token")) {
+      router.push("/login?next=" + encodeURIComponent("/products/" + slug));
+      return;
+    }
+    if (!reviewOrderId || reviewComment.trim().length < 10) {
+      setReviewError("Selecione uma encomenda paga e escreva um comentário com pelo menos 10 caracteres.");
+      return;
+    }
+    setReviewSubmitting(true);
+    try {
+      const result = await fetchWithAuth("/api/products/" + encodeURIComponent(slug) + "/reviews", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId: Number(reviewOrderId),
+          rating: reviewRating,
+          title: reviewTitle.trim() || undefined,
+          comment: reviewComment.trim(),
+        }),
+      });
+      setReviewNotice(result.message || "Avaliação enviada para moderação.");
+      setReviewTitle("");
+      setReviewComment("");
+      setReviewRating(5);
+    } catch (error) {
+      setReviewError(error instanceof Error ? error.message : "Não foi possível enviar a avaliação.");
+    } finally {
+      setReviewSubmitting(false);
+    }
+  }
 
   useEffect(() => {
     fetchWithAuth(`/api/products/${slug}`)
@@ -50,8 +144,11 @@ export default function ProductDetailsPage() {
       .finally(() => setLoading(false));
   }, [slug]);
 
+  useEffect(() => { void loadReviews(); }, [slug, reviewSort, reviewRatingFilter]);
+
   useEffect(() => {
     if (!product) return;
+    void loadReviewOrders();
     try {
       const key = "rd_recently_viewed";
       const stored = JSON.parse(localStorage.getItem(key) || "[]") as Array<{
@@ -201,7 +298,7 @@ export default function ProductDetailsPage() {
               <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${product.stock > 0 ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>
                 {product.stock > 0 ? "Em stock" : "Indisponível"}
               </span>
-              <span className="text-xs text-slate-400">Avaliações serão apresentadas quando disponíveis no catálogo.</span>
+              {reviewSummary.count > 0 ? <span className="inline-flex items-center gap-1 text-xs text-slate-500"><Star size={13} fill="currentColor" className="text-amber-500"/> {reviewSummary.averageRating.toFixed(1)}/5 · {reviewSummary.count} avaliação(ões) verificadas</span> : <span className="text-xs text-slate-400">Ainda sem avaliações publicadas.</span>}
             </div>
 
             <div className="mb-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
@@ -303,7 +400,7 @@ export default function ProductDetailsPage() {
               {[
                 ["description", "Descrição"],
                 ["specs", "Especificações"],
-                ["reviews", "Avaliações", "124"],
+                ["reviews", "Avaliações", String(reviewSummary.count)],
                 ["delivery", "Entrega e Garantia"],
                 ["support", "Suporte"],
               ].map(([id, label, count]) => (
@@ -333,7 +430,52 @@ export default function ProductDetailsPage() {
           <div className="min-h-[190px] p-5 sm:p-6" role="tabpanel">
             {activeTab === "description" && <div><h2 className="mb-3 text-lg font-bold text-gray-900">Desempenho que leva mais longe.</h2><p className="max-w-3xl text-sm leading-6 text-gray-600">{product.description} Com desempenho excepcional, design elegante e componentes cuidadosamente selecionados para profissionais e criadores.</p><ul className="mt-4 grid gap-2 text-xs text-gray-600 sm:grid-cols-2"><li>● Desempenho rápido e consistente</li><li>● Ecrã de alta resolução</li><li>● Até 22 horas de autonomia</li><li>● Design elegante e resistente</li></ul></div>}
             {activeTab === "specs" && <div className="grid gap-3 text-sm text-gray-600 sm:grid-cols-2"><InfoLine label="Marca" value={product.brand.name} /><InfoLine label="Categoria" value={product.category.name} /><InfoLine label="Stock" value={`${product.stock} unidades`} /><InfoLine label="Mercado" value={market === "AO" ? "Angola · Kz" : "Portugal · €"} /></div>}
-            {activeTab === "reviews" && <div><h2 className="font-bold text-gray-900">Avaliações dos clientes</h2><p className="mt-2 text-sm text-gray-600">Este produto tem classificação média de 4,8 em 5, com 124 avaliações verificadas.</p></div>}
+            {activeTab === "reviews" && <div className="space-y-6">
+              <div className="grid gap-5 md:grid-cols-[200px_minmax(0,1fr)]">
+                <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 text-center">
+                  <p className="text-4xl font-black text-slate-950">{reviewSummary.averageRating.toFixed(1)}</p>
+                  <p className="mt-1 text-lg tracking-wide text-amber-500">{Array.from({ length: 5 }, (_, index) => index < Math.round(reviewSummary.averageRating) ? "★" : "☆").join("")}</p>
+                  <p className="mt-1 text-[10px] text-slate-500">{reviewSummary.count} avaliação(ões) publicadas</p>
+                </div>
+                <div className="space-y-2">
+                  {[5,4,3,2,1].map((rating) => {
+                    const count = Number(reviewSummary.distribution[String(rating)] || 0);
+                    const percent = reviewSummary.count ? count / reviewSummary.count * 100 : 0;
+                    return <button key={rating} type="button" onClick={() => setReviewRatingFilter(reviewRatingFilter === String(rating) ? "ALL" : String(rating))} className="flex w-full items-center gap-2 text-left text-[10px]">
+                      <span className="w-12 shrink-0 font-bold text-slate-600">{rating} estrela(s)</span>
+                      <span className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100"><span className="block h-full rounded-full bg-amber-400" style={{ width: percent + "%" }}/></span>
+                      <span className="w-8 text-right text-slate-400">{count}</span>
+                    </button>;
+                  })}
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-y border-slate-100 py-3">
+                <div><h3 className="text-sm font-black text-slate-900">Opiniões dos clientes</h3><p className="mt-1 text-[10px] text-slate-500">Apenas avaliações aprovadas são apresentadas publicamente.</p></div>
+                <div className="flex flex-wrap gap-2">
+                  <select value={reviewRatingFilter} onChange={(event) => setReviewRatingFilter(event.target.value)} className="settings-input w-auto"><option value="ALL">Todas as estrelas</option>{[5,4,3,2,1].map((rating) => <option key={rating} value={rating}>{rating} estrela(s)</option>)}</select>
+                  <select value={reviewSort} onChange={(event) => setReviewSort(event.target.value as typeof reviewSort)} className="settings-input w-auto"><option value="recent">Mais recentes</option><option value="highest">Maior classificação</option><option value="lowest">Menor classificação</option></select>
+                </div>
+              </div>
+              {reviewsLoading ? <div className="space-y-3">{[1,2,3].map((id) => <div key={id} className="h-20 animate-pulse rounded-xl bg-slate-50"/>)}</div> : reviews.length ? <div className="divide-y divide-slate-100">{reviews.map((review) => <article key={review.id} className="py-4">
+                <div className="flex flex-wrap items-center gap-2"><strong className="text-xs font-black text-slate-900">{review.user.name || "Cliente verificado"}</strong>{review.verifiedPurchase && <span className="rounded-full bg-emerald-50 px-2 py-1 text-[9px] font-black text-emerald-700">Compra verificada</span>}<time className="text-[9px] text-slate-400">{new Date(review.createdAt).toLocaleDateString("pt-PT")}</time></div>
+                <p className="mt-1 text-sm tracking-wide text-amber-500">{Array.from({ length: 5 }, (_, index) => index < review.rating ? "★" : "☆").join("")}</p>
+                {review.title && <h4 className="mt-2 text-xs font-black text-slate-800">{review.title}</h4>}
+                <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-slate-600">{review.comment}</p>
+              </article>)}</div> : <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center"><Star size={25} className="mx-auto text-slate-300"/><p className="mt-2 text-xs font-bold text-slate-800">Ainda não há avaliações publicadas</p><p className="mt-1 text-[10px] text-slate-500">Depois da compra, pode partilhar a sua experiência com outros clientes.</p></div>}
+              <div className="rounded-xl border border-slate-200 p-4">
+                <h3 className="text-sm font-black text-slate-950">Avaliar este produto</h3>
+                <p className="mt-1 text-[10px] leading-5 text-slate-500">Só são aceites avaliações associadas a uma encomenda sua com pagamento confirmado. A publicação depende de moderação.</p>
+                {localStorage.getItem("jwt_token") && reviewOrders.length > 0 ? <div className="mt-4 space-y-3">
+                  <label className="block text-[10px] font-bold text-slate-600">Encomenda paga<select value={reviewOrderId} onChange={(event) => setReviewOrderId(event.target.value)} className="settings-input mt-1.5">{reviewOrders.map((order) => <option key={order.id} value={order.id}>{order.orderNumber}</option>)}</select></label>
+                  <div><p className="mb-1.5 text-[10px] font-bold text-slate-600">Classificação</p><div className="flex gap-1">{[1,2,3,4,5].map((rating) => <button key={rating} type="button" onClick={() => setReviewRating(rating)} aria-label={rating + " estrelas"} className={"text-2xl " + (rating <= reviewRating ? "text-amber-500" : "text-slate-300")}>★</button>)}</div></div>
+                  <label className="block text-[10px] font-bold text-slate-600">Título (opcional)<input value={reviewTitle} onChange={(event) => setReviewTitle(event.target.value)} maxLength={120} className="settings-input mt-1.5" placeholder="Resuma a sua experiência"/></label>
+                  <label className="block text-[10px] font-bold text-slate-600">Comentário<textarea value={reviewComment} onChange={(event) => setReviewComment(event.target.value)} maxLength={2000} rows={4} className="settings-input mt-1.5" placeholder="Conte como foi a utilização do produto."/></label>
+                  {reviewNotice && <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-[10px] font-semibold text-emerald-800">{reviewNotice}</p>}
+                  {reviewError && <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-[10px] font-semibold text-rose-800">{reviewError}</p>}
+                  <button type="button" onClick={() => void submitReview()} disabled={reviewSubmitting} className="btn-primary disabled:opacity-50">{reviewSubmitting ? <Loader2 size={14} className="animate-spin"/> : <Send size={14}/>} Enviar avaliação</button>
+                </div> : <div className="mt-3 rounded-lg bg-slate-50 p-3 text-[10px] leading-5 text-slate-600">{localStorage.getItem("jwt_token") ? "Não encontramos uma encomenda paga deste produto na sua conta." : <span>Inicie sessão e tenha comprado este produto para poder avaliá-lo. <Link href={"/login?next=" + encodeURIComponent("/products/" + slug)} className="font-black text-blue-700 hover:underline">Iniciar sessão</Link></span>}</div>}
+              </div>
+            </div>}
             {activeTab === "delivery" && <div><h2 className="font-bold text-gray-900">Entrega e garantia</h2><p className="mt-2 text-sm leading-6 text-gray-600">Entrega em Angola e Portugal em 1-3 dias úteis. Todos os produtos têm garantia e apoio especializado.</p></div>}
             {activeTab === "support" && <div><h2 className="font-bold text-gray-900">Precisa de ajuda?</h2><p className="mt-2 text-sm text-gray-600">A nossa equipa está disponível para esclarecer dúvidas sobre este produto.</p><Link href="/account/support" className="mt-4 inline-flex text-sm font-bold text-[#1d6ac4] hover:underline">Contactar suporte →</Link></div>}
           </div>
