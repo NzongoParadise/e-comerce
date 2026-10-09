@@ -16,9 +16,10 @@ type ProductDetails = {
   id: number;
   name: string;
   slug: string;
-  description: string;
+  description: string | null;
   basePrice: string;
-  imageUrl: string;
+  imageUrl: string | null;
+  attributes?: { id: number; name: string; value: string }[];
   stock: number;
   category: { id: number; name: string; slug: string };
   brand: { id: number; name: string; slug: string };
@@ -189,13 +190,16 @@ export default function ProductDetailsPage() {
   }
 
   // Calculate prices based on backend data if available, else defaults
-  const ptPrice = product.prices.find(p => p.market === "PT")?.amount || product.basePrice;
-  const aoPrice = product.prices.find(p => p.market === "AO")?.amount || (Number(product.basePrice) * 965).toString();
+  const ptPrice = product.prices.find((p) => p.market === "PT" && p.currency === "EUR")?.amount || product.basePrice;
+  const aoPrice = product.prices.find((p) => p.market === "AO" && p.currency === "AOA")?.amount || "";
+  const hasActivePrice = market === "AO" ? Boolean(aoPrice) : Boolean(ptPrice);
   const promotionProduct = { id: product.id, categoryId: product.category.id, brandId: product.brand.id };
-  const euroOffer = getPromotionalUnitPrice(promotionProduct, "PT", Number(ptPrice), promotions);
-  const kwanzaOffer = getPromotionalUnitPrice(promotionProduct, "AO", Number(aoPrice), promotions);
+  const euroOffer = ptPrice ? getPromotionalUnitPrice(promotionProduct, "PT", Number(ptPrice), promotions) : null;
+  const kwanzaOffer = aoPrice ? getPromotionalUnitPrice(promotionProduct, "AO", Number(aoPrice), promotions) : null;
 
   const handleAddToCart = () => {
+    if (!hasActivePrice) { setCartMessage(market === "AO" ? "O preço em kwanzas ainda não está configurado para este produto." : "O preço em euros ainda não está configurado para este produto."); return; }
+    if (product.stock <= 0) { setCartMessage("Este produto está sem stock disponível."); return; }
     addToCart({
       id: `${product.id}-default`,
       productId: product.id,
@@ -227,7 +231,7 @@ export default function ProductDetailsPage() {
     router.push("/cart");
   };
 
-  const activeMarketPrice = market === "AO" ? Number(aoPrice) : Number(ptPrice);
+  const activeMarketPrice = hasActivePrice ? Number(market === "AO" ? aoPrice : ptPrice) : null;
   const activeMarketOffer = market === "AO" ? kwanzaOffer : euroOffer;
   const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://e-comerce-sepia.vercel.app").replace(/\/$/, "");
   const structuredData = {
@@ -244,7 +248,7 @@ export default function ProductDetailsPage() {
       "@type": "Offer",
       url: siteUrl + "/products/" + product.slug,
       priceCurrency: market === "AO" ? "AOA" : "EUR",
-      price: String(activeMarketOffer?.promotionalPrice ?? activeMarketPrice),
+      ...(activeMarketPrice !== null ? { price: String(activeMarketOffer?.promotionalPrice ?? activeMarketPrice) } : {}),
       availability: product.stock > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
       itemCondition: "https://schema.org/NewCondition",
     },
@@ -279,7 +283,7 @@ export default function ProductDetailsPage() {
 
         {/* Center: Main Image */}
           <div className="relative order-1 flex min-h-[380px] items-center justify-center overflow-hidden rounded-xl border border-gray-200 bg-white p-8 shadow-sm transition-transform duration-300 hover:-translate-y-0.5 md:order-2 md:col-span-5">
-            <span className="absolute left-5 top-5 rounded-md bg-[#1d6ac4] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white">Novo</span>
+            
            {product.imageUrl ? <img src={product.imageUrl} alt={product.name} className="max-h-[330px] w-full object-contain transition-transform duration-500 hover:scale-[1.02]" /> : <Package size={160} className="text-gray-200" />}
             <button type="button" className="absolute bottom-4 right-4 rounded-lg border border-gray-200 bg-white p-2 text-gray-500 shadow-sm transition hover:border-[#1d6ac4] hover:text-[#1d6ac4]" aria-label="Ver imagem em ecrã inteiro"><Maximize2 size={16} /></button>
         </div>
@@ -349,14 +353,14 @@ export default function ProductDetailsPage() {
                    <span className="px-4 py-2 text-sm font-bold border-x border-gray-300">{quantity}</span>
                    <button onClick={() => setQuantity(quantity + 1)} className="px-3 py-2 text-gray-500 hover:bg-gray-50 rounded-r-lg">+</button>
                  </div>
-                 <button onClick={handleAddToCart} className="btn-primary flex-1 py-3 text-base gap-2">
+                 <button onClick={handleAddToCart} disabled={!hasActivePrice || product.stock <= 0} className="btn-primary flex-1 py-3 text-base gap-2 disabled:cursor-not-allowed disabled:opacity-50">
                    <ShoppingCart size={18} strokeWidth={2.5} aria-hidden="true" />
                    Adicionar ao carrinho
                  </button>
                </div>
                {cartMessage && <div role="status" aria-live="polite" className="mb-3 flex items-start gap-2 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2.5 text-xs font-semibold text-emerald-800"><CheckCircle2 size={15} className="mt-0.5 shrink-0" />{cartMessage}</div>}
 
-               <button onClick={handleBuyNow} className="mb-3 w-full btn-secondary py-3 text-sm border-gray-300 text-gray-700 hover:bg-gray-50 gap-2">
+               <button onClick={handleBuyNow} disabled={!hasActivePrice || product.stock <= 0} className="mb-3 w-full btn-secondary py-3 text-sm border-gray-300 text-gray-700 hover:bg-gray-50 gap-2 disabled:cursor-not-allowed disabled:opacity-50">
                  <Zap size={16} strokeWidth={2} aria-hidden="true" />
                  Comprar agora
                </button>
@@ -367,14 +371,14 @@ export default function ProductDetailsPage() {
                    <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-green-50 text-green-600"><MapPin size={14} /></span>
                    <div>
                      <div className="text-xs font-bold text-gray-900">Entrega em Angola</div>
-                     <div className="text-[10px] text-gray-500">Grátis a partir de Kz 200.000</div>
+                     <div className="text-[10px] text-gray-500">Custo e prazo apresentados no checkout.</div>
                    </div>
                  </div>
                  <div className="flex items-start gap-3">
                    <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-50 text-[#1d6ac4]"><MapPin size={14} /></span>
                    <div>
                      <div className="text-xs font-bold text-gray-900">Entrega em Portugal</div>
-                     <div className="text-[10px] text-gray-500">Grátis a partir de € 100</div>
+                     <div className="text-[10px] text-gray-500">Custo e prazo apresentados no checkout.</div>
                    </div>
                  </div>
                </div>
@@ -431,8 +435,8 @@ export default function ProductDetailsPage() {
             </div>
           </nav>
           <div className="min-h-[190px] p-5 sm:p-6" role="tabpanel">
-            {activeTab === "description" && <div><h2 className="mb-3 text-lg font-bold text-gray-900">Desempenho que leva mais longe.</h2><p className="max-w-3xl text-sm leading-6 text-gray-600">{product.description} Com desempenho excepcional, design elegante e componentes cuidadosamente selecionados para profissionais e criadores.</p><ul className="mt-4 grid gap-2 text-xs text-gray-600 sm:grid-cols-2"><li>● Desempenho rápido e consistente</li><li>● Ecrã de alta resolução</li><li>● Até 22 horas de autonomia</li><li>● Design elegante e resistente</li></ul></div>}
-            {activeTab === "specs" && <div className="grid gap-3 text-sm text-gray-600 sm:grid-cols-2"><InfoLine label="Marca" value={product.brand.name} /><InfoLine label="Categoria" value={product.category.name} /><InfoLine label="Stock" value={`${product.stock} unidades`} /><InfoLine label="Mercado" value={market === "AO" ? "Angola · Kz" : "Portugal · €"} /></div>}
+            {activeTab === "description" && <div><h2 className="mb-3 text-lg font-bold text-gray-900">Descrição do produto</h2><p className="max-w-3xl whitespace-pre-wrap text-sm leading-6 text-gray-600">{product.description || "O catálogo ainda não disponibilizou uma descrição detalhada para este produto."}</p></div>}
+            {activeTab === "specs" && <div className="grid gap-3 text-sm text-gray-600 sm:grid-cols-2"><InfoLine label="Marca" value={product.brand.name} /><InfoLine label="Categoria" value={product.category.name} /><InfoLine label="Stock" value={`${product.stock} unidades`} /><InfoLine label="Mercado" value={market === "AO" ? "Angola · Kz" : "Portugal · €"} />{(product.attributes || []).map((attribute) => <InfoLine key={attribute.id} label={attribute.name} value={attribute.value} />)}</div>}
             {activeTab === "reviews" && <div className="space-y-6">
               <div className="grid gap-5 md:grid-cols-[200px_minmax(0,1fr)]">
                 <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 text-center">
@@ -479,7 +483,7 @@ export default function ProductDetailsPage() {
                 </div> : <div className="mt-3 rounded-lg bg-slate-50 p-3 text-[10px] leading-5 text-slate-600">{hasSession ? "Não encontramos uma encomenda paga deste produto na sua conta." : <span>Inicie sessão e tenha comprado este produto para poder avaliá-lo. <Link href={"/login?next=" + encodeURIComponent("/products/" + slug)} className="font-black text-blue-700 hover:underline">Iniciar sessão</Link></span>}</div>}
               </div>
             </div>}
-            {activeTab === "delivery" && <div><h2 className="font-bold text-gray-900">Entrega e garantia</h2><p className="mt-2 text-sm leading-6 text-gray-600">Entrega em Angola e Portugal em 1-3 dias úteis. Todos os produtos têm garantia e apoio especializado.</p></div>}
+            {activeTab === "delivery" && <div><h2 className="font-bold text-gray-900">Entrega e garantia</h2><p className="mt-2 text-sm leading-6 text-gray-600">O custo e o prazo são calculados com base no destino e no método selecionado no checkout. Consulte as condições de garantia aplicáveis ao produto antes de concluir a compra.</p></div>}
             {activeTab === "support" && <div><h2 className="font-bold text-gray-900">Precisa de ajuda?</h2><p className="mt-2 text-sm text-gray-600">A nossa equipa está disponível para esclarecer dúvidas sobre este produto.</p><Link href="/account/support" className="mt-4 inline-flex text-sm font-bold text-[#1d6ac4] hover:underline">Contactar suporte →</Link></div>}
           </div>
         </section>
