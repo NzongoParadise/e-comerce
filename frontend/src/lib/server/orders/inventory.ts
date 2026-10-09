@@ -20,13 +20,15 @@ export async function cancelAwaitingPaymentAndReleaseStock(
     },
   });
 
-  if (!order || order.status !== 'AWAITING_PAYMENT') return false;
+  if (!order) return false;
+  const releasableStatus = order.status === 'AWAITING_PAYMENT' || (order.status === 'PENDING' && order.inventoryReserved);
+  if (!releasableStatus) return false;
   if (order.payment?.status === 'PAID') throw new Error('Cannot cancel an order with a paid payment');
 
   const cancelled = await transaction.order.updateMany({
     where: {
       id: orderId,
-      status: 'AWAITING_PAYMENT',
+      status: order.status,
       inventoryReserved: order.inventoryReserved,
     },
     data: {
