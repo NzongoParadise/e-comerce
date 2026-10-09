@@ -79,8 +79,8 @@ export async function POST(request: Request) {
   });
   if (!order) return errorResponse("Encomenda não encontrada.", 404);
   if (order.payment?.status !== "PAID") return errorResponse("Só é possível emitir fatura depois de o pagamento estar confirmado.", 409);
-  if (["CANCELLED", "REFUNDED"].includes(order.status)) {
-    return errorResponse("Não é possível emitir uma nova fatura para uma encomenda cancelada ou totalmente reembolsada.", 409);
+  if (order.status === "CANCELLED") {
+    return errorResponse("Não é possível emitir uma fatura para uma encomenda cancelada.", 409);
   }
 
   try {
