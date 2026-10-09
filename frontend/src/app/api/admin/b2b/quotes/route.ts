@@ -88,24 +88,27 @@ export async function PATCH(request: Request) {
       }
 
       const existing = quote.purchaseOrders[0] ?? null;
-      const po = existing ?? await tx.purchaseOrder.create({
-        data: {
-          companyId: quote.companyId,
-          quoteId: quote.id,
-          poNumber: `PO-${new Date().getFullYear()}-${String(quote.id).padStart(6, "0")}`,
-          status: "APPROVED",
-          approvedBy: auth.user!.id,
-          approvedAt: new Date(),
-          notes: note || null,
-        },
-      });
-
-      if (existing) {
-        await tx.purchaseOrder.update({
-          where: { id: existing.id },
-          data: { status: "APPROVED", approvedBy: auth.user!.id, approvedAt: new Date(), notes: note || existing.notes },
-        });
-      }
+      const po = existing
+        ? await tx.purchaseOrder.update({
+            where: { id: existing.id },
+            data: {
+              status: "APPROVED",
+              approvedBy: auth.user!.id,
+              approvedAt: new Date(),
+              notes: note || existing.notes,
+            },
+          })
+        : await tx.purchaseOrder.create({
+            data: {
+              companyId: quote.companyId,
+              quoteId: quote.id,
+              poNumber: `PO-${new Date().getFullYear()}-${String(quote.id).padStart(6, "0")}`,
+              status: "APPROVED",
+              approvedBy: auth.user!.id,
+              approvedAt: new Date(),
+              notes: note || null,
+            },
+          });
 
       const updated = await tx.quote.update({
         where: { id: quote.id },
