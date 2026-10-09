@@ -40,7 +40,6 @@ export function B2BProductCard({ product }: { product: B2BProductCardProduct }) 
     .filter((rule) => rule.currency === currency)
     .sort((a, b) => a.minQuantity - b.minQuantity);
   const bestRule = rules.length ? rules[rules.length - 1] : null;
-  const retailPrice = market === "PT" ? euroPrice : kwanzaPrice;
 
   function add() {
     if (product.stock <= 0) return;
@@ -109,7 +108,7 @@ export function B2BProductCard({ product }: { product: B2BProductCardProduct }) 
             </>
           ) : (
             <>
-              <p className="mt-1 text-lg font-black tracking-tight text-slate-950">{formatPrice(retailPrice)}</p>
+              <p className="mt-1 text-lg font-black tracking-tight text-slate-950">{market === "PT" ? formatPrice(euroPrice) : "Kz " + kwanzaPrice.toLocaleString("pt-AO", { maximumFractionDigits: 0 })}</p>
               <p className="mt-1 text-[8px] text-slate-500">Preço empresarial sob consulta</p>
             </>
           )}
