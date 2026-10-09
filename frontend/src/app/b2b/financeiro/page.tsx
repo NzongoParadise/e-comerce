@@ -10,6 +10,7 @@ type Payment = {
   method: string;
   currency: string;
   amountEUR: string | number;
+  amountKZ: string | number;
   paidAt?: string | null;
   createdAt: string;
   order: { orderNumber: string; status: string };
