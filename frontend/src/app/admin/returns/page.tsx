@@ -58,11 +58,22 @@ function money(item: ReturnItem) {
     : "Kz " + Number(item.order.totalKZ).toLocaleString("pt-AO", { maximumFractionDigits: 0 });
 }
 
+function returnRefundKey(item: ReturnItem, amount: number, reason: string) {
+  const input = item.id + ":" + (Math.round(amount * 100) / 100).toFixed(2) + ":" + reason;
+  let hash = 2166136261;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return "return-refund-" + item.id + "-" + (Math.round(amount * 100)).toString(36) + "-" + (hash >>> 0).toString(36);
+}
+
 export default function AdminReturnsPage() {
   const [items, setItems] = useState<ReturnItem[]>([]);
   const [filter, setFilter] = useState("ALL");
   const [draftStatuses, setDraftStatuses] = useState<Record<number, string>>({});
   const [notes, setNotes] = useState<Record<number, string>>({});
+  const [refundAmounts, setRefundAmounts] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<number | null>(null);
   const [error, setError] = useState("");
@@ -89,24 +100,90 @@ export default function AdminReturnsPage() {
     const status = draftStatuses[item.id];
     if (!status || status === item.status) return;
     const note = (notes[item.id] || "").trim();
+
     if (status === "REJECTED" && note.length < 5) {
       setError("Indique o motivo da rejeição com pelo menos cinco caracteres.");
       return;
     }
-    if (status === "COMPLETED" && item.status === "REFUND_PROCESSING" && item.type === "RETURN") {
-      setNotice("A conclusão será aceite apenas quando o reembolso estiver confirmado.");
+
+    const startsReturnRefund = status === "REFUND_PROCESSING" && item.type === "RETURN";
+    const amount = Number(refundAmounts[item.id]);
+    if (startsReturnRefund) {
+      if (item.status !== "ITEM_RECEIVED") {
+        setError("Registe primeiro a receção do artigo antes de iniciar o reembolso.");
+        return;
+      }
+      if (!Number.isFinite(amount) || amount <= 0) {
+        setError("Indique o valor que será realmente devolvido ao cliente.");
+        return;
+      }
+      const orderTotal = item.order.currency === "EUR" ? Number(item.order.totalEUR) : Number(item.order.totalKZ);
+      if (amount > orderTotal + 0.000001) {
+        setError("O valor do reembolso não pode ultrapassar o total original da encomenda.");
+        return;
+      }
+      if (note.length < 8) {
+        setError("Explique o motivo do reembolso com pelo menos oito caracteres.");
+        return;
+      }
     }
 
     setSavingId(item.id);
     setError("");
     setNotice("");
+
     try {
-      await fetchWithAuth("/api/admin/returns", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: item.id, status, note: note || undefined }),
-      });
-      setNotice("Solicitação " + item.requestNumber + " atualizada.");
+      let refundStatus: string | null = null;
+      if (startsReturnRefund) {
+        const reason = ("Devolução " + item.requestNumber + ": " + note).slice(0, 500);
+        const refundResponse = await fetchWithAuth("/api/admin/finance/refunds", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Idempotency-Key": returnRefundKey(item, amount, reason),
+          },
+          body: JSON.stringify({
+            orderId: item.orderId,
+            returnRequestId: item.id,
+            amount,
+            reason,
+          }),
+        });
+        if (!refundResponse?.data) throw new Error(refundResponse?.error || "Não foi possível registar o reembolso.");
+        refundStatus = String(refundResponse.data.status || "");
+
+        await fetchWithAuth("/api/admin/returns", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: item.id, status: "REFUND_PROCESSING", note }),
+        });
+
+        if (refundStatus === "SUCCEEDED") {
+          await fetchWithAuth("/api/admin/returns", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              id: item.id,
+              status: "COMPLETED",
+              note: "Reembolso confirmado no processamento inicial.",
+            }),
+          });
+        }
+      } else {
+        await fetchWithAuth("/api/admin/returns", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: item.id, status, note: note || undefined }),
+        });
+      }
+
+      setNotice(startsReturnRefund
+        ? refundStatus === "SUCCEEDED"
+          ? "Reembolso confirmado e devolução concluída."
+          : refundStatus === "REQUESTED" || refundStatus === "PROCESSING"
+            ? "Reembolso registado. A devolução ficará em processamento até ao gateway ou à reconciliação manual confirmar a transferência."
+            : "Pedido de reembolso registado com estado: " + (refundStatus || "pendente") + "."
+        : "Solicitação " + item.requestNumber + " atualizada.");
       await load();
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Não foi possível atualizar a solicitação.");
@@ -142,7 +219,9 @@ export default function AdminReturnsPage() {
         ) : items.length ? (
           <div className="divide-y divide-slate-100">
             {items.map((item) => {
-              const options = nextOptions[item.status] || [];
+              const options = (nextOptions[item.status] || []).filter((option) =>
+                option !== "REFUND_PROCESSING" || (item.type === "RETURN" && item.status === "ITEM_RECEIVED")
+              );
               const selectedStatus = draftStatuses[item.id] || item.status;
               return (
                 <article key={item.id} className="space-y-4 p-4 sm:p-5">
@@ -161,7 +240,13 @@ export default function AdminReturnsPage() {
                   {options.length > 0 ? (
                     <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_auto] sm:items-end">
                       <label className="block text-[9px] font-black uppercase tracking-wide text-slate-500">Próximo estado<select value={selectedStatus} onChange={(event) => setDraftStatuses((current) => ({ ...current, [item.id]: event.target.value }))} className="settings-input mt-2"><option value={item.status}>{labels[item.status]}</option>{options.map((option) => <option key={option} value={option}>{labels[option]}</option>)}</select></label>
-                      <label className="block text-[9px] font-black uppercase tracking-wide text-slate-500">Nota de tratamento<input value={notes[item.id] || ""} onChange={(event) => setNotes((current) => ({ ...current, [item.id]: event.target.value }))} maxLength={1000} placeholder={selectedStatus === "REJECTED" ? "Motivo da rejeição (obrigatório)" : "Instruções ou observação (opcional)"} className="settings-input mt-2"/></label>
+                      {selectedStatus === "REFUND_PROCESSING" && item.type === "RETURN" && (
+                        <label className="block text-[9px] font-black uppercase tracking-wide text-slate-500">Valor a reembolsar ({item.order.currency === "EUR" ? "EUR" : "AOA"})
+                          <input type="number" inputMode="decimal" min="0.01" step="0.01" max={item.order.currency === "EUR" ? Number(item.order.totalEUR) : Number(item.order.totalKZ)} value={refundAmounts[item.id] || ""} onChange={(event) => setRefundAmounts((current) => ({ ...current, [item.id]: event.target.value }))} placeholder={item.order.currency === "EUR" ? "Ex.: 39.90" : "Ex.: 25000"} required className="settings-input mt-2"/>
+                          <span className="mt-1 block normal-case font-medium tracking-normal text-slate-400">Total original: {money(item)}. O servidor confirma o saldo reembolsável.</span>
+                        </label>
+                      )}
+                      <label className="block text-[9px] font-black uppercase tracking-wide text-slate-500">Nota de tratamento{selectedStatus === "REFUND_PROCESSING" ? " / motivo do reembolso" : ""}<input value={notes[item.id] || ""} onChange={(event) => setNotes((current) => ({ ...current, [item.id]: event.target.value }))} maxLength={500} minLength={selectedStatus === "REFUND_PROCESSING" ? 8 : selectedStatus === "REJECTED" ? 5 : 0} placeholder={selectedStatus === "REJECTED" ? "Motivo da rejeição (obrigatório)" : selectedStatus === "REFUND_PROCESSING" ? "Motivo e contexto do reembolso (mínimo 8 caracteres)" : "Instruções ou observação (opcional)"} className="settings-input mt-2"/></label>
                       <button type="button" onClick={() => void save(item)} disabled={savingId === item.id || selectedStatus === item.status} className="btn-primary disabled:opacity-50">{savingId === item.id ? <Loader2 size={14} className="animate-spin"/> : <Save size={14}/>} Guardar estado</button>
                     </div>
                   ) : <p className="text-[10px] font-semibold text-slate-400">Esta solicitação está num estado terminal e não aceita mais transições.</p>}
