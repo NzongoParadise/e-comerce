@@ -74,7 +74,7 @@ jobs:
             exit 1
           fi
           for name in E2E_BASE_URL E2E_MUTATION_ALLOWED_HOSTS E2E_B2C_TOKEN E2E_B2B_OWNER_TOKEN E2E_B2B_BUYER_TOKEN E2E_ADMIN_TOKEN E2E_PRODUCT_ID_PT E2E_PRODUCT_ID_AO E2E_B2B_PRODUCT_ID E2E_PAID_ORDER_ID E2E_RETURN_ORDER_ID E2E_EXPIRED_ORDER_ID E2E_CRON_SECRET E2E_REFUND_AMOUNT; do
-            eval "configured=\${$name}"
+            eval "configured=\$name"
             if [ -z "$configured" ]; then
               echo "::error::Required staging E2E configuration is missing: $name"
               exit 1
