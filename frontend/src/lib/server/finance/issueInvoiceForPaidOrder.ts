@@ -1,5 +1,4 @@
 import crypto from "node:crypto";
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/server/prisma";
 import { logger } from "@/lib/server/logger";
 import { createNotificationIfAllowed } from "@/lib/server/notifications";
