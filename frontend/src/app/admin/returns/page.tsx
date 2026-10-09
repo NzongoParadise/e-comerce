@@ -208,13 +208,13 @@ export default function AdminReturnsPage() {
         });
       }
 
-      if (refundStatus === "FAILED") {
+      const refundFailed = refundStatus === "FAILED";
+      if (refundFailed) {
         setRefundAttemptKeys((current) => {
           const next = { ...current };
           delete next[item.id];
           return next;
         });
-        setError("O gateway não concluiu o reembolso. Reveja o motivo e selecione «Nova tentativa» apenas depois de confirmar que não houve transferência.");
       } else {
         setNotice(refundStatus === "SUCCEEDED"
           ? "Reembolso confirmado e devolução concluída."
@@ -226,6 +226,9 @@ export default function AdminReturnsPage() {
         });
       }
       await load();
+      if (refundFailed) {
+        setError("O gateway não concluiu o reembolso. Reveja o motivo e selecione «Nova tentativa» apenas depois de confirmar que não houve transferência.");
+      }
     } catch (refundError) {
       const message = refundError instanceof Error ? refundError.message : "Não foi possível iniciar o reembolso.";
       await load();
