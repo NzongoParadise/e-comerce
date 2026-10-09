@@ -14,6 +14,7 @@ type Invoice = {
   totalEUR: string | number;
   totalKZ: string | number;
   issuedAt: string;
+  creditNotes?: Array<{ id: number; creditNoteNumber: string; verificationCode: string; status: string; currency: string; amountEUR: string | number; amountKZ: string | number; issuedAt: string }>;
   order: { orderNumber: string; status: string; payment: { status: string; paidAt: string | null } | null };
 };
 
@@ -58,6 +59,7 @@ export default function AccountInvoicesPage() {
           {invoices.map((invoice) => <article key={invoice.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
             <div className="flex min-w-0 items-start gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700"><FileCheck2 size={18}/></span><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="text-xs font-black text-slate-950">{invoice.invoiceNumber}</h3><span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[9px] font-black text-emerald-700">{invoice.status}</span></div><p className="mt-1 text-[10px] text-slate-500">{invoice.order.orderNumber} · {new Date(invoice.issuedAt).toLocaleDateString("pt-PT")} · Pagamento: {invoice.order.payment?.status || "Desconhecido"}</p><p className="mt-1 text-sm font-black text-slate-900">{formatMoney(invoice)}</p></div></div>
             <div className="flex flex-wrap gap-2"><Link href={"/faturas/" + invoice.id} className="btn-primary">Abrir fatura</Link><Link href={"/verificar-fatura/" + encodeURIComponent(invoice.verificationCode)} target="_blank" className="btn-secondary">Validar QR <ExternalLink size={12}/></Link></div>
+            {invoice.creditNotes?.length ? <div className="flex flex-wrap gap-2 sm:justify-end">{invoice.creditNotes.map((note) => <Link key={note.id} href={"/notas-de-credito/" + note.id} className="inline-flex items-center rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] font-black text-amber-800 hover:bg-amber-100">Nota de crédito {note.creditNoteNumber}</Link>)}</div> : null}
           </article>)}
         </div> : <div className="p-12 text-center"><FileCheck2 size={32} className="mx-auto text-slate-300"/><h2 className="mt-3 text-sm font-black text-slate-800">Ainda não existem faturas emitidas</h2><p className="mt-1 text-xs leading-5 text-slate-500">Quando uma fatura for emitida para uma das suas encomendas pagas, aparecerá aqui.</p><Link href="/account/orders" className="btn-primary mt-4">Ver encomendas</Link></div>}
       </section>
