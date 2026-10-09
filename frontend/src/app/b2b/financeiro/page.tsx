@@ -15,6 +15,13 @@ type Payment = {
   order: { orderNumber: string; status: string };
 };
 
+function money(amount: string | number, currency: string) {
+  const value = Number(amount);
+  return currency === "EUR"
+    ? "€ " + value.toLocaleString("pt-PT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : "Kz " + value.toLocaleString("pt-AO", { maximumFractionDigits: 0 });
+}
+
 const statusLabel: Record<string, string> = {
   PAID: "Pago",
   PENDING: "Pendente",
@@ -62,9 +69,9 @@ export default function B2BFinancePage() {
       </header>
 
       <section className="grid gap-3 md:grid-cols-3">
-        <FinanceCard label="Total pago" value={`€ ${Number(data.totals.paid || 0).toFixed(2)}`} icon={CheckCircle2} tone="success" detail="Pagamentos confirmados" />
-        <FinanceCard label="Em aberto" value={`€ ${Number(data.totals.pending || 0).toFixed(2)}`} icon={Clock3} tone="warning" detail="Aguardam confirmação" />
-        <FinanceCard label="Falhados / cancelados" value={`€ ${Number(data.totals.failed || 0).toFixed(2)}`} icon={XCircle} tone="danger" detail="Necessitam atenção" />
+        <FinanceCard label="Total pago" value={money(data.totals.paidEUR || 0, "EUR")} secondaryValue={money(data.totals.paidAOA || 0, "AOA")} icon={CheckCircle2} tone="success" detail="Pagamentos confirmados por moeda" />
+        <FinanceCard label="Em aberto" value={money(data.totals.pendingEUR || 0, "EUR")} secondaryValue={money(data.totals.pendingAOA || 0, "AOA")} icon={Clock3} tone="warning" detail="Aguardam confirmação por moeda" />
+        <FinanceCard label="Falhados / cancelados" value={money(data.totals.failedEUR || 0, "EUR")} secondaryValue={money(data.totals.failedAOA || 0, "AOA")} icon={XCircle} tone="danger" detail="Valores agrupados pela moeda original" />
       </section>
 
       <section className="card overflow-hidden">
@@ -89,7 +96,7 @@ export default function B2BFinancePage() {
                   </span>
                   <div className="min-w-0"><p className="truncate text-xs font-black text-slate-900">{payment.order.orderNumber}</p><p className="mt-1 text-[9px] text-slate-500">{new Date(payment.createdAt).toLocaleString("pt-PT")} · {payment.method}</p></div>
                 </div>
-                <strong className="text-sm font-black text-slate-950">€ {Number(payment.amountEUR).toFixed(2)}</strong>
+                <strong className="text-sm font-black text-slate-950">{money(payment.currency === "EUR" ? payment.amountEUR : payment.amountKZ, payment.currency)}</strong>
                 <span className={`rounded-full px-2.5 py-1.5 text-[9px] font-black ${success ? "bg-emerald-50 text-emerald-700" : failed ? "bg-rose-50 text-rose-700" : "bg-amber-50 text-amber-700"}`}>{statusLabel[payment.status] || payment.status}</span>
                 {success && <ArrowUpRight size={15} className="hidden text-[#1d6ac4] lg:block" />}
               </article>;
@@ -103,7 +110,7 @@ export default function B2BFinancePage() {
   );
 }
 
-function FinanceCard({ label, value, detail, icon: Icon, tone }: { label: string; value: string; detail: string; icon: typeof WalletCards; tone: "success" | "warning" | "danger" }) {
+function FinanceCard({ label, value, secondaryValue, detail, icon: Icon, tone }: { label: string; value: string; secondaryValue?: string; detail: string; icon: typeof WalletCards; tone: "success" | "warning" | "danger" }) {
   const tones = {
     success: "bg-emerald-50 text-emerald-600",
     warning: "bg-amber-50 text-amber-600",
