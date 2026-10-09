@@ -615,6 +615,7 @@ model ReturnRequest {
   order         Order    @relation(fields: [orderId], references: [id])
   user          User     @relation(fields: [userId], references: [id])
   events        ReturnRequestEvent[]
+  refunds       Refund[]
   @@index([status, createdAt])
   @@index([userId, createdAt])
 }
@@ -880,6 +881,8 @@ model Refund {
   order            Order   @relation(fields: [orderId], references: [id])
   payment          Payment @relation(fields: [paymentId], references: [id])
   user             User    @relation(fields: [userId], references: [id])
+  returnRequestId  Int?
+  returnRequest    ReturnRequest? @relation(fields: [returnRequestId], references: [id], onDelete: SetNull)
   creditNote       CreditNote?
   @@index([orderId, createdAt])
   @@index([paymentId, status])
