@@ -14,8 +14,11 @@ type Refund = {
   status: string;
   provider: string;
   failureReason?: string | null;
+  providerRefundId?: string | null;
   createdAt: string;
   order: { orderNumber: string; status?: string };
+  payment?: { provider: string; method: string; currency: string; status: string };
+  returnRequest?: { id: number; requestNumber: string; status: string } | null;
 };
 
 const statusLabel: Record<string, string> = {
@@ -49,6 +52,9 @@ export default function RefundsPage() {
   const [error, setError] = useState("");
   const [requestKey, setRequestKey] = useState("");
   const [requestSignature, setRequestSignature] = useState("");
+  const [providerReferences, setProviderReferences] = useState<Record<number, string>>({});
+  const [reconciliationNotes, setReconciliationNotes] = useState<Record<number, string>>({});
+  const [reconcilingId, setReconcilingId] = useState<number | null>(null);
 
   const signature = useMemo(
     () => JSON.stringify({ orderId: Number(orderId), amount: Number(amount), reason: reason.trim() }),
@@ -113,6 +119,43 @@ export default function RefundsPage() {
     }
   }
 
+  async function reconcile(item: Refund, action: "CONFIRM_SUCCEEDED" | "MARK_FAILED") {
+    const providerReference = (providerReferences[item.id] || "").trim();
+    const note = (reconciliationNotes[item.id] || "").trim();
+    if (action === "CONFIRM_SUCCEEDED" && providerReference.length < 4) {
+      setError("Indique a referência real da transferência ou do reembolso externo.");
+      return;
+    }
+    if (note.length < 5) {
+      setError("Registe uma nota de reconciliação com pelo menos cinco caracteres.");
+      return;
+    }
+
+    setReconcilingId(item.id);
+    setError("");
+    setMessage("");
+    try {
+      const response = await fetchWithAuth("/api/admin/finance/refunds", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          refundId: item.id,
+          action,
+          providerReference: action === "CONFIRM_SUCCEEDED" ? providerReference : undefined,
+          note,
+        }),
+      });
+      setMessage(action === "CONFIRM_SUCCEEDED"
+        ? "Reembolso reconciliado com referência externa." + (response.returnCompleted ? " A devolução associada foi concluída." : "")
+        : "Falha do reembolso registada para auditoria.");
+      await load();
+    } catch (reconcileError) {
+      setError(reconcileError instanceof Error ? reconcileError.message : "Não foi possível reconciliar o reembolso.");
+    } finally {
+      setReconcilingId(null);
+    }
+  }
+
   return (
     <section className="space-y-6 pb-8">
       <header>
@@ -148,7 +191,7 @@ export default function RefundsPage() {
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full text-left text-xs">
-            <thead className="bg-slate-50 text-[9px] uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3">Encomenda</th><th className="px-4 py-3">Valor</th><th className="px-4 py-3">Gateway</th><th className="px-4 py-3">Estado</th><th className="px-4 py-3">Motivo / detalhe</th><th className="px-4 py-3">Data</th></tr></thead>
+            <thead className="bg-slate-50 text-[9px] uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3">Encomenda</th><th className="px-4 py-3">Valor</th><th className="px-4 py-3">Gateway</th><th className="px-4 py-3">Estado</th><th className="px-4 py-3">Motivo / detalhe</th><th className="px-4 py-3">Data</th><th className="px-4 py-3">Reconciliação</th></tr></thead>
             <tbody className="divide-y divide-slate-100">
               {items.map((item) => <tr key={item.id} className="align-top hover:bg-slate-50/60">
                 <td className="whitespace-nowrap px-4 py-3 font-black text-slate-900">{item.order?.orderNumber || "Encomenda #" + item.orderId}</td>
@@ -157,6 +200,23 @@ export default function RefundsPage() {
                 <td className="whitespace-nowrap px-4 py-3"><span className={"rounded-full px-2.5 py-1.5 text-[9px] font-black " + (item.status === "SUCCEEDED" ? "bg-emerald-50 text-emerald-700" : item.status === "FAILED" ? "bg-rose-50 text-rose-700" : "bg-amber-50 text-amber-700")}>{statusLabel[item.status] || item.status}</span></td>
                 <td className="min-w-56 max-w-md px-4 py-3 text-slate-600">{item.reason}{item.failureReason ? <p className="mt-1 break-words text-[10px] font-semibold text-rose-600">{item.failureReason}</p> : null}</td>
                 <td className="whitespace-nowrap px-4 py-3 text-[10px] text-slate-500">{new Date(item.createdAt).toLocaleString("pt-PT")}</td>
+                <td className="min-w-72 px-4 py-3">
+                  {item.provider !== "stripe" && ["REQUESTED", "PROCESSING"].includes(item.status) ? (
+                    <div className="space-y-2">
+                      <p className="text-[9px] font-bold text-slate-500">{item.returnRequest ? "Devolução " + item.returnRequest.requestNumber : "Confirmação manual do gateway"}</p>
+                      <input value={providerReferences[item.id] || ""} onChange={(event) => setProviderReferences((current) => ({ ...current, [item.id]: event.target.value }))} maxLength={160} placeholder="Referência externa (obrigatória para confirmar)" className="settings-input min-w-64"/>
+                      <input value={reconciliationNotes[item.id] || ""} onChange={(event) => setReconciliationNotes((current) => ({ ...current, [item.id]: event.target.value }))} maxLength={500} placeholder="Nota de reconciliação (mín. 5 caracteres)" className="settings-input min-w-64"/>
+                      <div className="flex flex-wrap gap-2">
+                        <button type="button" onClick={() => void reconcile(item, "CONFIRM_SUCCEEDED")} disabled={reconcilingId === item.id} className="rounded-lg bg-emerald-700 px-3 py-2 text-[9px] font-black text-white hover:bg-emerald-800 disabled:opacity-50">{reconcilingId === item.id ? "A guardar..." : "Confirmar concluído"}</button>
+                        <button type="button" onClick={() => void reconcile(item, "MARK_FAILED")} disabled={reconcilingId === item.id} className="rounded-lg border border-rose-200 px-3 py-2 text-[9px] font-black text-rose-700 hover:bg-rose-50 disabled:opacity-50">Registar falha</button>
+                      </div>
+                    </div>
+                  ) : item.provider === "stripe" && ["REQUESTED", "PROCESSING"].includes(item.status) ? (
+                    <span className="text-[10px] text-slate-500">Aguardar confirmação do webhook assinado do Stripe.</span>
+                  ) : (
+                    <span className="text-[10px] text-slate-400">{item.providerRefundId ? "Referência: " + item.providerRefundId : "Sem ação pendente"}</span>
+                  )}
+                </td>
               </tr>)}
             </tbody>
           </table>
