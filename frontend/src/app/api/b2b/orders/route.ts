@@ -79,11 +79,12 @@ export async function GET(request: Request) {
       prisma.order.groupBy({
         by: ["status"],
         where: { companyId: membership.companyId },
-        _count: { _all: true },
+        orderBy: { status: "asc" },
+        _count: { status: true },
       }),
     ]);
 
-    const statusCounts = Object.fromEntries(statusGroups.map((entry) => [entry.status, entry._count._all]));
+    const statusCounts = Object.fromEntries(statusGroups.map((entry) => [entry.status, entry._count.status]));
     const processing = (statusCounts.PROCESSING || 0) + (statusCounts.PENDING || 0);
     const completed = (statusCounts.COMPLETED || 0) + (statusCounts.DELIVERED || 0);
 
