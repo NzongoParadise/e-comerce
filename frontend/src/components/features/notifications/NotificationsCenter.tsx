@@ -39,11 +39,15 @@ const typeLabels: Record<string, string> = {
   QUOTE_REJECTED: "Cotação",
   PAYMENT_REVIEW_REQUIRED: "Verificação",
   B2B_INVITATION_ACCEPTED: "Equipa",
+  INVOICE_ISSUED: "Fatura",
+  RETURN_REQUEST_RECEIVED: "Pós-venda",
+  RETURN_STATUS_CHANGED: "Pós-venda",
+  PRODUCT_REVIEW_MODERATED: "Avaliação",
 };
 
 function iconFor(type: string) {
   if (type.toLowerCase().includes("payment") || type.toLowerCase().includes("refund")) return CreditCard;
-  if (type.toLowerCase().includes("quote")) return FileText;
+  if (type.toLowerCase().includes("quote") || type.toLowerCase().includes("invoice")) return FileText;
   if (type.toLowerCase().includes("security") || type.toLowerCase().includes("review")) return ShieldAlert;
   if (type.toLowerCase().includes("order")) return Package;
   return Bell;
