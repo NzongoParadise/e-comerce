@@ -20,10 +20,16 @@ export async function GET(request: Request) {
   const totals = payments.reduce((acc, payment) => {
     const isEUR = payment.currency === "EUR";
     const amount = isEUR ? Number(payment.amountEUR) : Number(payment.amountKZ);
-    const suffix = isEUR ? "EUR" : "AOA";
-    if (payment.status === "PAID") acc["paid" + suffix] += amount;
-    else if (["AWAITING_PAYMENT", "PROCESSING", "CREATED", "PENDING"].includes(payment.status)) acc["pending" + suffix] += amount;
-    else if (["FAILED", "EXPIRED", "CANCELLED"].includes(payment.status)) acc["failed" + suffix] += amount;
+    if (payment.status === "PAID") {
+      if (isEUR) acc.paidEUR += amount;
+      else acc.paidAOA += amount;
+    } else if (["AWAITING_PAYMENT", "PROCESSING", "CREATED", "PENDING"].includes(payment.status)) {
+      if (isEUR) acc.pendingEUR += amount;
+      else acc.pendingAOA += amount;
+    } else if (["FAILED", "EXPIRED", "CANCELLED"].includes(payment.status)) {
+      if (isEUR) acc.failedEUR += amount;
+      else acc.failedAOA += amount;
+    }
     return acc;
   }, {
     paidEUR: 0, paidAOA: 0,
