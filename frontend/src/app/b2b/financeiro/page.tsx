@@ -14,6 +14,7 @@ type Invoice = {
   totalEUR: string | number;
   totalKZ: string | number;
   issuedAt: string;
+  creditNotes?: Array<{ id: number; creditNoteNumber: string; verificationCode: string; status: string; currency: string; amountEUR: string | number; amountKZ: string | number; issuedAt: string }>;
   order: { orderNumber: string; status: string; payment: { status: string; paidAt: string | null } | null };
 };
 
@@ -142,6 +143,7 @@ export default function B2BFinancePage() {
                 <div className="flex flex-wrap gap-2">
                   <Link href={"/faturas/" + invoice.id} className="btn-primary">Abrir fatura</Link>
                   <Link href={"/verificar-fatura/" + encodeURIComponent(invoice.verificationCode)} target="_blank" className="btn-secondary">Validar <ExternalLink size={12}/></Link>
+                  {invoice.creditNotes?.map((note) => <Link key={note.id} href={"/notas-de-credito/" + note.id} className="inline-flex items-center rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] font-black text-amber-800 hover:bg-amber-100">{note.creditNoteNumber}</Link>)}
                 </div>
               </article>
             ))}
