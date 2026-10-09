@@ -16,11 +16,11 @@ export async function GET(request: Request) {
       where: { userId: profile.id, status: "ACTIVE", company: { status: "ACTIVE" } },
       select: { companyId: true },
     });
-    if (!membership) return Response.json({ data: [], company: null, message: "A empresa ainda aguarda aprovação." });
+    if (!membership) return Response.json({ data: [], company: null, companyMarket: null, message: "A empresa ainda aguarda aprovação." });
 
     const company = await prisma.company.findUnique({
       where: { id: membership.companyId },
-      select: { id: true, legalName: true, tradeName: true, nif: true, status: true },
+      select: { id: true, legalName: true, tradeName: true, nif: true, status: true, country: true },
     });
     const products = await prisma.product.findMany({
       include: {
@@ -36,8 +36,10 @@ export async function GET(request: Request) {
       take: 100,
     });
 
+    const companyMarket = company && /^(pt|portugal)$/i.test(company.country.trim()) ? "PT" : "AO";
     return Response.json({
       company,
+      companyMarket,
       data: products.map((product) => ({
         ...product,
         b2bPriceRules: product.b2bPriceRules.map((rule) => ({
