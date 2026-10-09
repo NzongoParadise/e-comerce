@@ -190,7 +190,7 @@ async function handleMulticaixaWebhook(request: Request) {
           if (payment.order.status === "CANCELLED") {
             await transaction.order.update({
               where: { id: payment.order.id },
-              data: { status: "PAYMENT_REVIEW_REQUIRED" },
+              data: { status: "PAYMENT_REVIEW_REQUIRED", inventoryReserved: false, inventoryReservationExpiresAt: null },
             });
             await transaction.trackingEvent.create({
               data: {
@@ -210,7 +210,7 @@ async function handleMulticaixaWebhook(request: Request) {
         });
         const confirmed = await transaction.order.updateMany({
           where: { id: payment.order.id, status: { in: ["PENDING", "AWAITING_PAYMENT"] } },
-          data: { status: "PAYMENT_CONFIRMED" },
+          data: { status: "PAYMENT_CONFIRMED", inventoryReserved: false, inventoryReservationExpiresAt: null },
         });
         if (!confirmed.count && payment.order.status !== "PAYMENT_CONFIRMED" &&
             !["PROCESSING", "SHIPPED", "DELIVERED", "COMPLETED"].includes(payment.order.status)) {
@@ -567,12 +567,12 @@ async function handleStripeWebhook(request: Request) {
       } });
       const awaitingOrder = await transaction.order.updateMany({
         where: { id: orderId, status: 'AWAITING_PAYMENT' },
-        data: { status: 'PAYMENT_CONFIRMED' },
+        data: { status: 'PAYMENT_CONFIRMED', inventoryReserved: false, inventoryReservationExpiresAt: null },
       });
       if (!awaitingOrder.count) {
         const cancelledOrder = await transaction.order.updateMany({
           where: { id: orderId, status: 'CANCELLED' },
-          data: { status: 'PAYMENT_REVIEW_REQUIRED' },
+          data: { status: 'PAYMENT_REVIEW_REQUIRED', inventoryReserved: false, inventoryReservationExpiresAt: null },
         });
         if (cancelledOrder.count) {
           await transaction.trackingEvent.create({ data: {
