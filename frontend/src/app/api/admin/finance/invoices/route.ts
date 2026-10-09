@@ -1,7 +1,7 @@
-import crypto from "node:crypto";
 import { prisma } from "@/lib/server/prisma";
 import { authenticate, errorResponse, isAdmin, readJson, userSubject } from "@/lib/server/api";
 import { logger } from "@/lib/server/logger";
+import { issueInvoiceForPaidOrder } from "@/lib/server/finance/issueInvoiceForPaidOrder";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -83,48 +83,11 @@ export async function POST(request: Request) {
     return errorResponse("Não é possível emitir uma nova fatura para uma encomenda cancelada ou totalmente reembolsada.", 409);
   }
 
-  const existing = await prisma.invoice.findUnique({
-    where: { orderId: order.id },
-  });
-  if (existing) {
-    return Response.json({ data: existing, idempotent: true });
-  }
-
-  const issuerName = process.env.SELLER_NAME?.trim() || "RUBRICA DILIGENTE (SU), LDA";
-  const verificationCode = crypto.randomBytes(12).toString("base64url");
-  const invoiceNumber = "FT-" + new Date().getFullYear() + "-" + String(order.id).padStart(8, "0");
-
   try {
-    const invoice = await prisma.invoice.create({
-      data: {
-        invoiceNumber,
-        verificationCode,
-        orderId: order.id,
-        userId: order.userId,
-        companyId: order.companyId,
-        status: "ISSUED",
-        currency: order.currency,
-        totalEUR: order.totalEUR,
-        totalKZ: order.totalKZ,
-        discountTotalEUR: order.discountTotalEUR,
-        discountTotalKZ: order.discountTotalKZ,
-        sellerName: issuerName,
-        sellerTaxId: process.env.SELLER_TAX_ID?.trim() || process.env.COMPANY_NIF?.trim() || null,
-        sellerAddress: process.env.SELLER_ADDRESS?.trim() || null,
-        buyerName: order.billingName || order.company?.legalName || order.user.name || null,
-        buyerEmail: order.billingEmail || order.company?.email || order.user.email || null,
-        buyerTaxId: order.billingTaxId || order.company?.nif || null,
-        buyerAddress: order.address || order.company?.address || null,
-        issuedBy: auth.actor!,
-      },
-    });
-
-    return Response.json({ data: invoice, idempotent: false }, { status: 201 });
+    const result = await issueInvoiceForPaidOrder(order.id, auth.actor!);
+    if (!result) return errorResponse("A encomenda ainda não está num estado elegível para emissão de fatura.", 409);
+    return Response.json({ data: result.invoice, idempotent: !result.created }, { status: result.created ? 201 : 200 });
   } catch (error) {
-    if ((error as { code?: string })?.code === "P2002") {
-      const duplicate = await prisma.invoice.findUnique({ where: { orderId: order.id } });
-      if (duplicate) return Response.json({ data: duplicate, idempotent: true });
-    }
     logger.error("Unable to issue invoice", {
       orderId: order.id,
       orderNumber: order.orderNumber,
