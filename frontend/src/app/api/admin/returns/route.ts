@@ -86,10 +86,13 @@ export async function PATCH(request: Request) {
       }
       if (current.type === "RETURN" && parsed.data.status === "EXCHANGE_PROCESSING") throw new Error("RETURN_TYPE_TRANSITION_MISMATCH");
       if (current.type === "EXCHANGE" && parsed.data.status === "REFUND_PROCESSING") throw new Error("RETURN_TYPE_TRANSITION_MISMATCH");
+      if (current.type === "RETURN" && parsed.data.status === "REFUND_PROCESSING" && current.status !== "ITEM_RECEIVED") {
+        throw new Error("RETURN_ITEM_NOT_RECEIVED");
+      }
 
       if (parsed.data.status === "COMPLETED" && current.status === "REFUND_PROCESSING" && current.type === "RETURN") {
         const refund = await tx.refund.findFirst({
-          where: { orderId: current.orderId, status: "SUCCEEDED" },
+          where: { returnRequestId: current.id, status: "SUCCEEDED" },
           select: { id: true },
         });
         if (!refund) throw new Error("REFUND_NOT_CONFIRMED");
@@ -145,7 +148,8 @@ export async function PATCH(request: Request) {
     if (code === "RETURN_NOT_FOUND") return errorResponse("Solicitação não encontrada.", 404);
     if (code === "INVALID_TRANSITION") return errorResponse("Esta transição não é permitida. Atualize a lista e selecione o próximo estado válido.", 409);
     if (code === "RETURN_TYPE_TRANSITION_MISMATCH") return errorResponse("O próximo estado não corresponde ao tipo de solicitação (devolução, troca ou reclamação).", 409);
-    if (code === "REFUND_NOT_CONFIRMED") return errorResponse("A solicitação só pode ser concluída depois de existir um reembolso confirmado.", 409);
+    if (code === "REFUND_NOT_CONFIRMED") return errorResponse("A solicitação só pode ser concluída depois de existir um reembolso confirmado para esta devolução.", 409);
+    if (code === "RETURN_ITEM_NOT_RECEIVED") return errorResponse("Registe primeiro a receção do artigo antes de iniciar o reembolso.", 409);
     return errorResponse("Não foi possível atualizar a solicitação.", 503);
   }
 }
