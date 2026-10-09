@@ -9,6 +9,7 @@ import { authenticate, errorResponse, readJson, userSubject } from '@/lib/server
 import { setStripeDefaultPaymentMethod } from '@/lib/server/payments/stripeCustomers';
 import { createNotificationIfAllowed } from '@/lib/server/notifications';
 import { issueInvoiceForPaidOrder } from '@/lib/server/finance/issueInvoiceForPaidOrder';
+import { issueCreditNoteForSucceededRefund } from '@/lib/server/finance/issueCreditNoteForSucceededRefund';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -547,6 +548,10 @@ async function handleStripeWebhook(request: Request) {
         }).catch(() => undefined);
       }
     });
+
+    if (nextStatus === 'SUCCEEDED') {
+      await issueCreditNoteForSucceededRefund(internalRefundId, 'SYSTEM_STRIPE_WEBHOOK');
+    }
 
     return Response.json({ received: true });
   }
