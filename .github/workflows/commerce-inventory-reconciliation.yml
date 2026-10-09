@@ -1,0 +1,40 @@
+name: Commerce Inventory Reservation Cleanup
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: commerce-inventory-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    if: github.repository == 'NzongoParadise/e-comerce'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Validate scheduler configuration
+        env:
+          PRODUCTION_BASE_URL: ${{ vars.PRODUCTION_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          test -n "$PRODUCTION_BASE_URL" || { echo "::error::Configure the PRODUCTION_BASE_URL repository variable."; exit 1; }
+          test -n "$CRON_SECRET" || { echo "::error::Configure the CRON_SECRET repository secret."; exit 1; }
+          case "$PRODUCTION_BASE_URL" in https://*) ;; *) echo "::error::PRODUCTION_BASE_URL must use HTTPS."; exit 1;; esac
+
+      - name: Release expired inventory reservations
+        env:
+          PRODUCTION_BASE_URL: ${{ vars.PRODUCTION_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error \
+            --retry 2 --retry-delay 5 --max-time 70 \
+            --request POST \
+            --header "Authorization: Bearer $CRON_SECRET" \
+            "${PRODUCTION_BASE_URL%/}/api/cron/release-expired-inventory"
