@@ -37,6 +37,15 @@ async function runCleanup(request: Request) {
   const startedAt = Date.now();
   const deadline = startedAt + WORK_BUDGET_MS;
   const now = new Date(startedAt);
+  const requestedOrderId = new URL(request.url).searchParams.get("orderId");
+  const targetOrderId = requestedOrderId === null ? null : Number(requestedOrderId);
+  if (requestedOrderId !== null && (!Number.isSafeInteger(targetOrderId) || Number(targetOrderId) <= 0)) {
+    return errorResponse("orderId must be a positive integer.", 400);
+  }
+  const candidateWhere: Prisma.OrderWhereInput = {
+    ...expiredOrderWhere(now),
+    ...(targetOrderId !== null ? { id: targetOrderId! } : {}),
+  };
   const attemptedIds: number[] = [];
   let scanned = 0;
   let released = 0;
@@ -48,7 +57,7 @@ async function runCleanup(request: Request) {
     const take = Math.min(BATCH_SIZE, MAX_ORDERS_PER_RUN - scanned);
     const batch = await prisma.order.findMany({
       where: {
-        ...expiredOrderWhere(now),
+        ...candidateWhere,
         ...(attemptedIds.length ? { id: { notIn: attemptedIds } } : {}),
       },
       select: { id: true },
@@ -159,7 +168,7 @@ async function runCleanup(request: Request) {
 
   let hasMoreCandidates = true;
   try {
-    hasMoreCandidates = (await prisma.order.count({ where: expiredOrderWhere(now) })) > 0;
+    hasMoreCandidates = (await prisma.order.count({ where: candidateWhere })) > 0;
   } catch (error) {
     logger.warn("Unable to count remaining expired inventory reservations", {
       error: error instanceof Error ? error.message : error,
