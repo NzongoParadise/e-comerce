@@ -18,6 +18,8 @@ export type Product = {
   category: { name: string; slug: string };
   brand: { name: string; slug: string };
   prices?: { market: string; amount: string | number; currency: string }[];
+  rating?: number;
+  reviews?: number;
 };
 
 export function ProductTile({ product }: { product: Product }) {
@@ -51,6 +53,8 @@ export function ProductTile({ product }: { product: Product }) {
             priceEUR: euroPrice,
             priceKZ: kwanzaPrice ?? undefined,
             stock: product.stock,
+            rating: product.rating,
+            reviews: product.reviews,
             imageUrl: product.imageUrl || undefined,
           })
         }
@@ -85,6 +89,11 @@ export function ProductTile({ product }: { product: Product }) {
           <span>{product.category.name}</span>
           <span aria-hidden="true">·</span>
           <span>{product.stock > 0 ? "Disponível" : "Indisponível"}</span>
+        </div>
+        <div className="mt-1 flex min-h-4 items-center gap-1.5 text-[9px]">
+          {Number(product.reviews) > 0
+            ? <><span className="tracking-wide text-amber-500" aria-label={"Classificação " + Number(product.rating || 0).toFixed(1) + " em 5"}>{Array.from({ length: 5 }, (_, index) => index < Math.round(Number(product.rating || 0)) ? "★" : "☆").join("")}</span><span className="text-slate-400">{Number(product.reviews)} avaliação(ões)</span></>
+            : <span className="text-slate-400">Sem avaliações publicadas</span>}
         </div>
 
         <div className="mt-auto pt-3">
