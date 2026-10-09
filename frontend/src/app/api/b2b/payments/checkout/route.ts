@@ -192,12 +192,14 @@ export async function POST(request: Request) {
       Date.now() - currentPayment.updatedAt.getTime() < 120_000) {
     return errorResponse("Já existe uma tentativa de pagamento em preparação. Atualize as encomendas antes de tentar novamente.", 409);
   }
-  if (currentPayment?.status === "AWAITING_PAYMENT" && currentPayment.method === method &&
-      currentPayment.expiresAt && currentPayment.expiresAt.getTime() > Date.now()) {
-    const checkoutUrl = currentPayment.reference?.startsWith("cs_") ? await stripeSessionUrl(currentPayment.reference) : null;
-    if (method === "STRIPE_CHECKOUT" && checkoutUrl) return responseForExisting(currentPayment, checkoutUrl, true);
-    if (method !== "STRIPE_CHECKOUT" && (currentPayment.referenceNumber || currentPayment.entity)) {
-      return responseForExisting(currentPayment, null, true);
+  if (currentPayment?.status === "AWAITING_PAYMENT" && currentPayment.method === method) {
+    const reservationExpiresAt = po.order.inventoryReservationExpiresAt?.getTime() ?? 0;
+    const paymentExpiresAt = currentPayment.expiresAt?.getTime() ?? 0;
+    const stillActive = Math.max(reservationExpiresAt, paymentExpiresAt) > Date.now();
+    if (stillActive) {
+      const checkoutUrl = currentPayment.reference?.startsWith("cs_") ? await stripeSessionUrl(currentPayment.reference) : null;
+      if (method === "STRIPE_CHECKOUT" && checkoutUrl) return responseForExisting(currentPayment, checkoutUrl, true);
+      if (method !== "STRIPE_CHECKOUT") return responseForExisting(currentPayment, null, true);
     }
   }
 
