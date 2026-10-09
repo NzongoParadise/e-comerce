@@ -5,10 +5,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const appDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const rootDirectory = path.resolve(appDirectory, '..');
 const cleanupTargets = [
   path.join(appDirectory, 'node_modules', '.prisma'),
-  path.join(rootDirectory, 'node_modules', '.prisma'),
 ];
 
 for (const target of cleanupTargets) {

@@ -25,9 +25,9 @@ export default function StorefrontMobileNav() {
   return (
     <nav
       aria-label="Navegação rápida"
-      className="storefront-mobile-nav fixed inset-x-3 bottom-3 z-[60] lg:hidden"
+      className="storefront-mobile-nav fixed inset-x-0 bottom-0 z-[60] border-t border-gray-200 bg-white/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_rgba(15,23,42,0.1)] backdrop-blur lg:hidden"
     >
-      <div className="grid grid-cols-5 overflow-hidden rounded-2xl border border-slate-200/90 bg-white/95 p-1 shadow-[0_18px_50px_rgba(15,23,42,0.18)] backdrop-blur">
+      <div className="mx-auto grid max-w-xl grid-cols-5 px-2 pt-2 pb-1">
         {items.map(({ href, label, Icon }) => {
           const active = isActive(pathname, href);
           const showBadge = href === "/cart" && cartCount > 0;
@@ -38,10 +38,10 @@ export default function StorefrontMobileNav() {
               href={href}
               aria-current={active ? "page" : undefined}
               className={
-                "relative flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[9px] font-bold transition " +
+                "relative flex min-h-14 flex-col items-center justify-center gap-1 rounded-lg px-1 text-[10px] font-semibold transition " +
                 (active
-                  ? "bg-[#e8f0fc] text-[#1d6ac4]"
-                  : "text-slate-500 hover:bg-slate-50 hover:text-slate-900")
+                  ? "text-[#8a5b00] after:absolute after:left-1/2 after:top-0 after:h-0.5 after:w-8 after:-translate-x-1/2 after:rounded-full after:bg-[#f5a800]"
+                  : "text-slate-500 hover:text-slate-900")
               }
             >
               <span className="relative">

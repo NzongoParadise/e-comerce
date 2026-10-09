@@ -47,11 +47,145 @@ a, button, input, textarea {
   --color-primary-light: #fff4d4;
   background-color: #f6f6f4;
   background-image: radial-gradient(circle at 8% 0%, rgba(245, 168, 0, 0.07), transparent 24%);
-  padding-bottom: 5.5rem;
+  padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
 }
 
 @media (min-width: 1024px) {
   .storefront-public { padding-bottom: 0; }
+}
+
+@media (max-width: 639px) {
+  .storefront-public {
+    padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
+  }
+
+  .storefront-header > div:first-child > div {
+    min-height: 2rem;
+    padding-block: 0.25rem;
+  }
+
+  .storefront-header > div:first-child button {
+    padding-block: 0.125rem;
+    font-size: 10px;
+  }
+
+  .storefront-header > div:nth-child(2) > div {
+    row-gap: 0.375rem;
+    padding-block: 0.5rem;
+  }
+
+  .storefront-header > div:nth-child(2) > div > form {
+    min-height: 2.5rem;
+  }
+
+  .storefront-header > div:nth-child(2) > div > form input {
+    padding-block: 0.5rem;
+  }
+
+  .storefront-header a[href="/"] strong {
+    max-width: 7.5rem;
+    overflow: hidden;
+    font-size: 0.7rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .storefront-catalog > div:first-child {
+    display: none;
+  }
+
+  .storefront-catalog > div:nth-child(2) {
+    padding-top: 0.75rem;
+  }
+
+  .storefront-catalog h1 {
+    font-size: 1.25rem;
+    line-height: 1.2;
+  }
+
+  .storefront-catalog .storefront-filter-panel {
+    max-height: none;
+  }
+
+  .storefront-catalog .storefront-filter-panel > div:first-child {
+    margin: 0;
+    padding: 0;
+  }
+
+  .storefront-catalog .storefront-filter-panel .mobile-filter-toggle {
+    display: inline-flex;
+  }
+
+  .storefront-catalog .storefront-filter-panel[data-mobile-open="false"] > :not(:first-child) {
+    display: none;
+  }
+
+  .storefront-catalog .storefront-filter-panel[data-mobile-open="false"] {
+    padding-block: 0.75rem;
+  }
+
+  .storefront-catalog .storefront-filter-panel[data-mobile-open="false"] > div:first-child {
+    margin-bottom: 0;
+  }
+
+  .storefront-catalog .storefront-filter-panel[data-mobile-open="true"] > div:first-child {
+    border-bottom: 1px solid #f1f1f1;
+    background: #fff;
+    margin-bottom: 0.65rem;
+    padding-bottom: 0.6rem;
+  }
+
+  .storefront-catalog .storefront-filter-panel > div.mb-5 {
+    margin-bottom: 0.65rem;
+  }
+
+  .storefront-catalog section > .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .storefront-catalog .storefront-product-card {
+    display: grid;
+    grid-template-columns: minmax(5.5rem, 34%) minmax(0, 1fr);
+  }
+
+  .storefront-catalog .storefront-product-card > div:first-child {
+    min-height: 8rem;
+  }
+
+  .storefront-catalog .storefront-product-media {
+    height: 100%;
+    min-height: 8rem;
+  }
+
+  .storefront-catalog .storefront-product-card > div:nth-child(2) {
+    padding: 0.65rem;
+  }
+
+  .storefront-catalog .storefront-product-card .storefront-product-media img {
+    padding: 0.65rem;
+  }
+
+  .storefront-catalog .storefront-product-card .storefront-price {
+    font-size: 1rem;
+  }
+
+  .storefront-catalog .storefront-product-card .storefront-cta {
+    min-height: 2.125rem;
+    margin-top: 0.5rem;
+  }
+
+  .storefront-mobile-nav > div {
+    padding-top: 0.25rem;
+    padding-bottom: 0.25rem;
+  }
+
+  .storefront-mobile-nav a {
+    min-height: 3rem;
+  }
+}
+
+.storefront-catalog .mobile-filter-toggle {
+  display: none;
 }
 
 .storefront-header {
@@ -105,6 +239,10 @@ a, button, input, textarea {
   color: #34383d;
 }
 
+.storefront-header > div:nth-child(3) a[href="/promotions"] {
+  border-radius: 0;
+}
+
 .storefront-header > div:nth-child(3) a:hover {
   background-color: #f5f5f3;
   color: #17191c;
@@ -119,14 +257,11 @@ a, button, input, textarea {
   background-color: #ffc43d;
 }
 
-.storefront-mobile-nav > div {
-  border-color: #dedfdf;
-  box-shadow: 0 14px 36px rgba(20, 22, 25, 0.16);
-}
+.storefront-mobile-nav > div { width: 100%; }
 
 .storefront-mobile-nav a[aria-current="page"] {
-  background-color: #fff4d4 !important;
-  color: #17191c !important;
+  background-color: transparent !important;
+  color: #8a5b00 !important;
 }
 
 .storefront-public [class*="text-[#1d6ac4]"] { color: #8a5b00 !important; }
