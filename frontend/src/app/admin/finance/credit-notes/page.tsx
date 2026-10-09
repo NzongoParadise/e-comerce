@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { AlertCircle, ExternalLink, FileCheck2, RefreshCw, Search } from "lucide-react";
 import { fetchWithAuth } from "@/lib/api";
 
@@ -66,7 +66,7 @@ export default function AdminCreditNotesPage() {
 
   useEffect(() => { void load(); }, [status, search, page]);
 
-  function submitSearch(event: React.FormEvent<HTMLFormElement>) {
+  function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPage(1);
     setSearch(searchDraft.trim());
