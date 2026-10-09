@@ -3,6 +3,8 @@ import { prisma } from "@/lib/server/prisma";
 import { authenticate, errorResponse, isAdmin, readJson, userSubject } from "@/lib/server/api";
 import { createNotificationIfAllowed } from "@/lib/server/notifications";
 import { logger } from "@/lib/server/logger";
+import { issueInvoiceForPaidOrder } from "@/lib/server/finance/issueInvoiceForPaidOrder";
+import { issueCreditNoteForSucceededRefund } from "@/lib/server/finance/issueCreditNoteForSucceededRefund";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -284,6 +286,7 @@ export async function POST(request: Request) {
       return saved;
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5000, timeout: 10000 });
 
+    let creditNotePending = false;
     if (succeeded) {
       await notifyRefund({
         userId: refund.userId,
@@ -292,9 +295,19 @@ export async function POST(request: Request) {
         refundId: refund.id,
         status: "SUCCEEDED",
       });
+      try {
+        await issueCreditNoteForSucceededRefund(refund.id, userSubject(auth.user) || "admin");
+      } catch (creditNoteError) {
+        creditNotePending = true;
+        logger.error("Refund succeeded but credit note issuance is pending", {
+          refundId: refund.id,
+          orderId: refund.orderId,
+          error: creditNoteError instanceof Error ? creditNoteError.message : creditNoteError,
+        });
+      }
     }
 
-    return Response.json({ data: updated, idempotent: false }, { status: 201 });
+    return Response.json({ data: updated, idempotent: false, creditNotePending }, { status: 201 });
   } catch (error) {
     const failureReason = error instanceof Error ? error.message : "STRIPE_REFUND_FAILED";
     const updated = await prisma.refund.update({
@@ -308,4 +321,126 @@ export async function POST(request: Request) {
     });
     return Response.json({ data: updated, error: "O reembolso não foi concluído. O estado foi registado para auditoria." }, { status: 502 });
   }
+}
+
+
+const manualRefundUpdateSchema = z.object({
+  refundId: z.number().int().positive(),
+  status: z.enum(["SUCCEEDED", "FAILED"]),
+  note: z.string().trim().max(500).optional(),
+}).superRefine((value, context) => {
+  if (value.status === "FAILED" && (!value.note || value.note.length < 5)) {
+    context.addIssue({ code: "custom", path: ["note"], message: "Indique o motivo da falha." });
+  }
+});
+
+export async function PATCH(request: Request) {
+  const auth = await admin(request);
+  if (auth.error) return auth.error;
+
+  const parsed = manualRefundUpdateSchema.safeParse(await readJson(request));
+  if (!parsed.success) return errorResponse("Dados de processamento de reembolso inválidos.", 400, parsed.error.flatten().fieldErrors);
+
+  const existing = await prisma.refund.findUnique({
+    where: { id: parsed.data.refundId },
+    include: {
+      order: { select: { id: true, orderNumber: true, status: true, companyId: true } },
+      payment: { select: { id: true, amountEUR: true, amountKZ: true, currency: true, provider: true, status: true } },
+    },
+  });
+  if (!existing) return errorResponse("Reembolso não encontrado.", 404);
+  if (existing.provider === "stripe") return errorResponse("Os reembolsos Stripe são atualizados pelo webhook assinado; não altere o estado manualmente.", 409);
+  if (!["REQUESTED", "PROCESSING"].includes(existing.status)) {
+    return errorResponse("Este reembolso já foi processado e não aceita novas transições.", 409);
+  }
+
+  const actor = userSubject(auth.user) || "admin";
+  if (parsed.data.status === "SUCCEEDED") {
+    try {
+      const invoice = await issueInvoiceForPaidOrder(existing.orderId, actor);
+      if (!invoice) return errorResponse("A encomenda não está num estado válido para processar o reembolso. Reveja a reconciliação.", 409);
+    } catch (error) {
+      logger.error("Unable to ensure invoice before confirming manual refund", {
+        refundId: existing.id,
+        orderId: existing.orderId,
+        error: error instanceof Error ? error.message : error,
+      });
+      return errorResponse("Não foi possível confirmar a fatura original antes do reembolso.", 503);
+    }
+  }
+
+  let updated;
+  try {
+    updated = await prisma.$transaction(async (tx) => {
+      const saved = await tx.refund.update({
+        where: { id: existing.id },
+        data: {
+          status: parsed.data.status,
+          processedBy: actor,
+          processedAt: parsed.data.status === "SUCCEEDED" ? new Date() : null,
+          failureReason: parsed.data.status === "FAILED" ? parsed.data.note!.trim() : null,
+        },
+      });
+
+      if (parsed.data.status === "SUCCEEDED") {
+        const totals = await tx.refund.aggregate({
+          where: { paymentId: existing.paymentId, status: "SUCCEEDED" },
+          _sum: { amountEUR: true, amountKZ: true },
+        });
+        const refundedTotal = existing.payment.currency === "EUR"
+          ? Number(totals._sum.amountEUR || 0)
+          : Number(totals._sum.amountKZ || 0);
+        const originalTotal = existing.payment.currency === "EUR"
+          ? Number(existing.payment.amountEUR)
+          : Number(existing.payment.amountKZ);
+        await tx.order.update({
+          where: { id: existing.orderId },
+          data: { status: refundedTotal + 0.000001 >= originalTotal ? "REFUNDED" : "PARTIALLY_REFUNDED" },
+        });
+      }
+      return saved;
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5000, timeout: 10000 });
+  } catch (error) {
+    if ((error as { code?: string })?.code === "P2034") {
+      return errorResponse("O estado do reembolso mudou em paralelo. Atualize a lista antes de tentar novamente.", 409);
+    }
+    logger.error("Unable to update manual refund status", {
+      refundId: existing.id,
+      error: error instanceof Error ? error.message : error,
+    });
+    return errorResponse("Não foi possível atualizar o reembolso.", 503);
+  }
+
+  let creditNotePending = false;
+  if (updated.status === "SUCCEEDED") {
+    try {
+      await issueCreditNoteForSucceededRefund(updated.id, actor);
+    } catch (error) {
+      creditNotePending = true;
+      logger.error("Manual refund succeeded but credit note issuance is pending", {
+        refundId: updated.id,
+        orderId: existing.orderId,
+        error: error instanceof Error ? error.message : error,
+      });
+    }
+    await notifyRefund({
+      userId: existing.userId,
+      orderId: existing.orderId,
+      orderNumber: existing.order.orderNumber,
+      refundId: updated.id,
+      status: "SUCCEEDED",
+    });
+  } else {
+    await createNotificationIfAllowed({
+      userId: existing.userId,
+      channel: "orderUpdates",
+      type: "REFUND_FAILED",
+      title: "Reembolso não concluído",
+      message: "O reembolso da encomenda " + existing.order.orderNumber + " foi marcado como falhado. Motivo: " + parsed.data.note!.trim(),
+      link: existing.order.companyId ? "/b2b/financeiro" : "/account/invoices",
+      dedupeKey: "refund:" + updated.id + ":status:FAILED",
+    }).catch(() => undefined);
+  }
+
+  return Response.json({ data: updated, creditNotePending });
 }
