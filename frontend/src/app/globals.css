@@ -41,6 +41,143 @@ a, button, input, textarea {
   @apply mx-auto w-full max-w-[1280px] px-4;
 }
 
+.storefront-public {
+  --color-primary: #8a5b00;
+  --color-primary-dark: #6b4500;
+  --color-primary-light: #fff4d4;
+  background-color: #f6f6f4;
+  background-image: radial-gradient(circle at 8% 0%, rgba(245, 168, 0, 0.07), transparent 24%);
+  padding-bottom: 5.5rem;
+}
+
+@media (min-width: 1024px) {
+  .storefront-public { padding-bottom: 0; }
+}
+
+.storefront-header {
+  box-shadow: 0 8px 24px rgba(20, 22, 25, 0.08);
+}
+
+.storefront-header > div:first-child {
+  background-color: #17191c !important;
+  color: #d4d5d7;
+}
+
+.storefront-header > div:nth-child(2) {
+  border-color: #e8e8e6;
+  background-color: #fff;
+  color: #17191c;
+}
+
+.storefront-header > div:nth-child(2) > div {
+  color: #17191c;
+}
+
+.storefront-header > div:nth-child(2) .text-white {
+  color: #17191c !important;
+}
+
+.storefront-header .text-blue-100 {
+  color: #8a5b00 !important;
+}
+
+.storefront-header > div:nth-child(2) > div > form {
+  border-color: #dedfdf;
+  background-color: #f4f5f5;
+}
+
+.storefront-header > div:nth-child(2) > div > form button {
+  background-color: #f5a800;
+  color: #17191c;
+}
+
+.storefront-header > div:nth-child(2) > div > form button:hover {
+  background-color: #ffc43d;
+}
+
+.storefront-header > div:nth-child(3) {
+  border-bottom: 1px solid #e8e8e6;
+  background-color: #fff;
+  color: #17191c;
+}
+
+.storefront-header > div:nth-child(3) a {
+  color: #34383d;
+}
+
+.storefront-header > div:nth-child(3) a:hover {
+  background-color: #f5f5f3;
+  color: #17191c;
+}
+
+.storefront-header > div:nth-child(3) > div > div:first-child > button {
+  background-color: #f5a800;
+  color: #17191c;
+}
+
+.storefront-header > div:nth-child(3) > div > div:first-child > button:hover {
+  background-color: #ffc43d;
+}
+
+.storefront-mobile-nav > div {
+  border-color: #dedfdf;
+  box-shadow: 0 14px 36px rgba(20, 22, 25, 0.16);
+}
+
+.storefront-mobile-nav a[aria-current="page"] {
+  background-color: #fff4d4 !important;
+  color: #17191c !important;
+}
+
+.storefront-public [class*="text-[#1d6ac4]"] { color: #8a5b00 !important; }
+.storefront-public [class*="bg-[#1d6ac4]"] { background-color: #f5a800 !important; color: #17191c !important; }
+.storefront-public [class*="border-[#1d6ac4]"] { border-color: #f5a800 !important; }
+.storefront-public [class*="ring-[#1d6ac4]"] { --tw-ring-color: #f5a800 !important; }
+.storefront-public [class*="hover:text-[#1d6ac4]"]:hover { color: #8a5b00 !important; }
+.storefront-public [class*="hover:bg-[#155099]"]:hover { background-color: #d99100 !important; color: #17191c !important; }
+.storefront-public [class*="hover:bg-[#e8f0fc]"]:hover { background-color: #fff4d4 !important; }
+.storefront-public [class*="hover:border-[#1d6ac4]"]:hover { border-color: #f5a800 !important; }
+.storefront-public [class*="focus:border-[#1d6ac4]"]:focus,
+.storefront-public [class*="focus-within:border-[#1d6ac4]"]:focus-within { border-color: #f5a800 !important; }
+
+.storefront-public [class~="bg-blue-50"],
+.storefront-public [class*="bg-blue-50/"],
+.storefront-public [class~="bg-blue-100"],
+.storefront-public [class*="bg-blue-100/"] { background-color: #fff4d4 !important; }
+.storefront-public [class~="text-blue-500"],
+.storefront-public [class~="text-blue-600"],
+.storefront-public [class~="text-blue-700"],
+.storefront-public [class~="text-blue-800"],
+.storefront-public [class~="text-blue-900"] { color: #8a5b00 !important; }
+.storefront-public [class*="border-blue-"] { border-color: #f5dea5 !important; }
+.storefront-public [class*="ring-blue-"] { --tw-ring-color: #f5dea5 !important; }
+.storefront-public [class~="bg-blue-600"],
+.storefront-public [class~="bg-blue-700"] { background-color: #f5a800 !important; color: #17191c !important; }
+.storefront-public [class~="hover:bg-blue-500"]:hover,
+.storefront-public [class~="hover:bg-blue-600"]:hover,
+.storefront-public [class~="hover:bg-blue-700"]:hover { background-color: #ffc43d !important; color: #17191c !important; }
+.storefront-public [class*="hover:text-blue-"]:hover { color: #6b4500 !important; }
+.storefront-public [class~="focus:border-blue-500"]:focus,
+.storefront-public [class~="focus:border-blue-600"]:focus,
+.storefront-public [class~="focus-within:border-blue-500"]:focus-within,
+.storefront-public [class~="focus-within:border-blue-600"]:focus-within { border-color: #f5a800 !important; }
+
+.storefront-public footer { background-color: #17191c !important; }
+
+.storefront-public .btn-primary {
+  background-color: #f5a800;
+  color: #17191c;
+}
+
+.storefront-public .btn-primary:hover { background-color: #ffc43d; }
+
+.storefront-public .btn-secondary {
+  border-color: #d99100;
+  color: #8a5b00;
+}
+
+.storefront-public .btn-secondary:hover { background-color: #fff4d4; }
+
 .soft-card {
   box-shadow: 0 16px 36px rgba(15, 23, 42, 0.06);
   border: 1px solid rgba(148, 163, 184, 0.18);
@@ -66,10 +203,10 @@ a, button, input, textarea {
   @apply inline-flex items-center rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[10px] font-semibold text-gray-700;
 }
 
-/* RUBRICA DILIGENTE (SU), LDA brand blue */
-.bg-brand { background-color: #1d6ac4; }
-.text-brand { color: #1d6ac4; }
-.border-brand { border-color: #1d6ac4; }
+/* Brand utilities inherit the active app palette. */
+.bg-brand { background-color: var(--color-primary); }
+.text-brand { color: var(--color-primary); }
+.border-brand { border-color: var(--color-primary); }
 
 /* Shared components */
 .btn-primary {

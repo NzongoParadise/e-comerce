@@ -53,20 +53,20 @@ export default function B2BLayout({ children }: { children: React.ReactNode }) {
   const closeMobile = () => setSidebarOpen(false);
 
   if (!authResolved) return <div className="flex min-h-screen items-center justify-center bg-[#f5f6fa] text-sm text-slate-500">A carregar...</div>;
-  if (!authenticated) return <><Header /><main className="flex-1">{children}</main><Footer /></>;
+  if (!authenticated) return <div className="storefront-public min-h-screen"><Header /><main className="flex-1">{children}</main><Footer /></div>;
 
   return (
-    <div className="min-h-screen bg-[#f6f8fb] text-slate-950">
+    <div className="storefront-public min-h-screen text-slate-950">
       <header className="sticky top-0 z-50 h-16 border-b border-slate-200 bg-white/95 backdrop-blur">
         <div className="flex h-full items-center gap-3 px-4 lg:px-6">
           <button type="button" onClick={() => setSidebarOpen(true)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 lg:hidden" aria-label="Abrir menu empresarial"><Menu size={18} /></button>
           <Link href="/b2b" className="flex min-w-0 items-center gap-3 lg:w-64">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#1555d8] text-white shadow-sm"><Building2 size={17} /></span>
-            <span className="hidden min-w-0 sm:block"><strong className="block truncate text-sm font-black tracking-tight">RUBRICA DILIGENTE</strong><span className="block text-[9px] font-bold uppercase tracking-[0.16em] text-[#1555d8]">B2B · Angola + Portugal</span></span>
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f5a800] text-[#17191c] shadow-sm"><Building2 size={17} /></span>
+            <span className="hidden min-w-0 sm:block"><strong className="block truncate text-sm font-black tracking-tight">RUBRICA DILIGENTE</strong><span className="block text-[9px] font-bold uppercase tracking-[0.16em] text-[#8a5b00]">B2B · Angola + Portugal</span></span>
           </Link>
           <div className="relative hidden max-w-2xl flex-1 md:block">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && search.trim()) window.location.href = `/b2b/catalogo?search=${encodeURIComponent(search.trim())}`; }} placeholder="Pesquisar no catálogo, encomendas ou cotações..." className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-3 text-xs outline-none transition focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100" aria-label="Pesquisa empresarial" />
+            <input value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && search.trim()) window.location.href = `/b2b/catalogo?search=${encodeURIComponent(search.trim())}`; }} placeholder="Pesquisar no catálogo, encomendas ou cotações..." className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-3 text-xs outline-none transition focus:border-[#f5a800] focus:bg-white focus:ring-2 focus:ring-[#f5a800]/20" aria-label="Pesquisa empresarial" />
           </div>
           <div className="ml-auto flex items-center gap-2">
             <Link href="/products" className="hidden items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-bold text-slate-700 hover:bg-slate-50 sm:inline-flex">Loja</Link>
@@ -85,8 +85,8 @@ export default function B2BLayout({ children }: { children: React.ReactNode }) {
                 <p className="mb-2 px-3 text-[9px] font-black uppercase tracking-[0.16em] text-slate-400">{group.label}</p>
                 <div className="space-y-1">{group.items.map(({ href, label, Icon }) => {
                   const active = isActive(pathname, href);
-                  return <Link key={href} href={href} onClick={closeMobile} aria-current={active ? "page" : undefined} className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 text-xs font-semibold transition ${active ? "bg-blue-50 text-blue-700 shadow-sm ring-1 ring-blue-100" : "text-slate-600 hover:bg-slate-50 hover:text-slate-950"}`}>
-                    <Icon size={15} className={active ? "text-blue-700" : "text-slate-400 group-hover:text-slate-600"} /><span className="flex-1">{label}</span>{active && <ChevronRight size={13} className="text-blue-500" />}
+                  return <Link key={href} href={href} onClick={closeMobile} aria-current={active ? "page" : undefined} className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 text-xs font-semibold transition ${active ? "bg-[#fff4d4] text-[#8a5b00] shadow-sm ring-1 ring-[#f5dea5]" : "text-slate-600 hover:bg-slate-50 hover:text-slate-950"}`}>
+                    <Icon size={15} className={active ? "text-[#8a5b00]" : "text-slate-400 group-hover:text-slate-600"} /><span className="flex-1">{label}</span>{active && <ChevronRight size={13} className="text-[#d99100]" />}
                   </Link>;
                 })}</div>
               </section>)}
