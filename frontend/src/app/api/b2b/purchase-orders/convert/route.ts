@@ -84,7 +84,7 @@ export async function POST(request: Request) {
         if (updated.count !== 1) throw new Error(`STOCK:${item.product.name}`);
       }
 
-      const orderNumber = `B2B-${new Date().getFullYear()}-${String(po.id).padStart(7, "0")}`;
+      const orderNumber = `B2B-${new Date().getFullYear()}-${String(po.id).padStart(6, "0")}-${Date.now().toString(36).toUpperCase()}`;
       const order = await tx.order.create({
         data: {
           orderNumber,
