@@ -3,6 +3,7 @@ import { prisma } from "@/lib/server/prisma";
 import { errorResponse } from "@/lib/server/api";
 import { logger } from "@/lib/server/logger";
 import { issueInvoiceForPaidOrder } from "@/lib/server/finance/issueInvoiceForPaidOrder";
+import { issueCreditNoteForSucceededRefund } from "@/lib/server/finance/issueCreditNoteForSucceededRefund";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -63,15 +64,56 @@ export async function GET(request: Request) {
     }
   }
 
+  const creditNoteCandidates = await prisma.refund.findMany({
+    where: {
+      status: "SUCCEEDED",
+      creditNote: { is: null },
+    },
+    select: { id: true, orderId: true },
+    orderBy: [{ processedAt: "asc" }, { createdAt: "asc" }],
+    take: 100,
+  });
+
+  let creditNotesIssued = 0;
+  let creditNotesAlreadyIssued = 0;
+  const creditNoteFailures: Array<{ refundId: number; reason: string }> = [];
+
+  for (const refund of creditNoteCandidates) {
+    try {
+      const result = await issueCreditNoteForSucceededRefund(refund.id, "SYSTEM_CRON");
+      if (!result) continue;
+      if (result.created) creditNotesIssued += 1;
+      else creditNotesAlreadyIssued += 1;
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "Unknown credit note error";
+      creditNoteFailures.push({ refundId: refund.id, reason });
+      logger.error("Automatic credit note issuance failed", {
+        refundId: refund.id,
+        orderId: refund.orderId,
+        error: reason,
+      });
+    }
+  }
+
   return Response.json({
     data: {
-      scanned: candidates.length,
-      issued,
-      alreadyIssued,
-      skipped,
-      failed: failures.length,
-      failures,
-      hasMoreCandidates: candidates.length === 100,
+      invoiceReconciliation: {
+        scanned: candidates.length,
+        issued,
+        alreadyIssued,
+        skipped,
+        failed: failures.length,
+        failures,
+        hasMoreCandidates: candidates.length === 100,
+      },
+      creditNoteReconciliation: {
+        scanned: creditNoteCandidates.length,
+        issued: creditNotesIssued,
+        alreadyIssued: creditNotesAlreadyIssued,
+        failed: creditNoteFailures.length,
+        failures: creditNoteFailures,
+        hasMoreCandidates: creditNoteCandidates.length === 100,
+      },
       ranAt: now.toISOString(),
     },
   });
