@@ -1,5 +1,6 @@
+import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/server/prisma';
-import { authenticate, errorResponse, isAdmin, prismaErrorCode, readJson } from '@/lib/server/api';
+import { authenticate, errorResponse, isAdmin, prismaErrorCode, readJson, userSubject } from '@/lib/server/api';
 import { z } from 'zod';
 import { createNotificationsForChannel } from '@/lib/server/notifications';
 
@@ -41,6 +42,24 @@ const querySchema = z.object({
   pageSize: z.coerce.number().min(1).max(100).default(10),
 });
 
+
+const reviewQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(50).default(10),
+  rating: z.coerce.number().int().min(1).max(5).optional(),
+  sort: z.enum(["recent", "highest", "lowest"]).default("recent"),
+});
+const reviewSchema = z.object({
+  orderId: z.number().int().positive(),
+  rating: z.number().int().min(1).max(5),
+  title: z.string().trim().max(120).optional(),
+  comment: z.string().trim().min(10).max(2000),
+});
+
+function pathParts(request: Request) {
+  return new URL(request.url).pathname.split("/").filter(Boolean);
+}
+
 function productSegment(request: Request) {
   const parts = new URL(request.url).pathname.split('/').filter(Boolean);
   return parts.length === 3 ? parts[2] : null;
@@ -54,6 +73,62 @@ async function requireAdmin(request: Request) {
 }
 
 export async function GET(request: Request) {
+
+  const routeParts = pathParts(request);
+  if (routeParts.length === 4 && routeParts[3] === "reviews") {
+    const slug = routeParts[2];
+    const product = await prisma.product.findUnique({ where: { slug }, select: { id: true } });
+    if (!product) return errorResponse("Product not found", 404);
+
+    const params = Object.fromEntries(new URL(request.url).searchParams);
+    const parsed = reviewQuerySchema.safeParse(params);
+    if (!parsed.success) return errorResponse("Filtros de avaliação inválidos.", 400);
+    const { page, pageSize, rating, sort } = parsed.data;
+    const where: Prisma.ProductReviewWhereInput = {
+      productId: product.id,
+      status: "APPROVED",
+      ...(rating ? { rating } : {}),
+    };
+    const orderBy: Prisma.ProductReviewOrderByWithRelationInput =
+      sort === "highest" ? { rating: "desc" } :
+      sort === "lowest" ? { rating: "asc" } :
+      { createdAt: "desc" };
+
+    const [reviews, total, summary, distribution] = await prisma.$transaction([
+      prisma.productReview.findMany({
+        where,
+        include: { user: { select: { name: true } } },
+        orderBy: [orderBy, { createdAt: "desc" }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      prisma.productReview.count({ where }),
+      prisma.productReview.aggregate({
+        where: { productId: product.id, status: "APPROVED" },
+        _avg: { rating: true },
+        _count: { _all: true },
+      }),
+      prisma.productReview.groupBy({
+        by: ["rating"],
+        where: { productId: product.id, status: "APPROVED" },
+        _count: { _all: true },
+      }),
+    ]);
+
+    return Response.json({
+      data: reviews,
+      meta: { total, page, pageSize, pageCount: Math.ceil(total / pageSize) },
+      summary: {
+        averageRating: Number(summary._avg.rating || 0),
+        count: summary._count._all,
+        distribution: Object.fromEntries([1, 2, 3, 4, 5].map((value) => [
+          value,
+          distribution.find((row) => row.rating === value)?._count._all || 0,
+        ])),
+      },
+    });
+  }
+
   const segment = productSegment(request);
   if (segment !== null) {
     try {
@@ -127,6 +202,67 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+
+  const routeParts = pathParts(request);
+  if (routeParts.length === 4 && routeParts[3] === "reviews") {
+    const auth = await authenticate(request);
+    const subject = userSubject(auth);
+    if (!subject) return errorResponse("Inicie sessão para avaliar uma compra.", 401);
+
+    const parsed = reviewSchema.safeParse(await readJson(request));
+    if (!parsed.success) return errorResponse("Dados da avaliação inválidos.", 400, parsed.error.flatten().fieldErrors);
+
+    const user = await prisma.user.findUnique({
+      where: { externalId: subject },
+      select: { id: true },
+    });
+    if (!user) return errorResponse("Perfil de utilizador não encontrado.", 401);
+
+    const product = await prisma.product.findUnique({
+      where: { slug: routeParts[2] },
+      select: { id: true, name: true },
+    });
+    if (!product) return errorResponse("Produto não encontrado.", 404);
+
+    const eligibleOrder = await prisma.order.findFirst({
+      where: {
+        id: parsed.data.orderId,
+        userId: user.id,
+        payment: { is: { status: "PAID" } },
+        items: { some: { productId: product.id } },
+      },
+      select: { id: true },
+    });
+    if (!eligibleOrder) {
+      return errorResponse("Só pode avaliar um produto comprado numa encomenda sua com pagamento confirmado.", 403);
+    }
+
+    try {
+      const review = await prisma.productReview.create({
+        data: {
+          productId: product.id,
+          userId: user.id,
+          orderId: eligibleOrder.id,
+          rating: parsed.data.rating,
+          title: parsed.data.title || null,
+          comment: parsed.data.comment,
+          status: "PENDING",
+          verifiedPurchase: true,
+        },
+      });
+      return Response.json({
+        data: review,
+        message: "Avaliação enviada para moderação. Só aparecerá publicamente depois de aprovada.",
+      }, { status: 201 });
+    } catch (error) {
+      if (prismaErrorCode(error) === "P2002") {
+        return errorResponse("Já enviou uma avaliação para este produto.", 409);
+      }
+      console.error("Unable to create product review:", error);
+      return errorResponse("Não foi possível registar a avaliação.", 503);
+    }
+  }
+
   const authError = await requireAdmin(request);
   if (authError) return authError;
   const parsed = productSchema.safeParse(await readJson(request));
