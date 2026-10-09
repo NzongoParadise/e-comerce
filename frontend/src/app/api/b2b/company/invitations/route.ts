@@ -68,6 +68,11 @@ export async function GET(request: Request) {
   if (!ctx) return errorResponse("Não autenticado.", 401);
   if (!ctx.membership) return errorResponse("A empresa não está ativa ou não existe.", 403);
 
+  await prisma.b2BInvitation.updateMany({
+    where: { companyId: ctx.membership.companyId, status: "PENDING", expiresAt: { lte: new Date() } },
+    data: { status: "EXPIRED" },
+  });
+
   const invitations = await prisma.b2BInvitation.findMany({
     where: { companyId: ctx.membership.companyId },
     include: { invitedBy: { select: { name: true, email: true } } },
