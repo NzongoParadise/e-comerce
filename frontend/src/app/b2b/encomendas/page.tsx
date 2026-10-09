@@ -30,7 +30,7 @@ type PO = {
     status: string;
     items: Array<{ quantity: number; name: string; subtotal: string | number }>;
   } | null;
-  order?: { orderNumber: string; status: string; country: "AO" | "PT"; currency: string; totalEUR: string | number; totalKZ: string | number; payment?: { id: number; status: string; method: string; entity: string | null; referenceNumber: string | null; expiresAt: string | null; paidAt: string | null } | null } | null;
+  order?: { orderNumber: string; status: string; country: "AO" | "PT"; currency: string; totalEUR: string | number; totalKZ: string | number; payment?: { id: number; status: string; method: string; currency: string; amountEUR: string | number; amountKZ: string | number; entity: string | null; referenceNumber: string | null; expiresAt: string | null; paidAt: string | null } | null } | null;
 };
 
 type Order = {
