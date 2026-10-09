@@ -101,11 +101,6 @@ export async function PATCH(request: Request) {
         });
       }
 
-      await tx.company.update({
-        where: { id: quote.companyId },
-        data: { status: "ACTIVE" },
-      });
-
       const updated = await tx.quote.update({
         where: { id: quote.id },
         data: { status: "APPROVED", notes: note ? [quote.notes, note].filter(Boolean).join("\n") : quote.notes },
