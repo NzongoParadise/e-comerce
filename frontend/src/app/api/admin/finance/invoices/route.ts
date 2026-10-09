@@ -25,13 +25,17 @@ export async function GET(request: Request) {
 
   const params = new URL(request.url).searchParams;
   const orderValue = params.get("orderId");
+  const invoiceValue = params.get("invoiceId");
   if (orderValue && (!Number.isInteger(Number(orderValue)) || Number(orderValue) <= 0)) {
     return errorResponse("ID da encomenda inválido.", 400);
+  }
+  if (invoiceValue && (!Number.isInteger(Number(invoiceValue)) || Number(invoiceValue) <= 0)) {
+    return errorResponse("ID da fatura inválido.", 400);
   }
 
   try {
     const invoices = await prisma.invoice.findMany({
-      where: orderValue ? { orderId: Number(orderValue) } : undefined,
+      where: invoiceValue ? { id: Number(invoiceValue) } : orderValue ? { orderId: Number(orderValue) } : undefined,
       include: {
         order: {
           select: {
