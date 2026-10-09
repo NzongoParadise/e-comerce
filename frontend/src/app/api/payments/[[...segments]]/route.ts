@@ -119,52 +119,204 @@ export async function GET(request: Request) {
 
 async function handleMulticaixaWebhook(request: Request) {
   const rawBody = Buffer.from(await request.arrayBuffer());
-  const signature = request.headers.get('x-multicaixa-signature') || undefined;
+  const signature = request.headers.get("x-multicaixa-signature") || undefined;
   if (!multicaixaProvider.verifyWebhook(rawBody, signature)) {
-    logger.warn('Rejected Multicaixa webhook signature', { hasSignature: Boolean(signature) });
-    return errorResponse('Invalid webhook signature', 401);
+    logger.warn("Rejected Multicaixa webhook signature", { hasSignature: Boolean(signature) });
+    return errorResponse("Invalid webhook signature", 401);
   }
+
   let event;
   try {
     event = multicaixaProvider.parseWebhook(rawBody);
   } catch (error) {
-    logger.warn('Invalid Multicaixa webhook payload', { error: error instanceof Error ? error.message : error });
-    return errorResponse('Invalid webhook payload', 400);
+    logger.warn("Invalid Multicaixa webhook payload", { error: error instanceof Error ? error.message : error });
+    return errorResponse("Invalid webhook payload", 400);
   }
+
   const payment = await prisma.payment.findUnique({
     where: { providerPaymentId: event.providerPaymentId },
-    include: { order: { select: { id: true, orderNumber: true, userId: true } } },
+    include: {
+      order: {
+        select: {
+          id: true,
+          orderNumber: true,
+          userId: true,
+          companyId: true,
+          status: true,
+          items: { select: { productId: true, quantity: true } },
+        },
+      },
+    },
   });
-  if (!payment) return errorResponse('Payment not found', 404);
-  if (Number(payment.amountKZ) !== event.amountKZ || payment.currency !== event.currency) return errorResponse('Payment amount or currency mismatch', 422);
+  if (!payment) return errorResponse("Payment not found", 404);
+  if (Number(payment.amountKZ) !== event.amountKZ || payment.currency !== event.currency) {
+    logger.warn("Rejected Multicaixa webhook amount/currency mismatch", {
+      paymentId: payment.id,
+      orderId: payment.orderId,
+      expectedAmount: Number(payment.amountKZ),
+      receivedAmount: event.amountKZ,
+      expectedCurrency: payment.currency,
+      receivedCurrency: event.currency,
+    });
+    return errorResponse("Payment amount or currency mismatch", 422);
+  }
+
+  let outcome = "UPDATED";
   try {
-    await prisma.$transaction(async (transaction) => {
-      await transaction.paymentEvent.create({ data: {
-        paymentId: payment.id,
-        providerEventId: event.providerEventId,
-        eventType: event.type,
-        status: event.status,
-        amountKZ: event.amountKZ,
-        currency: event.currency,
-        payload: event.payload as never,
-        processedAt: new Date(),
-      } });
-      await transaction.payment.update({ where: { id: payment.id }, data: statusUpdates(event.status) });
-      if (event.status === 'PAID') await transaction.order.update({ where: { id: payment.orderId }, data: { status: 'PAYMENT_CONFIRMED' } });
+    outcome = await prisma.$transaction(async (transaction) => {
+      const latePaidAfterCancellation =
+        event.status === "PAID" &&
+        ["CANCELLED", "PAYMENT_REVIEW_REQUIRED"].includes(payment.order.status);
+
+      await transaction.paymentEvent.create({
+        data: {
+          paymentId: payment.id,
+          providerEventId: event.providerEventId,
+          eventType: event.type,
+          status: latePaidAfterCancellation ? "PAID_REVIEW_REQUIRED" : event.status,
+          amountKZ: event.amountKZ,
+          currency: event.currency,
+          payload: event.payload as never,
+          processedAt: new Date(),
+        },
+      });
+
+      if (event.status === "PAID") {
+        if (latePaidAfterCancellation) {
+          await transaction.payment.update({
+            where: { id: payment.id },
+            data: { ...statusUpdates("PAID") },
+          });
+          if (payment.order.status === "CANCELLED") {
+            await transaction.order.update({
+              where: { id: payment.order.id },
+              data: { status: "PAYMENT_REVIEW_REQUIRED" },
+            });
+            await transaction.trackingEvent.create({
+              data: {
+                orderId: payment.order.id,
+                status: "PAYMENT_REVIEW_REQUIRED",
+                location: "Online",
+                description: "Pagamento MULTICAIXA confirmado após cancelamento e libertação do stock. É necessária revisão manual antes do processamento.",
+              },
+            });
+          }
+          return "LATE_PAID_REVIEW";
+        }
+
+        await transaction.payment.update({
+          where: { id: payment.id },
+          data: { ...statusUpdates("PAID") },
+        });
+        const confirmed = await transaction.order.updateMany({
+          where: { id: payment.order.id, status: { in: ["PENDING", "AWAITING_PAYMENT"] } },
+          data: { status: "PAYMENT_CONFIRMED" },
+        });
+        if (!confirmed.count && payment.order.status !== "PAYMENT_CONFIRMED" &&
+            !["PROCESSING", "SHIPPED", "DELIVERED", "COMPLETED"].includes(payment.order.status)) {
+          logger.error("Multicaixa reports paid order in an unexpected lifecycle state", {
+            paymentId: payment.id,
+            orderId: payment.order.id,
+            orderStatus: payment.order.status,
+          });
+          return "PAID_REVIEW_REQUIRED";
+        }
+        return "PAID";
+      }
+
+      if (["FAILED", "EXPIRED", "CANCELLED"].includes(event.status)) {
+        if (["PAYMENT_CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED", "COMPLETED", "REFUNDED"].includes(payment.order.status)) {
+          logger.warn("Ignoring late non-success Multicaixa event for an already paid/fulfilled order", {
+            paymentId: payment.id,
+            orderId: payment.order.id,
+            eventStatus: event.status,
+            orderStatus: payment.order.status,
+          });
+          return "LATE_FAILURE_IGNORED";
+        }
+
+        if (payment.order.status === "AWAITING_PAYMENT") {
+          const released = await cancelAwaitingPaymentAndReleaseStock(
+            transaction,
+            payment.order.id,
+            payment.order.items,
+            event.status === "EXPIRED" ? "EXPIRED" : event.status === "CANCELLED" ? "CANCELLED" : "FAILED",
+            event.status === "EXPIRED"
+              ? "Encomenda cancelada após expiração do pagamento MULTICAIXA."
+              : event.status === "CANCELLED"
+                ? "Encomenda cancelada no gateway MULTICAIXA."
+                : "Encomenda cancelada após falha do pagamento MULTICAIXA.",
+          );
+
+          if (released && payment.order.companyId) {
+            await transaction.purchaseOrder.updateMany({
+              where: { companyId: payment.order.companyId, orderId: payment.order.id, status: "CONVERTED" },
+              data: { status: "APPROVED", orderId: null, approvedBy: null, approvedAt: null },
+            });
+          }
+        } else {
+          await transaction.payment.updateMany({
+            where: { id: payment.id, status: { not: "PAID" } },
+            data: statusUpdates(event.status),
+          });
+        }
+        return "FAILED";
+      }
+
+      await transaction.payment.updateMany({
+        where: { id: payment.id, status: { not: "PAID" } },
+        data: statusUpdates(event.status),
+      });
+      return "UPDATED";
     });
   } catch (error) {
-    if (error instanceof Error && error.message.includes('Unique constraint')) return Response.json({ received: true, duplicate: true });
+    if (error instanceof Error && error.message.includes("Unique constraint")) {
+      return Response.json({ received: true, duplicate: true });
+    }
     throw error;
   }
-  const lifecycle = event.status === 'PAID'
-    ? { type: 'ORDER_PAYMENT_CONFIRMED', title: 'Pagamento confirmado', message: `O pagamento da encomenda ${payment.order.orderNumber} foi confirmado.` }
-    : ['FAILED', 'EXPIRED', 'CANCELLED'].includes(event.status)
-      ? { type: 'ORDER_PAYMENT_FAILED', title: 'Pagamento não concluído', message: `O pagamento da encomenda ${payment.order.orderNumber} não foi concluído.` }
-      : null;
-  if (lifecycle) {
-    await createNotificationIfAllowed({ userId: payment.order.userId, channel: 'orderUpdates', ...lifecycle, link: `/account/orders/${payment.order.id}`, dedupeKey: `order:${payment.order.id}:payment:${event.status}` })
-      .catch((error) => console.error('Unable to create Multicaixa payment notification:', error));
+
+  if (outcome === "LATE_PAID_REVIEW" || outcome === "PAID_REVIEW_REQUIRED") {
+    logger.error("Multicaixa payment requires manual reconciliation", {
+      paymentId: payment.id,
+      orderId: payment.order.id,
+      companyId: payment.order.companyId,
+      providerPaymentId: event.providerPaymentId,
+    });
+    await createNotificationIfAllowed({
+      userId: payment.order.userId,
+      channel: "orderUpdates",
+      type: "PAYMENT_REVIEW_REQUIRED",
+      title: "Pagamento em verificação",
+      message: `O pagamento da encomenda ${payment.order.orderNumber} foi recebido, mas o estado da encomenda requer revisão manual antes do processamento.`,
+      link: payment.order.companyId ? "/b2b/encomendas" : `/account/orders/${payment.order.id}`,
+      dedupeKey: `order:${payment.order.id}:payment:review-required`,
+    }).catch((error) => logger.error("Unable to notify about payment review", { orderId: payment.order.id, error: error instanceof Error ? error.message : error }));
+    return Response.json({ received: true, reviewRequired: true });
   }
+
+  if (outcome === "PAID") {
+    await createNotificationIfAllowed({
+      userId: payment.order.userId,
+      channel: "orderUpdates",
+      type: "ORDER_PAYMENT_CONFIRMED",
+      title: "Pagamento confirmado",
+      message: `O pagamento da encomenda ${payment.order.orderNumber} foi confirmado.`,
+      link: payment.order.companyId ? "/b2b/encomendas" : `/account/orders/${payment.order.id}`,
+      dedupeKey: `order:${payment.order.id}:payment:paid`,
+    }).catch((error) => logger.error("Unable to create Multicaixa payment notification", { orderId: payment.order.id, error: error instanceof Error ? error.message : error }));
+  } else if (outcome === "FAILED") {
+    await createNotificationIfAllowed({
+      userId: payment.order.userId,
+      channel: "orderUpdates",
+      type: "ORDER_PAYMENT_FAILED",
+      title: "Pagamento não concluído",
+      message: `O pagamento da encomenda ${payment.order.orderNumber} não foi concluído. Se for uma compra empresarial, volte às encomendas para gerar uma nova tentativa.`,
+      link: payment.order.companyId ? "/b2b/encomendas" : `/account/orders/${payment.order.id}`,
+      dedupeKey: `order:${payment.order.id}:payment:failed`,
+    }).catch((error) => logger.error("Unable to create Multicaixa payment failure notification", { orderId: payment.order.id, error: error instanceof Error ? error.message : error }));
+  }
+
   return Response.json({ received: true });
 }
 
