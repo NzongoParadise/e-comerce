@@ -21,12 +21,14 @@ export type Product = {
 };
 
 export function ProductTile({ product }: { product: Product }) {
-  const { market, formatPrice, eurToKz } = useMarket();
+  const { market, formatPrice } = useMarket();
   const { addToCart } = useCart();
   const { isFavorite, toggleFavorite } = useFavorites();
 
-  const euroPrice = Number(product.prices?.find((price) => price.market === "PT")?.amount ?? product.basePrice);
-  const kwanzaPrice = Number(product.prices?.find((price) => price.market === "AO")?.amount ?? eurToKz(euroPrice));
+  const euroPrice = Number(product.prices?.find((price) => price.market === "PT" && price.currency === "EUR")?.amount ?? product.basePrice);
+  const configuredKwanza = product.prices?.find((price) => price.market === "AO" && price.currency === "AOA")?.amount;
+  const kwanzaPrice = configuredKwanza === undefined ? null : Number(configuredKwanza);
+  const hasActivePrice = market === "PT" ? euroPrice > 0 : kwanzaPrice !== null && kwanzaPrice > 0;
   const favorite = isFavorite(product.id);
 
   return (
@@ -47,6 +49,8 @@ export function ProductTile({ product }: { product: Product }) {
             category: product.category.name,
             specs: product.description || "",
             priceEUR: euroPrice,
+            priceKZ: kwanzaPrice ?? undefined,
+            stock: product.stock,
             imageUrl: product.imageUrl || undefined,
           })
         }
@@ -84,12 +88,12 @@ export function ProductTile({ product }: { product: Product }) {
         </div>
 
         <div className="mt-auto pt-3">
-          <p className="text-lg font-black tracking-tight text-[#df1f2d]">{formatPrice(euroPrice)}</p>
-          <p className="mt-0.5 text-[9px] text-slate-400">
-            {market === "PT"
-              ? `Kz ${kwanzaPrice.toLocaleString("pt-AO")}`
-              : `€ ${euroPrice.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}`}
-          </p>
+          <p className="text-lg font-black tracking-tight text-[#df1f2d]">{market === "PT"
+            ? formatPrice(euroPrice)
+            : kwanzaPrice !== null && kwanzaPrice > 0
+              ? "Kz " + kwanzaPrice.toLocaleString("pt-AO", { maximumFractionDigits: 0 })
+              : "Preço por confirmar"}</p>
+          <p className="mt-0.5 text-[9px] text-slate-400">{market === "AO" && !hasActivePrice ? "Sem preço configurado para Angola" : "Preço do mercado selecionado"}</p>
           <div className="mt-2 flex items-center justify-between gap-2 text-[9px]">
             <span className={product.stock > 0 ? "font-bold text-emerald-600" : "font-bold text-red-600"}>
               {product.stock > 0 ? `${product.stock} em stock` : "Sem stock"}
@@ -98,7 +102,7 @@ export function ProductTile({ product }: { product: Product }) {
           </div>
           <button
             type="button"
-            disabled={product.stock <= 0}
+            disabled={product.stock <= 0 || !hasActivePrice}
             onClick={() =>
               addToCart({
                 id: `${product.id}-default`,
@@ -106,12 +110,12 @@ export function ProductTile({ product }: { product: Product }) {
                 name: product.name,
                 slug: product.slug,
                 priceEUR: euroPrice,
-                priceKZ: kwanzaPrice,
+                priceKZ: kwanzaPrice ?? 0,
                 quantity: 1,
                 imageUrl: product.imageUrl || undefined,
               })
             }
-            className="storefront-cta mt-3 flex w-full items-center justify-center gap-2 px-3"
+            className="storefront-cta mt-3 flex w-full items-center justify-center gap-2 px-3 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <ShoppingCart size={14} strokeWidth={2.4} />
             Adicionar ao carrinho
