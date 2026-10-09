@@ -95,7 +95,7 @@ export default function B2BSettingsPage() {
       <section className="card overflow-hidden">
         <div className="flex items-start gap-3 border-b border-slate-100 p-5 sm:p-6">
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700"><Bell size={20}/></span>
-          <div><h2 className="text-sm font-black text-slate-950">Preferências de comunicação</h2><p className="mt-1 text-xs leading-5 text-slate-500">Escolha os e-mails que pretende receber. As preferências ficam associadas à sua conta e são usadas pelos serviços de notificação que suportam estes canais.</p></div>
+          <div><h2 className="text-sm font-black text-slate-950">Preferências de comunicação</h2><p className="mt-1 text-xs leading-5 text-slate-500">Escolha as comunicações que pretende receber. As preferências ficam associadas à sua conta e são aplicadas pelos canais de notificação que suportam cada opção.</p></div>
         </div>
 
         {loading ? (
