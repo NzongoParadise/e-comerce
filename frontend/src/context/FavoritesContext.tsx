@@ -10,6 +10,8 @@ export type FavoriteProduct = {
   category: string;
   specs: string;
   priceEUR: number;
+  priceKZ?: number;
+  stock?: number;
   oldPriceEUR?: number;
   imageUrl?: string;
   rating?: number;
@@ -38,6 +40,8 @@ function normalizeFavorites(value: unknown): FavoriteProduct[] {
       category: String(candidate.category || "Geral"),
       specs: String(candidate.specs || ""),
       priceEUR: Number.isFinite(Number(candidate.priceEUR)) ? Number(candidate.priceEUR) : 0,
+      ...(Number.isFinite(Number(candidate.priceKZ)) ? { priceKZ: Number(candidate.priceKZ) } : {}),
+      ...(Number.isFinite(Number(candidate.stock)) ? { stock: Math.max(0, Math.floor(Number(candidate.stock))) } : {}),
       ...(Number.isFinite(Number(candidate.oldPriceEUR)) ? { oldPriceEUR: Number(candidate.oldPriceEUR) } : {}),
       ...(candidate.imageUrl ? { imageUrl: String(candidate.imageUrl) } : {}),
       ...(Number.isFinite(Number(candidate.rating)) ? { rating: Number(candidate.rating) } : {}),
@@ -68,7 +72,8 @@ export function FavoritesProvider({ children }: { children: React.ReactNode }) {
         try {
           const response = await fetchWithAuth("/api/favorites", { cache: "no-store" });
           const remoteFavorites = normalizeFavorites(response.data);
-          const merged = normalizeFavorites([...remoteFavorites, ...localFavorites]);
+          // Remote catalogue values are authoritative for IDs already present on the server.
+          const merged = normalizeFavorites([...localFavorites, ...remoteFavorites]);
           if (!active) return;
 
           setFavorites(merged);
