@@ -76,7 +76,8 @@ export async function POST(request: Request) {
   const parsed = schema.safeParse(await readJson(request));
   if (!parsed.success) return errorResponse("Itens da cotação inválidos.", 400);
 
-  const productIds = [...new Set(parsed.data.items.map((item) => item.productId))];
+  const aggregatedItems = Array.from(parsed.data.items.reduce((map, item) => map.set(item.productId, (map.get(item.productId) ?? 0) + item.quantity), new Map<number, number>()).entries()).map(([productId, quantity]) => ({ productId, quantity }));
+  const productIds = aggregatedItems.map((item) => item.productId);
   const products = await prisma.product.findMany({
     where: { id: { in: productIds } },
     include: { prices: true },
@@ -105,7 +106,7 @@ export async function POST(request: Request) {
   }
 
   const calculatedItems = [];
-  for (const requested of parsed.data.items) {
+  for (const requested of aggregatedItems) {
     const product = productMap.get(requested.productId);
     if (!product) return errorResponse("Um ou mais produtos não existem.", 400);
     if (requested.quantity > product.stock) {
@@ -117,11 +118,10 @@ export async function POST(request: Request) {
       .sort((a, b) => b.minQuantity - a.minQuantity)[0];
 
     const marketPrice = product.prices.find((price) => price.market === market && price.currency === currency)?.amount;
-    const unitPrice = matchingRule?.unitPrice ?? marketPrice ?? product.basePrice;
-
-    if (currency === "AOA" && !matchingRule && !marketPrice) {
-      return errorResponse(`Preço empresarial não configurado para ${product.name}.`, 422);
+    if (!matchingRule && !marketPrice) {
+      return errorResponse(`Preço empresarial não configurado para ${product.name} no mercado ${market}.`, 422);
     }
+    const unitPrice = matchingRule?.unitPrice ?? marketPrice!;
 
     calculatedItems.push({
       productId: product.id,
