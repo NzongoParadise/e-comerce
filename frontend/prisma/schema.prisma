@@ -765,6 +765,7 @@ model Refund {
   reason           String
   status           String   @default("REQUESTED")
   providerRefundId String?  @unique
+  idempotencyKey   String?  @unique
   provider         String
   requestedBy      String?
   processedBy      String?
