@@ -1,0 +1,131 @@
+import crypto from "node:crypto";
+import { prisma } from "@/lib/server/prisma";
+import { authenticate, errorResponse, isAdmin, readJson, userSubject } from "@/lib/server/api";
+import { logger } from "@/lib/server/logger";
+import { z } from "zod";
+
+export const runtime = "nodejs";
+
+const createSchema = z.object({
+  orderId: z.number().int().positive(),
+});
+
+async function requireAdmin(request: Request) {
+  const auth = await authenticate(request);
+  if (!auth) return { error: errorResponse("Authentication required", 401), actor: null };
+  if (!isAdmin(auth)) return { error: errorResponse("Administrator access required", 403), actor: null };
+  const actor = userSubject(auth);
+  if (!actor) return { error: errorResponse("Identidade administrativa inválida.", 403), actor: null };
+  return { error: null, actor };
+}
+
+export async function GET(request: Request) {
+  const auth = await requireAdmin(request);
+  if (auth.error) return auth.error;
+
+  const params = new URL(request.url).searchParams;
+  const orderValue = params.get("orderId");
+  if (orderValue && (!Number.isInteger(Number(orderValue)) || Number(orderValue) <= 0)) {
+    return errorResponse("ID da encomenda inválido.", 400);
+  }
+
+  try {
+    const invoices = await prisma.invoice.findMany({
+      where: orderValue ? { orderId: Number(orderValue) } : undefined,
+      include: {
+        order: {
+          select: {
+            id: true,
+            orderNumber: true,
+            status: true,
+            totalEUR: true,
+            totalKZ: true,
+            currency: true,
+            items: true,
+            payment: { select: { status: true, provider: true, paidAt: true } },
+          },
+        },
+        user: { select: { id: true, name: true, email: true } },
+        company: { select: { id: true, legalName: true, nif: true } },
+      },
+      orderBy: { issuedAt: "desc" },
+      take: 200,
+    });
+    return Response.json({ data: invoices });
+  } catch (error) {
+    logger.error("Unable to list invoices", { error: error instanceof Error ? error.message : error });
+    return errorResponse("Não foi possível carregar as faturas.", 503);
+  }
+}
+
+export async function POST(request: Request) {
+  const auth = await requireAdmin(request);
+  if (auth.error) return auth.error;
+
+  const parsed = createSchema.safeParse(await readJson(request));
+  if (!parsed.success) return errorResponse("Indique uma encomenda válida.", 400, parsed.error.flatten().fieldErrors);
+
+  const order = await prisma.order.findUnique({
+    where: { id: parsed.data.orderId },
+    include: {
+      user: { select: { id: true, name: true, email: true } },
+      company: { select: { id: true, legalName: true, nif: true, email: true, address: true } },
+      payment: { select: { status: true, paidAt: true } },
+    },
+  });
+  if (!order) return errorResponse("Encomenda não encontrada.", 404);
+  if (order.payment?.status !== "PAID") return errorResponse("Só é possível emitir fatura depois de o pagamento estar confirmado.", 409);
+  if (["CANCELLED", "REFUNDED"].includes(order.status)) {
+    return errorResponse("Não é possível emitir uma nova fatura para uma encomenda cancelada ou totalmente reembolsada.", 409);
+  }
+
+  const existing = await prisma.invoice.findUnique({
+    where: { orderId: order.id },
+  });
+  if (existing) {
+    return Response.json({ data: existing, idempotent: true });
+  }
+
+  const issuerName = process.env.SELLER_NAME?.trim() || "RUBRICA DILIGENTE (SU), LDA";
+  const verificationCode = crypto.randomBytes(12).toString("base64url");
+  const invoiceNumber = "FT-" + new Date().getFullYear() + "-" + String(order.id).padStart(8, "0");
+
+  try {
+    const invoice = await prisma.invoice.create({
+      data: {
+        invoiceNumber,
+        verificationCode,
+        orderId: order.id,
+        userId: order.userId,
+        companyId: order.companyId,
+        status: "ISSUED",
+        currency: order.currency,
+        totalEUR: order.totalEUR,
+        totalKZ: order.totalKZ,
+        discountTotalEUR: order.discountTotalEUR,
+        discountTotalKZ: order.discountTotalKZ,
+        sellerName: issuerName,
+        sellerTaxId: process.env.SELLER_TAX_ID?.trim() || process.env.COMPANY_NIF?.trim() || null,
+        sellerAddress: process.env.SELLER_ADDRESS?.trim() || null,
+        buyerName: order.billingName || order.company?.legalName || order.user.name || null,
+        buyerEmail: order.billingEmail || order.company?.email || order.user.email || null,
+        buyerTaxId: order.billingTaxId || order.company?.nif || null,
+        buyerAddress: order.address || order.company?.address || null,
+        issuedBy: auth.actor!,
+      },
+    });
+
+    return Response.json({ data: invoice, idempotent: false }, { status: 201 });
+  } catch (error) {
+    if ((error as { code?: string })?.code === "P2002") {
+      const duplicate = await prisma.invoice.findUnique({ where: { orderId: order.id } });
+      if (duplicate) return Response.json({ data: duplicate, idempotent: true });
+    }
+    logger.error("Unable to issue invoice", {
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      error: error instanceof Error ? error.message : error,
+    });
+    return errorResponse("Não foi possível emitir a fatura.", 503);
+  }
+}
