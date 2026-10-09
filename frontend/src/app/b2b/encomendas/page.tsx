@@ -14,6 +14,8 @@ import {
   ShoppingBag,
   WalletCards,
   XCircle,
+  Copy,
+  Check,
 } from "lucide-react";
 import { fetchWithAuth } from "@/lib/api";
 
@@ -28,7 +30,7 @@ type PO = {
     status: string;
     items: Array<{ quantity: number; name: string; subtotal: string | number }>;
   } | null;
-  order?: { orderNumber: string; status: string; totalEUR: string | number } | null;
+  order?: { orderNumber: string; status: string; country: "AO" | "PT"; currency: string; totalEUR: string | number; totalKZ: string | number; payment?: { id: number; status: string; method: string; entity: string | null; referenceNumber: string | null; expiresAt: string | null; paidAt: string | null } | null } | null;
 };
 
 type Order = {
@@ -42,6 +44,8 @@ type Order = {
 const orderStatus: Record<string, string> = {
   PENDING: "Pendente",
   AWAITING_PAYMENT: "A aguardar pagamento",
+  PAYMENT_CONFIRMED: "Pagamento confirmado",
+  PAYMENT_REVIEW_REQUIRED: "Pagamento em verificação",
   PROCESSING: "Em processamento",
   SHIPPED: "Enviada",
   DELIVERED: "Entregue",
@@ -69,6 +73,9 @@ export default function B2BOrdersPage() {
   const [expandedPO, setExpandedPO] = useState<number | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [paymentInfo, setPaymentInfo] = useState<{ poNumber: string; payment: NonNullable<PO["order"]>["payment"] } | null>(null);
+  const [copiedPaymentField, setCopiedPaymentField] = useState("");
 
   async function load() {
     setError("");
@@ -123,25 +130,51 @@ export default function B2BOrdersPage() {
     }
   }
 
-  async function pay(poId: number) {
-    setPaying(poId);
+  async function pay(po: PO, method: "STRIPE_CHECKOUT" | "MULTICAIXA_REFERENCE" | "MULTICAIXA_EXPRESS") {
+    if (!po.order) return;
+    if (method === "MULTICAIXA_EXPRESS" && !/^(?:\\+244|244|0)?9\\d{8}$/.test(phoneNumber.trim())) {
+      setError("Indique um número angolano válido para MULTICAIXA Express.");
+      return;
+    }
+    setPaying(po.id);
     setError("");
     setMessage("");
+    setPaymentInfo(null);
     try {
       const result = await fetchWithAuth("/api/b2b/payments/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ poId, idempotencyKey: crypto.randomUUID() }),
+        body: JSON.stringify({
+          poId: po.id,
+          method,
+          idempotencyKey: crypto.randomUUID(),
+          ...(method === "MULTICAIXA_EXPRESS" ? { phoneNumber: phoneNumber.trim() } : {}),
+        }),
       });
       if (result.data?.checkoutUrl) {
         window.location.assign(result.data.checkoutUrl);
         return;
       }
-      setMessage("Checkout criado, mas o link de pagamento não foi devolvido.");
+      if (result.data?.payment) {
+        setPaymentInfo({ poNumber: po.poNumber, payment: result.data.payment });
+        setMessage(method === "MULTICAIXA_EXPRESS" ? "Pedido enviado para MULTICAIXA Express." : "Instruções de pagamento atualizadas.");
+        await load();
+      } else {
+        throw new Error("O gateway não devolveu os dados de pagamento.");
+      }
     } catch (paymentError) {
       setError(paymentError instanceof Error ? paymentError.message : "Não foi possível iniciar o pagamento.");
     } finally {
       setPaying(null);
+    }
+  }
+
+  async function copyPaymentValue(label: string, value: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedPaymentField(label);
+    } catch {
+      setError("Não foi possível copiar automaticamente. Selecione e copie o valor manualmente.");
     }
   }
 
@@ -161,6 +194,7 @@ export default function B2BOrdersPage() {
 
       {message && <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800">{message}</div>}
       {error && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-800">{error}</div>}
+      {paymentInfo?.payment && <section className="card border-blue-100 p-4 sm:p-5"><div className="flex items-start gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700"><WalletCards size={18}/></span><div className="min-w-0 flex-1"><h2 className="text-sm font-black text-slate-950">Dados de pagamento · {paymentInfo.poNumber}</h2><p className="mt-1 text-xs text-slate-500">Estado: {paymentInfo.payment.status} · {paymentInfo.payment.method}</p><p className="mt-2 text-lg font-black text-slate-950">{paymentInfo.payment.currency === "EUR" ? "€ " + Number(paymentInfo.payment.amountEUR).toFixed(2) : "Kz " + Number(paymentInfo.payment.amountKZ).toLocaleString("pt-AO", { maximumFractionDigits: 0 })}</p>{paymentInfo.payment.entity && <div className="mt-3 flex flex-wrap items-center gap-2 text-xs"><span className="text-slate-500">Entidade:</span><strong className="font-mono text-slate-900">{paymentInfo.payment.entity}</strong><button type="button" onClick={() => void copyPaymentValue("entity", paymentInfo.payment!.entity!)} className="rounded-lg border border-slate-200 p-2 text-slate-600 hover:bg-slate-50" aria-label="Copiar entidade"><Copy size={13}/></button>{copiedPaymentField === "entity" && <Check size={13} className="text-emerald-600"/>}</div>}{paymentInfo.payment.referenceNumber && <div className="mt-2 flex flex-wrap items-center gap-2 text-xs"><span className="text-slate-500">Referência:</span><strong className="font-mono text-slate-900">{paymentInfo.payment.referenceNumber}</strong><button type="button" onClick={() => void copyPaymentValue("reference", paymentInfo.payment!.referenceNumber!)} className="rounded-lg border border-slate-200 p-2 text-slate-600 hover:bg-slate-50" aria-label="Copiar referência"><Copy size={13}/></button>{copiedPaymentField === "reference" && <Check size={13} className="text-emerald-600"/>}</div>}{paymentInfo.payment.expiresAt && <p className="mt-3 text-[10px] text-slate-500">Expira em {new Date(paymentInfo.payment.expiresAt).toLocaleString("pt-PT")}</p>}<p className="mt-3 text-[10px] leading-4 text-slate-500">Confirme que o valor e a referência correspondem a esta encomenda antes de concluir o pagamento.</p></div></div></section>}
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="Em processamento" value={Number(summary.processing || 0)} tone="blue" icon={Clock3} detail="Em execução" />
@@ -231,7 +265,7 @@ export default function B2BOrdersPage() {
           <div className="divide-y divide-slate-100">
             {pos.map((po) => {
               const expanded = expandedPO === po.id;
-              const canPay = Boolean(po.orderId && po.order?.status === "AWAITING_PAYMENT" && canConvert);
+              const canPay = Boolean(po.status === "CONVERTED" && po.orderId && po.order && ["PENDING", "AWAITING_PAYMENT"].includes(po.order.status) && canConvert);
               return (
                 <article key={po.id} className="p-4 sm:p-5">
                   <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
@@ -244,8 +278,16 @@ export default function B2BOrdersPage() {
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <button type="button" onClick={() => setExpandedPO(expanded ? null : po.id)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-2 text-[10px] font-bold text-slate-700 hover:bg-slate-50">{expanded ? "Ocultar itens" : "Ver itens"} <ArrowRight size={12} className={expanded ? "-rotate-90" : ""}/></button>
-                      {canPay ? (
-                        <button type="button" disabled={paying === po.id} onClick={() => void pay(po.id)} className="inline-flex items-center gap-1.5 rounded-lg bg-[#1d6ac4] px-3 py-2 text-[10px] font-black text-white disabled:opacity-50">{paying === po.id && <Loader2 size={13} className="animate-spin"/>} Pagar com Stripe <ExternalLink size={12}/></button>
+                      {canPay && po.order?.currency === "EUR" ? (
+                        <button type="button" disabled={paying === po.id} onClick={() => void pay(po, "STRIPE_CHECKOUT")} className="inline-flex items-center gap-1.5 rounded-lg bg-[#1d6ac4] px-3 py-2 text-[10px] font-black text-white disabled:opacity-50">{paying === po.id && <Loader2 size={13} className="animate-spin"/>} Pagar com cartão <ExternalLink size={12}/></button>
+                      ) : canPay && po.order?.currency === "AOA" ? (
+                        <div className="flex w-full flex-col gap-2 xl:w-auto">
+                          <input value={phoneNumber} onChange={(event) => setPhoneNumber(event.target.value)} placeholder="Telefone para Express (opcional)" aria-label="Telefone para MULTICAIXA Express" className="h-9 w-full rounded-lg border border-slate-200 px-3 text-[10px] outline-none focus:border-blue-500 xl:w-52"/>
+                          <div className="flex flex-wrap gap-2">
+                            <button type="button" disabled={paying === po.id} onClick={() => void pay(po, "MULTICAIXA_REFERENCE")} className="inline-flex items-center gap-1.5 rounded-lg bg-[#1d6ac4] px-3 py-2 text-[10px] font-black text-white disabled:opacity-50">{paying === po.id && <Loader2 size={13} className="animate-spin"/>} MULTICAIXA Referência</button>
+                            <button type="button" disabled={paying === po.id} onClick={() => void pay(po, "MULTICAIXA_EXPRESS")} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-black text-slate-700 disabled:opacity-50">MULTICAIXA Express</button>
+                          </div>
+                        </div>
                       ) : po.orderId ? (
                         <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-2 text-[10px] font-black text-emerald-700"><CheckCircle2 size={13}/> {po.order?.orderNumber || "Encomenda convertida"}</span>
                       ) : po.status === "APPROVED" && canConvert ? (
