@@ -493,7 +493,8 @@ async function handleStripeWebhook(request: Request) {
         ? 'FAILED'
         : 'PROCESSING';
 
-    await prisma.$transaction(async (transaction) => {
+    const completedReturn = await prisma.$transaction(async (transaction) => {
+      let completion: { id: number; requestNumber: string; userId: number; orderNumber: string } | null = null;
       await transaction.paymentEvent.create({
         data: {
           paymentId: refund.paymentId,
@@ -534,6 +535,42 @@ async function handleStripeWebhook(request: Request) {
           where: { id: refund.orderId },
           data: { status: refundedTotal + 0.000001 >= originalTotal ? 'REFUNDED' : 'PARTIALLY_REFUNDED' },
         });
+
+        if (refund.returnRequestId) {
+          const returnRequest = await transaction.returnRequest.findUnique({
+            where: { id: refund.returnRequestId },
+            include: {
+              user: { select: { id: true } },
+              order: { select: { orderNumber: true } },
+            },
+          });
+          if (
+            returnRequest &&
+            returnRequest.type === 'RETURN' &&
+            returnRequest.orderId === refund.orderId &&
+            returnRequest.status === 'REFUND_PROCESSING'
+          ) {
+            const completed = await transaction.returnRequest.update({
+              where: { id: returnRequest.id },
+              data: { status: 'COMPLETED' },
+            });
+            await transaction.returnRequestEvent.create({
+              data: {
+                returnRequestId: completed.id,
+                previousStatus: 'REFUND_PROCESSING',
+                nextStatus: 'COMPLETED',
+                actorExternalId: 'SYSTEM_STRIPE_WEBHOOK',
+                note: 'Stripe confirmou o reembolso ' + refundId + '.',
+              },
+            });
+            completion = {
+              id: completed.id,
+              requestNumber: completed.requestNumber,
+              userId: returnRequest.user.id,
+              orderNumber: returnRequest.order.orderNumber,
+            };
+          }
+        }
       }
 
       if (updated.status === 'SUCCEEDED') {
@@ -547,7 +584,20 @@ async function handleStripeWebhook(request: Request) {
           dedupeKey: `refund:${refund.id}:stripe-succeeded`,
         }).catch(() => undefined);
       }
+      return completion;
     });
+
+    if (completedReturn) {
+      await createNotificationIfAllowed({
+        userId: completedReturn.userId,
+        channel: 'orderUpdates',
+        type: 'RETURN_STATUS_CHANGED',
+        title: 'Devolução concluída',
+        message: 'A solicitação ' + completedReturn.requestNumber + ' da encomenda ' + completedReturn.orderNumber + ' foi concluída após confirmação do reembolso.',
+        link: '/account/returns',
+        dedupeKey: 'return:' + completedReturn.id + ':status:COMPLETED',
+      }).catch(() => undefined);
+    }
 
     if (nextStatus === 'SUCCEEDED') {
       await issueCreditNoteForSucceededRefund(internalRefundId, 'SYSTEM_STRIPE_WEBHOOK');
