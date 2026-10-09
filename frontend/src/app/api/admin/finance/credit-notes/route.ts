@@ -49,7 +49,7 @@ export async function GET(request: Request) {
         take: pageSize,
       }),
       prisma.creditNote.count({ where }),
-      prisma.creditNote.groupBy({ by: ["status"], _count: { _all: true } }),
+      prisma.creditNote.groupBy({ by: ["status"], orderBy: { status: "asc" }, _count: { _all: true } }),
     ]);
 
     return Response.json({
