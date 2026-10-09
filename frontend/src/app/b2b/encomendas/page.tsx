@@ -38,6 +38,8 @@ type Order = {
   orderNumber: string;
   status: string;
   totalEUR: string | number;
+  totalKZ: string | number;
+  currency: string;
   createdAt: string;
 };
 
@@ -157,7 +159,12 @@ export default function B2BOrdersPage() {
       }
       if (result.data?.payment) {
         setPaymentInfo({ poNumber: po.poNumber, payment: result.data.payment });
-        setMessage(method === "MULTICAIXA_EXPRESS" ? "Pedido enviado para MULTICAIXA Express." : "Instruções de pagamento atualizadas.");
+        const paymentStatus = String(result.data.payment.status || "");
+        if (["FAILED", "EXPIRED", "CANCELLED"].includes(paymentStatus)) {
+          setError("O gateway não concluiu o pagamento. O stock foi libertado e o Purchase Order voltou a ficar disponível para uma nova conversão.");
+        } else {
+          setMessage(method === "MULTICAIXA_EXPRESS" ? "Pedido enviado para MULTICAIXA Express." : "Instruções de pagamento atualizadas.");
+        }
         await load();
       } else {
         throw new Error("O gateway não devolveu os dados de pagamento.");
@@ -200,7 +207,7 @@ export default function B2BOrdersPage() {
         <MetricCard label="Em processamento" value={Number(summary.processing || 0)} tone="blue" icon={Clock3} detail="Em execução" />
         <MetricCard label="Concluídas" value={Number(summary.completed || 0)} tone="green" icon={CheckCircle2} detail="Entrega finalizada" />
         <MetricCard label="POs pendentes" value={pos.filter((item) => !item.orderId && item.status !== "REJECTED").length} tone="amber" icon={FileText} detail="Aguardam ação" />
-        <MetricCard label="Volume histórico" value={"€ " + Number(summary.totalEUR || 0).toFixed(2)} tone="navy" icon={WalletCards} detail="Total de compras" />
+        <MetricCard label="Encomendas históricas" value={Number(summary.count || 0)} tone="navy" icon={WalletCards} detail={"€ " + Number(summary.totalEUR || 0).toFixed(2) + " · Kz " + Number(summary.totalKZ || 0).toLocaleString("pt-AO", { maximumFractionDigits: 0 })} />
       </section>
 
       <section className="card overflow-hidden">
@@ -236,7 +243,7 @@ export default function B2BOrdersPage() {
                       <p className="mt-1 text-[9px] text-slate-500">{new Date(order.createdAt).toLocaleString("pt-PT")}</p>
                     </div>
                   </div>
-                  <div className="text-sm font-black text-slate-950">€ {Number(order.totalEUR).toFixed(2)}</div>
+                  <div className="text-sm font-black text-slate-950">{order.currency === "EUR" ? "€ " + Number(order.totalEUR).toFixed(2) : "Kz " + Number(order.totalKZ).toLocaleString("pt-AO", { maximumFractionDigits: 0 })}</div>
                   <span className={"w-fit rounded-full px-2.5 py-1.5 text-[9px] font-black " + (order.status === "CANCELLED" ? "bg-rose-50 text-rose-700" : order.status === "DELIVERED" || order.status === "COMPLETED" ? "bg-emerald-50 text-emerald-700" : order.status === "AWAITING_PAYMENT" ? "bg-amber-50 text-amber-700" : "bg-blue-50 text-blue-700")}>{orderStatus[order.status] || order.status}</span>
                 </div>
                 <div className="mt-4 grid gap-3 border-t border-slate-100 pt-3 sm:grid-cols-3">
@@ -305,7 +312,7 @@ export default function B2BOrdersPage() {
                             {po.quote.items.map((item, index) => (
                               <div key={index} className="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2.5 text-[10px]">
                                 <span className="min-w-0 truncate font-bold text-slate-700">{item.quantity} × {item.name}</span>
-                                <strong className="shrink-0 text-slate-950">€ {Number(item.subtotal).toFixed(2)}</strong>
+                                <strong className="shrink-0 text-slate-950">{po.order?.currency === "AOA" ? "Kz " + Number(item.subtotal).toLocaleString("pt-AO", { maximumFractionDigits: 0 }) : "€ " + Number(item.subtotal).toFixed(2)}</strong>
                               </div>
                             ))}
                           </div>
@@ -313,7 +320,7 @@ export default function B2BOrdersPage() {
                       </div>
                       <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-3">
                         <p className="text-[9px] font-black uppercase tracking-[0.14em] text-blue-700">Próximo passo</p>
-                        <p className="mt-2 text-xs font-bold text-slate-800">{po.orderId ? (po.order?.status === "AWAITING_PAYMENT" ? "Pagamento necessário." : "Encomenda em processamento.") : po.status === "APPROVED" ? "Converter a aprovação numa encomenda." : "Aguardar decisão comercial."}</p>
+                        <p className="mt-2 text-xs font-bold text-slate-800">{po.orderId ? (po.order?.status === "AWAITING_PAYMENT" ? "A aguardar confirmação de pagamento." : po.order?.status === "PENDING" ? "Encomenda criada; pagamento ainda não iniciado." : po.order?.status === "PAYMENT_CONFIRMED" ? "Pagamento confirmado." : "Encomenda em processamento.") : po.status === "APPROVED" ? "Converter a aprovação numa encomenda." : "Aguardar decisão comercial."}</p>
                       </div>
                     </div>
                   )}
