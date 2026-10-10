@@ -109,6 +109,7 @@ model Company {
   city String?
   address String?
   status String @default("PENDING")
+  statusHistory CompanyStatusHistory[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   users User[]
@@ -118,6 +119,19 @@ model Company {
   priceRules B2BPriceRule[]
   purchaseOrders PurchaseOrder[]
   @@index([status])
+}
+
+model CompanyStatusHistory {
+  id Int @id @default(autoincrement())
+  companyId Int
+  fromStatus String?
+  toStatus String
+  reason String?
+  actorUserId Int?
+  createdAt DateTime @default(now())
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  actor User? @relation("CompanyStatusActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  @@index([companyId, createdAt])
 }
 
 model CompanyMember {
@@ -156,6 +170,7 @@ model PurchaseOrder {
   orderId Int?
   poNumber String @unique
   status String @default("DRAFT")
+  currency String @default("AOA")
   approvedBy Int?
   approvedAt DateTime?
   notes String?
@@ -188,6 +203,8 @@ model User {
   updatedAt    DateTime @updatedAt
   orders       Order[]
   quotes       Quote[]
+  quoteRevisionsCreated QuoteRevision[] @relation("QuoteRevisionActor")
+  quoteEventsCreated QuoteEvent[] @relation("QuoteEventActor")
   returnRequests ReturnRequest[]
   payments     Payment[]
   passwordResetTokens PasswordResetToken[]
@@ -207,6 +224,7 @@ model User {
   supportMessages SupportMessage[]
   company Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
   companyMemberships CompanyMember[]
+  companyStatusChanges CompanyStatusHistory[] @relation("CompanyStatusActor")
 }
 
 model Address {
@@ -430,6 +448,7 @@ model Quote {
   quoteNumber String   @unique
   userId      Int
   status      String   @default("SUBMITTED")
+  currency    String   @default("AOA")
   companyName String
   companyNif  String
   address     String?
@@ -444,6 +463,13 @@ model Quote {
   company     Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
   items       QuoteItem[]
   purchaseOrders PurchaseOrder[]
+  revisions   QuoteRevision[]
+  events      QuoteEvent[]
+  version     Int      @default(0)
+  validUntil  DateTime?
+  issuedAt    DateTime?
+  acceptedAt  DateTime?
+  acceptedVersion Int?
 }
 
 model QuoteItem {
@@ -451,11 +477,46 @@ model QuoteItem {
   quoteId   Int
   productId Int
   name      String
+  description String?
+  imageUrl  String?
   unitPrice Decimal  @db.Decimal(10,2)
   quantity  Int
   subtotal  Decimal  @db.Decimal(12,2)
   quote     Quote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
   product   Product  @relation(fields: [productId], references: [id])
+}
+
+model QuoteRevision {
+  id          Int      @id @default(autoincrement())
+  quoteId     Int
+  version     Int
+  snapshot    Json
+  validUntil  DateTime
+  createdByUserId Int
+  createdAt   DateTime @default(now())
+  quote       Quote    @relation(fields: [quoteId], references: [id], onDelete: Restrict)
+  createdBy   User     @relation("QuoteRevisionActor", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  events      QuoteEvent[]
+  @@unique([quoteId, version])
+  @@index([quoteId, createdAt])
+}
+
+model QuoteEvent {
+  id             Int      @id @default(autoincrement())
+  quoteId        Int
+  revisionId     Int?
+  version        Int
+  fromStatus     String?
+  toStatus       String
+  action         String
+  note           String?
+  actorUserId    Int?
+  createdAt      DateTime @default(now())
+  quote          Quote    @relation(fields: [quoteId], references: [id], onDelete: Restrict)
+  revision       QuoteRevision? @relation(fields: [revisionId], references: [id], onDelete: SetNull)
+  actor          User?    @relation("QuoteEventActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  @@index([quoteId, createdAt])
+  @@index([actorUserId, createdAt])
 }
 
 model ReturnRequest {

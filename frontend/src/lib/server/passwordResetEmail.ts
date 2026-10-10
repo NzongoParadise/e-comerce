@@ -1,5 +1,7 @@
+import { getAppUrl } from '@/lib/server/appUrl';
+
 export function passwordResetEmailConfigured() {
-  return Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM && (process.env.FRONTEND_URL || process.env.APP_URL));
+  return Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM && getAppUrl());
 }
 
 function escapeHtml(value: string) {
@@ -15,7 +17,7 @@ function escapeHtml(value: string) {
 export async function sendPasswordResetEmail(input: { email: string; name?: string | null; token: string }) {
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.EMAIL_FROM;
-  const appUrl = (process.env.FRONTEND_URL || process.env.APP_URL || "").replace(/\/$/, "");
+  const appUrl = getAppUrl();
   if (!apiKey || !from || !appUrl) throw new Error("Password reset email configuration is incomplete");
 
   const resetUrl = appUrl + "/reset-password?token=" + encodeURIComponent(input.token);

@@ -19,13 +19,23 @@ export default function B2BPage() {
   const [data, setData] = useState<Dashboard | null>(null);
   const [error, setError] = useState("");
   const [guest, setGuest] = useState(false);
+  const [needsCompany, setNeedsCompany] = useState(false);
 
   useEffect(() => {
     let active = true;
     fetchWithAuth("/api/auth/me")
       .then(() => fetchWithAuth("/api/b2b/dashboard"))
-      .then((r) => { if (active) setData(r.data ?? null); })
-      .catch(() => { if (active) setGuest(true); })
+      .then((r) => {
+        if (!active) return;
+        setData(r.data ?? null);
+        setNeedsCompany(!r.data);
+      })
+      .catch((cause: unknown) => {
+        if (!active) return;
+        const message = cause instanceof Error ? cause.message : "Não foi possível carregar a área empresarial.";
+        if (message.includes("Authentication required") || message.includes("Não autenticado")) setGuest(true);
+        else setError(message);
+      })
     return () => { active = false; };
   }, []);
 
@@ -52,6 +62,18 @@ export default function B2BPage() {
   );
 
   if (error) return <main className="container mx-auto px-4 py-12"><div className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-sm font-bold text-rose-700">{error}</div></main>;
+
+  if (needsCompany) return (
+    <main className="container mx-auto px-4 py-10 sm:py-14">
+      <section className="mx-auto max-w-2xl rounded-3xl border border-amber-200 bg-white p-6 shadow-sm sm:p-9">
+        <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-50 text-amber-800"><Building2 size={23} /></span>
+        <p className="mt-5 text-[10px] font-black uppercase tracking-[0.18em] text-amber-800">Configuração B2B</p>
+        <h1 className="mt-2 text-2xl font-black text-[#0c1b2a] sm:text-3xl">Associe os dados da sua empresa</h1>
+        <p className="mt-3 text-sm leading-6 text-gray-600">A sua conta empresarial está ativa, mas ainda não existe um perfil de empresa associado. Registe a razão social e o NIF oficiais para enviar os dados à validação administrativa.</p>
+        <Link href="/b2b/empresa" className="mt-6 inline-flex items-center gap-2 rounded-xl bg-[#0c1b2a] px-5 py-3 text-sm font-black text-white transition hover:bg-[#18334f]">Preencher dados da empresa <ArrowRight size={16} /></Link>
+      </section>
+    </main>
+  );
 
   if (!data) return <main className="container mx-auto px-4 py-12"><div className="grid gap-4 md:grid-cols-4">{[1,2,3,4].map((i)=><div key={i} className="h-28 animate-pulse rounded-2xl bg-gray-200" />)}</div></main>;
 

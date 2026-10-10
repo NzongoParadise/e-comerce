@@ -10,6 +10,7 @@ import { evaluateOrderPromotions, legacyCouponDiscount, reservePromotionUsages }
 import { ensureStripeCustomer } from '@/lib/server/payments/stripeCustomers';
 import { z } from 'zod';
 import { createNotificationIfAllowed } from '@/lib/server/notifications';
+import { getAppUrl } from '@/lib/server/appUrl';
 
 export const runtime = 'nodejs';
 
@@ -77,7 +78,8 @@ function parseStripeCheckoutSession(value: unknown): StripeCheckoutSession {
 async function createStripeCheckout(orderId: number, orderNumber: string, amount: number, expiresAt: Date, paymentMethod: 'card' | 'mbway') {
   const secretKey = process.env.STRIPE_SECRET_KEY;
   if (!secretKey) throw new Error('PAYMENT_PROVIDER_NOT_CONFIGURED');
-  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const frontendUrl = getAppUrl();
+  if (!frontendUrl) throw new Error('FRONTEND_URL_NOT_CONFIGURED');
   const paymentMethodTypes = paymentMethod === 'mbway' ? ['mb_way'] : ['card'];
   const params = new URLSearchParams({
     mode: 'payment',

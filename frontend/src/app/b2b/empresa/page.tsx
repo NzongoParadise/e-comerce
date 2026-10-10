@@ -8,6 +8,7 @@ type CompanyForm = {
   legalName: string;
   tradeName: string;
   nif: string;
+  country: string;
   email: string;
   phone: string;
   province: string;
@@ -19,7 +20,7 @@ type Company = CompanyForm & { id: number; status: string; createdAt?: string; u
 type CompanyResponse = { data: Company | null; role?: string };
 
 const emptyForm: CompanyForm = {
-  legalName: "", tradeName: "", nif: "", email: "", phone: "", province: "", city: "", address: "",
+  legalName: "", tradeName: "", nif: "", country: "Angola", email: "", phone: "", province: "", city: "", address: "",
 };
 
 const statusStyle: Record<string, string> = {
@@ -35,7 +36,7 @@ const statusLabel: Record<string, string> = {
 
 function toForm(company: Company): CompanyForm {
   return {
-    legalName: company.legalName || "", tradeName: company.tradeName || "", nif: company.nif || "",
+    legalName: company.legalName || "", tradeName: company.tradeName || "", nif: company.nif || "", country: company.country || "Angola",
     email: company.email || "", phone: company.phone || "", province: company.province || "",
     city: company.city || "", address: company.address || "",
   };
@@ -77,7 +78,25 @@ export default function B2BCompanyPage() {
     }
   }
 
-  useEffect(() => { void loadCompany(); }, []);
+  useEffect(() => {
+    let active = true;
+    fetchWithAuth("/api/b2b/company", { cache: "no-store" })
+      .then((response: CompanyResponse) => {
+        if (!active) return;
+        setLoadFailed(false);
+        setCompany(response.data);
+        setRole(response.role || "");
+        setForm(response.data ? toForm(response.data) : emptyForm);
+      })
+      .catch((cause: unknown) => {
+        if (active) {
+          setLoadFailed(true);
+          setError(cause instanceof Error ? cause.message : "Não foi possível carregar os dados da empresa.");
+        }
+      })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
 
   function updateField(name: keyof CompanyForm, value: string) {
     setForm((current) => ({ ...current, [name]: value }));
@@ -107,7 +126,6 @@ export default function B2BCompanyPage() {
   }
 
   const canEdit = !loadFailed && (!company || role === "OWNER");
-  const currentStatus = company?.status || "PENDING";
 
   if (loading) return <div className="space-y-5"><div className="h-20 animate-pulse rounded-xl bg-slate-200" /><div className="h-64 animate-pulse rounded-xl bg-slate-200" /></div>;
 
@@ -141,6 +159,7 @@ export default function B2BCompanyPage() {
                 <Field label="Razão social" name="legalName" value={form.legalName} onChange={updateField} required disabled={!canEdit} />
                 <Field label="Nome comercial" name="tradeName" value={form.tradeName} onChange={updateField} disabled={!canEdit} />
                 <Field label="NIF" name="nif" value={form.nif} onChange={updateField} required disabled={!canEdit || Boolean(company)} />
+                <Field label="País de registo" name="country" value={form.country} onChange={updateField} required disabled={!canEdit} />
                 <Field label="Email comercial" name="email" value={form.email} onChange={updateField} type="email" disabled={!canEdit} />
                 <Field label="Telefone" name="phone" value={form.phone} onChange={updateField} type="tel" disabled={!canEdit} />
               </div>

@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 const required = [
   'DATABASE_URL',
   'JWT_SECRET',
-  'FRONTEND_URL',
+  ...(process.env.VERCEL_ENV === 'preview' ? [] : ['FRONTEND_URL']),
 ];
 
 // The app's own login issues HS256 tokens with JWT_SECRET. These settings are
@@ -23,6 +23,11 @@ const missing = required.filter((key) => !process.env[key] || !String(process.en
 if (missing.length > 0) {
   console.error('Missing required production env vars:', missing.join(', '));
   console.error('Copy frontend/.env.production.example to frontend/.env.production and fill in the real values before deployment.');
+  process.exit(1);
+}
+
+if (process.env.VERCEL_ENV !== 'preview' && Buffer.byteLength(process.env.CRON_SECRET || '', 'utf8') < 32) {
+  console.error('CRON_SECRET must contain at least 32 characters.');
   process.exit(1);
 }
 

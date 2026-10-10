@@ -4,7 +4,7 @@ import { mkdir, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { canRequestB2BAccount, getUserRoles } from '@/lib/auth';
+import { getUserRoles } from '@/lib/auth';
 import { prisma } from '@/lib/server/prisma';
 import { authenticate, errorResponse, isAdmin, prismaErrorCode, readJson, rateLimit, userSubject } from '@/lib/server/api';
 import { z } from "zod";
@@ -22,6 +22,17 @@ const registerSchema = credentialsSchema.extend({
   accountType: z.enum(['B2C', 'B2B']).default('B2C'),
 });
 const profileSchema = z.object({ name: z.string().trim().min(2).max(120) });
+const b2bCompanySchema = z.object({
+  legalName: z.string().trim().min(2).max(160),
+  tradeName: z.string().trim().max(160).optional().default(''),
+  nif: z.string().trim().min(5).max(40).transform((value) => value.toUpperCase()),
+  email: z.union([z.string().trim().email().max(254), z.literal('')]).optional().default(''),
+  phone: z.string().trim().max(40).optional().default(''),
+  country: z.string().trim().min(2).max(80).optional().default('Angola'),
+  province: z.string().trim().max(80).optional().default(''),
+  city: z.string().trim().max(80).optional().default(''),
+  address: z.string().trim().max(240).optional().default(''),
+});
 const passwordSchema = z.object({ currentPassword: z.string().min(1).max(128), newPassword: z.string().min(8).max(128) });
 const communicationPreferenceSchema = z.object({
   promotions: z.boolean(),
@@ -164,9 +175,35 @@ export async function GET(request: Request) {
   if (!user || !subject) return errorResponse('Authentication required', 401);
   try {
     const provider = user.provider || user.app_metadata?.provider;
-    const profile = await prisma.user.upsert({ where: { externalId: subject }, create: { externalId: subject, email: user.email, name: user.name, provider }, update: { provider, lastLoginAt: new Date() } });
+    let profile = await prisma.user.upsert({
+      where: { externalId: subject },
+      create: { externalId: subject, email: user.email, name: user.name, provider },
+      update: { provider, lastLoginAt: new Date() },
+      include: { company: true },
+    });
+    if (profile.accountType === 'B2B' && !profile.company) {
+      const ownerMembership = await prisma.companyMember.findFirst({
+        where: {
+          userId: profile.id,
+          role: 'OWNER',
+          status: 'ACTIVE',
+        },
+        select: { companyId: true },
+        orderBy: { createdAt: 'asc' },
+      });
+      if (ownerMembership) {
+        await prisma.user.updateMany({
+          where: { id: profile.id, accountType: 'B2B', companyId: null },
+          data: { companyId: ownerMembership.companyId },
+        });
+        profile = await prisma.user.findUniqueOrThrow({
+          where: { id: profile.id },
+          include: { company: true },
+        });
+      }
+    }
     const roles = getUserRoles({ roles: user.roles || user.app_metadata?.roles || [], accessRole: profile.accessRole, email: user.email });
-    return Response.json({ data: { id: profile.id, externalId: profile.externalId, email: profile.email, name: profile.name, provider: profile.provider, accessRole: profile.accessRole, isAdmin: isAdmin({ ...user, accessRole: profile.accessRole, email: profile.email }), accountName: profile.accountName, accountType: profile.accountType, b2bRequestStatus: profile.b2bRequestStatus, roles } });
+    return Response.json({ data: { id: profile.id, externalId: profile.externalId, email: profile.email, name: profile.name, provider: profile.provider, accessRole: profile.accessRole, isAdmin: isAdmin({ ...user, accessRole: profile.accessRole, email: profile.email }), accountName: profile.accountName, accountType: profile.accountType, b2bRequestStatus: profile.b2bRequestStatus, b2bReviewReason: null, company: profile.company, roles } });
   } catch (error) {
     console.error('Error syncing authenticated user:', error);
     return errorResponse('Unable to load user profile', 500);
@@ -345,10 +382,16 @@ async function updatePassword(request: Request) {
 async function submitB2BRequest(request: Request) {
   const user = await authenticate(request); const subject = userSubject(user);
   if (!subject) return errorResponse('Authentication required', 401);
-  const profile = await prisma.user.findUnique({ where: { externalId: subject }, select: { accessRole: true, accountType: true, status: true, b2bRequestStatus: true } });
-  if (!canRequestB2BAccount(profile)) return errorResponse('Apenas contas retalhistas ativas sem pedido pendente podem solicitar acesso grossista.', 403);
+  const profile = await prisma.user.findUnique({ where: { externalId: subject }, select: { id: true, accessRole: true, accountType: true, status: true, b2bRequestStatus: true, companyId: true } });
+  const canSubmit = profile?.accessRole === 'CUSTOMER'
+    && profile.accountType === 'B2C'
+    && profile.status === 'ACTIVE'
+    && (profile.b2bRequestStatus !== 'PENDING' || profile.companyId === null);
+  if (!canSubmit) return errorResponse('Apenas contas retalhistas ativas sem pedido pendente podem solicitar acesso grossista.', 403);
   const body = await readProfileBody(request);
   if (!body) return errorResponse('Formato de documento não permitido', 400);
+  const companyParsed = b2bCompanySchema.safeParse(body.fields || {});
+  if (!companyParsed.success) return errorResponse('Preencha corretamente os dados oficiais da empresa.', 400, companyParsed.error.flatten().fieldErrors);
   const companyDocument = body.files.find(({ field }) => field === 'companyDocument')?.file;
   const personalDocument = body.files.find(({ field }) => field === 'personalDocument')?.file;
   if (!companyDocument || !personalDocument) return errorResponse('Envie o documento da empresa e o documento pessoal', 400);
@@ -356,11 +399,70 @@ async function submitB2BRequest(request: Request) {
     if (!validDocument(file)) return errorResponse(file.size > 5 * 1024 * 1024 ? 'Cada documento deve ter no máximo 5 MB' : 'Formato de documento não permitido', 400);
     if (!(await hasValidSignature(file))) return errorResponse('O conteúdo do documento não corresponde ao formato indicado', 400);
   }
-  const saved = await storeDocuments(body.files);
+  let saved: Awaited<ReturnType<typeof storeDocuments>> = [];
   try {
-    const profile = await prisma.user.update({ where: { externalId: subject }, data: { b2bRequestStatus: 'PENDING', companyDocumentPath: saved.find(({ field }) => field === 'companyDocument')?.path, personalDocumentPath: saved.find(({ field }) => field === 'personalDocument')?.path } });
-    return Response.json({ data: { b2bRequestStatus: profile.b2bRequestStatus } }, { status: 202 });
-  } catch (error) { await removeDocuments(saved); console.error('Error requesting B2B account:', error); return errorResponse('Unable to submit B2B request', 500); }
+    saved = await storeDocuments(body.files);
+    const companyDetails = {
+      legalName: companyParsed.data.legalName,
+      tradeName: companyParsed.data.tradeName || null,
+      nif: companyParsed.data.nif,
+      email: companyParsed.data.email || null,
+      phone: companyParsed.data.phone || null,
+      country: companyParsed.data.country,
+      province: companyParsed.data.province || null,
+      city: companyParsed.data.city || null,
+      address: companyParsed.data.address || null,
+    };
+    const company = await prisma.$transaction(async (tx) => {
+      const byNif = await tx.company.findUnique({ where: { nif: companyDetails.nif } });
+      if (byNif && byNif.id !== profile.companyId) throw new Error('NIF_ALREADY_EXISTS');
+      let linkedCompany = profile.companyId
+        ? await tx.company.findUnique({ where: { id: profile.companyId } })
+        : null;
+      if (linkedCompany) {
+        if (linkedCompany.nif !== companyDetails.nif) {
+          const duplicate = await tx.company.findUnique({ where: { nif: companyDetails.nif }, select: { id: true } });
+          if (duplicate && duplicate.id !== linkedCompany.id) throw new Error('NIF_ALREADY_EXISTS');
+        }
+        const previousStatus = linkedCompany.status;
+        linkedCompany = await tx.company.update({
+          where: { id: linkedCompany.id },
+          data: { ...companyDetails, status: 'PENDING' },
+        });
+        if (previousStatus !== 'PENDING') {
+          await tx.companyStatusHistory.create({
+            data: { companyId: linkedCompany.id, fromStatus: previousStatus, toStatus: 'PENDING', reason: 'Pedido de conversão submetido novamente pelo cliente.', actorUserId: profile.id },
+          });
+        }
+      } else {
+        linkedCompany = await tx.company.create({ data: { ...companyDetails, status: 'PENDING' } });
+        await tx.companyStatusHistory.create({
+          data: { companyId: linkedCompany.id, fromStatus: null, toStatus: 'PENDING', reason: 'Pedido de conversão B2C para B2B submetido.', actorUserId: profile.id },
+        });
+      }
+      await tx.companyMember.upsert({
+        where: { companyId_userId: { companyId: linkedCompany.id, userId: profile.id } },
+        create: { companyId: linkedCompany.id, userId: profile.id, role: 'OWNER', status: 'ACTIVE' },
+        update: { role: 'OWNER', status: 'ACTIVE' },
+      });
+      await tx.user.update({
+        where: { id: profile.id },
+        data: {
+          companyId: linkedCompany.id,
+          b2bRequestStatus: 'PENDING',
+          companyDocumentPath: saved.find(({ field }) => field === 'companyDocument')?.path,
+          personalDocumentPath: saved.find(({ field }) => field === 'personalDocument')?.path,
+        },
+      });
+      return linkedCompany;
+    });
+    return Response.json({ data: { b2bRequestStatus: 'PENDING', companyId: company.id, company } }, { status: 202 });
+  } catch (error) {
+    await removeDocuments(saved);
+    if (error instanceof Error && error.message === 'NIF_ALREADY_EXISTS') return errorResponse('Já existe uma empresa registada com este NIF. Contacte o suporte para associar a conta.', 409);
+    console.error('Error requesting B2B account:', error);
+    return errorResponse('Não foi possível submeter o pedido B2B.', 500);
+  }
 }
 
 async function updateProfile(request: Request) {

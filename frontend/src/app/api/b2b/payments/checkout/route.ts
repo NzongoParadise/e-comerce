@@ -1,8 +1,12 @@
-import crypto from "node:crypto";
 import { z } from "zod";
 import { prisma } from "@/lib/server/prisma";
 import { authenticate, errorResponse, readJson, userSubject } from "@/lib/server/api";
+import { getAppUrl } from "@/lib/server/appUrl";
 import { isStripeCurrencySupported, toStripeMinorUnits } from "@/lib/server/payments/stripeAmounts";
+import {
+  cancelAwaitingPaymentAndReleaseStock,
+  getB2BStockReservationExpiry,
+} from "@/lib/server/orders/inventory";
 
 export const runtime = "nodejs";
 
@@ -47,7 +51,10 @@ export async function POST(request: Request) {
   const user = await prisma.user.findUnique({ where: { externalId: subject }, select: { id: true, accountType: true, stripeCustomerId: true } });
   if (!user || user.accountType !== "B2B") return errorResponse("Esta operação requer uma conta empresarial.", 403);
 
-  const membership = await prisma.companyMember.findFirst({ where: { userId: user.id, status: "ACTIVE" }, select: { companyId: true, role: true } });
+  const membership = await prisma.companyMember.findFirst({
+    where: { userId: user.id, status: "ACTIVE", company: { status: "ACTIVE" } },
+    select: { companyId: true, role: true },
+  });
   if (!membership) return errorResponse("Empresa não encontrada.", 404);
 
   const po = await prisma.purchaseOrder.findFirst({
@@ -57,8 +64,46 @@ export async function POST(request: Request) {
   if (!po || !po.order) return errorResponse("Purchase Order convertido em encomenda não encontrado.", 404);
   if (!["OWNER", "APPROVER"].includes(membership.role)) return errorResponse("Apenas OWNER ou APPROVER pode iniciar o pagamento.", 403);
   if (po.status !== "CONVERTED") return errorResponse("O Purchase Order ainda não está convertido em encomenda.", 409);
-  if (po.order.currency !== "EUR" || !isStripeCurrencySupported(po.order.currency)) return errorResponse("O pagamento B2B via Stripe requer uma encomenda em EUR.", 422);
+  if (!["PENDING", "AWAITING_PAYMENT"].includes(po.order.status)) return errorResponse("O estado atual da encomenda não permite iniciar um pagamento.", 409);
+  if (po.order.currency !== "EUR" || !isStripeCurrencySupported(po.order.currency)) {
+    return errorResponse("O checkout Stripe está disponível apenas para encomendas em EUR. Para encomendas em AOA, aguarde as instruções da equipa comercial.", 422);
+  }
   if (po.order.payment?.status === "PAID") return errorResponse("A encomenda já está paga.", 409);
+  const reservationExpiresAt = getB2BStockReservationExpiry(po.order.createdAt, po.order.payment?.expiresAt ?? null);
+  const stripeSessionExpiresAt = reservationExpiresAt;
+  const now = new Date();
+  if (reservationExpiresAt <= now) {
+    try {
+      const cancelled = await prisma.$transaction((transaction) => cancelAwaitingPaymentAndReleaseStock(
+        transaction,
+        po.order!.id,
+        po.order!.items,
+        "EXPIRED",
+        "Encomenda B2B cancelada após expiração da reserva de stock.",
+        { allowedOrderStatuses: ["AWAITING_PAYMENT", "PENDING"], allowMissingPayment: true },
+      ));
+      if (!cancelled) return errorResponse("O estado da encomenda mudou. Atualize a página antes de tentar novamente.", 409);
+    } catch (error) {
+      console.error("Unable to release expired B2B stock reservation:", error);
+      return errorResponse("Não foi possível confirmar a expiração da reserva. Contacte o suporte.", 503);
+    }
+    return errorResponse("O prazo de reserva expirou e a encomenda foi cancelada. Contacte a equipa comercial para solicitar uma nova proposta.", 409);
+  }
+
+  if (po.order.payment?.status === "AWAITING_PAYMENT" && po.order.payment.reference) {
+    const reference = po.order.payment.reference;
+    let checkoutUrl: string | null;
+    try {
+      checkoutUrl = reference.startsWith("cs_") ? await stripeSessionUrl(reference) : reference;
+    } catch (error) {
+      if (error instanceof Error && error.message === "STRIPE_NOT_CONFIGURED") {
+        return errorResponse("Stripe não está configurado no ambiente.", 503);
+      }
+      console.error("Unable to resume B2B Stripe checkout:", error);
+      return errorResponse("Não foi possível retomar o checkout Stripe B2B.", 502);
+    }
+    if (checkoutUrl) return Response.json({ data: { payment: po.order.payment, checkoutUrl, idempotent: true } });
+  }
 
   const existingAttempt = await prisma.paymentAttempt.findUnique({ where: { idempotencyKey: parsed.data.idempotencyKey }, include: { payment: true } });
   if (existingAttempt) {
@@ -69,14 +114,35 @@ export async function POST(request: Request) {
     return Response.json({ data: { payment: existingAttempt.payment, checkoutUrl, idempotent: true } });
   }
 
+  if (stripeSessionExpiresAt.getTime() - now.getTime() < 30 * 60 * 1000 + 1000) {
+    return errorResponse("Faltam menos de 30 minutos para terminar a reserva. Contacte a equipa comercial para emitir uma nova proposta.", 409);
+  }
+
   const amount = Number(po.order.totalEUR);
   if (!Number.isFinite(amount) || amount <= 0) return errorResponse("Valor da encomenda inválido.", 422);
 
-  const frontendUrl = process.env.FRONTEND_URL || process.env.APP_URL;
+  const frontendUrl = getAppUrl();
   if (!frontendUrl) return errorResponse("FRONTEND_URL/APP_URL não configurado.", 503);
   const baseUrl = frontendUrl.replace(/\/$/, "");
-  const payment = await prisma.payment.create({
-    data: {
+  const payment = po.order.payment
+    ? await prisma.payment.update({
+      where: { id: po.order.payment.id },
+      data: {
+        provider: "stripe",
+        method: "STRIPE_CHECKOUT",
+        status: "CREATED",
+        currency: "EUR",
+        amountEUR: amount,
+        amountKZ: Number(po.order.totalKZ || 0),
+        providerPaymentId: null,
+        reference: null,
+        expiresAt: reservationExpiresAt,
+        paidAt: null,
+        failedAt: null,
+      },
+    })
+    : await prisma.payment.create({
+      data: {
       orderId: po.order.id,
       userId: user.id,
       provider: "stripe",
@@ -85,8 +151,9 @@ export async function POST(request: Request) {
       currency: "EUR",
       amountEUR: amount,
       amountKZ: Number(po.order.totalKZ || 0),
-    },
-  });
+      expiresAt: reservationExpiresAt,
+      },
+    });
 
   const attempt = await prisma.paymentAttempt.create({
     data: { paymentId: payment.id, idempotencyKey: parsed.data.idempotencyKey, status: "PROCESSING" },
@@ -102,6 +169,7 @@ export async function POST(request: Request) {
     body.set("metadata[poId]", String(po.id));
     body.set("metadata[userId]", String(user.id));
     body.set("payment_method_types[0]", "card");
+    body.set("expires_at", String(Math.floor(stripeSessionExpiresAt.getTime() / 1000)));
     if (user.stripeCustomerId) body.set("customer", user.stripeCustomerId);
     po.order.items.forEach((item, index) => {
       body.set(`line_items[${index}][price_data][currency]`, "eur");

@@ -9,6 +9,7 @@ type Quote = {
   id: number;
   quoteNumber: string;
   status: string;
+  currency: "AOA" | "EUR";
   companyName: string;
   companyNif: string;
   email: string;
@@ -19,6 +20,15 @@ type Quote = {
   user?: { name?: string | null; email?: string | null } | null;
   purchaseOrders: Array<{ id: number; poNumber: string; status: string; orderId?: number | null }>;
 };
+
+function formatQuoteAmount(value: number | string, currency: string) {
+  const supportedCurrency = currency === "EUR" ? "EUR" : "AOA";
+  return new Intl.NumberFormat("pt-PT", {
+    style: "currency",
+    currency: supportedCurrency,
+    maximumFractionDigits: 2,
+  }).format(Number(value) || 0);
+}
 
 type Rule = {
   id: number;
@@ -40,6 +50,7 @@ export default function AdminB2BPage() {
   const [companies, setCompanies] = useState<Option[]>([]);
   const [products, setProducts] = useState<Option[]>([]);
   const [tab, setTab] = useState<"quotes" | "pricing">("quotes");
+  const [companyId, setCompanyId] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<number | null>(null);
   const [message, setMessage] = useState("");
@@ -50,8 +61,8 @@ export default function AdminB2BPage() {
     setLoading(true); setError("");
     try {
       const [quoteResult, priceResult] = await Promise.all([
-        fetchWithAuth("/api/admin/b2b/quotes?status=ALL"),
-        fetchWithAuth("/api/admin/b2b/price-rules"),
+        fetchWithAuth(`/api/admin/b2b/quotes?status=ALL${companyId ? `&companyId=${companyId}` : ""}`),
+        fetchWithAuth(`/api/admin/b2b/price-rules${companyId ? `?companyId=${companyId}` : ""}`),
       ]);
       setQuotes(quoteResult.data ?? []);
       setRules(priceResult.data ?? []);
@@ -62,9 +73,31 @@ export default function AdminB2BPage() {
     } finally { setLoading(false); }
   }
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    let active = true;
+    const params = new URLSearchParams(window.location.search);
+    const initialCompanyId = params.get("companyId") || "";
+    const initialTab = params.get("tab");
+    Promise.all([
+      fetchWithAuth(`/api/admin/b2b/quotes?status=ALL${initialCompanyId ? `&companyId=${initialCompanyId}` : ""}`),
+      fetchWithAuth(`/api/admin/b2b/price-rules${initialCompanyId ? `?companyId=${initialCompanyId}` : ""}`),
+    ]).then(([quoteResult, priceResult]) => {
+      if (!active) return;
+      setCompanyId(initialCompanyId);
+      if (initialTab === "pricing") setTab("pricing");
+      setQuotes(quoteResult.data ?? []);
+      setRules(priceResult.data ?? []);
+      setCompanies(priceResult.companies ?? []);
+      setProducts(priceResult.products ?? []);
+    }).catch((cause: unknown) => {
+      if (active) setError(cause instanceof Error ? cause.message : "Não foi possível carregar a operação B2B.");
+    }).finally(() => {
+      if (active) setLoading(false);
+    });
+    return () => { active = false; };
+  }, []);
 
-  async function processQuote(quoteId: number, action: "APPROVE" | "REJECT") {
+  async function processQuote(quoteId: number, action: "ISSUE_PROPOSAL" | "REJECT") {
     setBusy(quoteId); setError(""); setMessage("");
     try {
       const result = await fetchWithAuth("/api/admin/b2b/quotes", {
@@ -72,9 +105,9 @@ export default function AdminB2BPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ quoteId, action }),
       });
-      setMessage(action === "APPROVE"
-        ? `Cotação aprovada. Documento ${result.data.purchaseOrder?.poNumber || "PO"} criado.`
-        : "Cotação rejeitada.");
+      setMessage(action === "ISSUE_PROPOSAL"
+        ? `Proposta ${result.data.version} enviada. Válida até ${new Date(result.data.validUntil).toLocaleDateString("pt-PT")}.`
+        : "Pedido de cotação rejeitado.");
       await load();
     } catch (e) { setError(e instanceof Error ? e.message : "Não foi possível processar a cotação."); }
     finally { setBusy(null); }
@@ -112,32 +145,52 @@ export default function AdminB2BPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-blue-600">Admin · B2B</p><h1 className="mt-1 text-2xl font-black">Operação empresarial</h1><p className="mt-1 text-sm text-slate-500">Aprovação de empresas, cotações e preços comerciais por volume.</p></div>
-        <Link href="/admin/b2b/empresas" className="inline-flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700"><Building2 size={14}/>Empresas</Link><button onClick={() => void load()} disabled={loading} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold hover:bg-slate-50"><RefreshCw size={14} className={loading ? "animate-spin" : ""}/>Atualizar</button>
+        <div><p className="text-[10px] font-black uppercase tracking-[0.18em] text-blue-600">Admin · B2B</p><h1 className="mt-1 text-2xl font-black">Operação empresarial</h1><p className="mt-1 text-sm text-slate-500">Gestão de empresas, cotações e preços comerciais por volume.</p></div>
+        <Link href="/admin/b2b/empresas" className="inline-flex items-center gap-2 rounded-lg bg-blue-700 px-4 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-blue-800"><Building2 size={15}/>Gestão de empresas</Link><button onClick={() => void load()} disabled={loading} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold hover:bg-slate-50"><RefreshCw size={14} className={loading ? "animate-spin" : ""}/>Atualizar</button>
       </div>
       {message && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{message}</div>}
       {error && <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{error}</div>}
 
+      <section className="grid gap-3 sm:grid-cols-3" aria-label="Resumo da operação empresarial">
+        <Link href="/admin/b2b/empresas" className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-blue-200 hover:shadow">
+          <p className="text-xs font-semibold text-slate-500">Empresas registadas</p>
+          <p className="mt-2 text-2xl font-black text-slate-950">{companies.length}</p>
+          <p className="mt-1 text-xs font-semibold text-blue-700">Abrir gestão de empresas →</p>
+        </Link>
+        <button type="button" onClick={() => setTab("quotes")} className="rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-blue-200 hover:shadow">
+          <p className="text-xs font-semibold text-slate-500">Cotações por analisar</p>
+          <p className="mt-2 text-2xl font-black text-slate-950">{quotes.filter((quote) => ["SUBMITTED", "UNDER_REVIEW", "REVISION_REQUESTED"].includes(quote.status)).length}</p>
+          <p className="mt-1 text-xs font-semibold text-blue-700">Consultar cotações →</p>
+        </button>
+        <button type="button" onClick={() => setTab("pricing")} className="rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-blue-200 hover:shadow">
+          <p className="text-xs font-semibold text-slate-500">Regras de preço empresarial</p>
+          <p className="mt-2 text-2xl font-black text-slate-950">{rules.length}</p>
+          <p className="mt-1 text-xs font-semibold text-blue-700">Gerir preços comerciais →</p>
+        </button>
+      </section>
+
+      {companyId && <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-xs text-blue-900"><span>A mostrar a operação comercial da empresa #{companyId}.</span><Link href="/admin/b2b" className="font-bold underline">Ver todas as empresas</Link></div>}
       <div className="flex gap-2 border-b border-slate-200">
-        <button onClick={() => setTab("quotes")} className={`border-b-2 px-4 py-3 text-xs font-black ${tab === "quotes" ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500"}`}>Cotações B2B ({quotes.filter(q => ["SUBMITTED","UNDER_REVIEW"].includes(q.status)).length})</button>
+        <button onClick={() => setTab("quotes")} className={`border-b-2 px-4 py-3 text-xs font-black ${tab === "quotes" ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500"}`}>Cotações B2B ({quotes.filter(q => ["SUBMITTED","UNDER_REVIEW","REVISION_REQUESTED"].includes(q.status)).length})</button>
         <button onClick={() => setTab("pricing")} className={`border-b-2 px-4 py-3 text-xs font-black ${tab === "pricing" ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500"}`}>Preços empresariais ({rules.length})</button>
       </div>
 
       {tab === "quotes" ? (
         <section className="space-y-3">
-          {quotes.filter(q => ["SUBMITTED","UNDER_REVIEW"].includes(q.status)).length === 0 ? <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500">Não existem cotações pendentes.</div> :
-          quotes.filter(q => ["SUBMITTED","UNDER_REVIEW"].includes(q.status)).map((quote) => (
+          {quotes.filter(q => ["SUBMITTED","UNDER_REVIEW","REVISION_REQUESTED"].includes(q.status)).length === 0 ? <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500">Não existem cotações pendentes.</div> :
+          quotes.filter(q => ["SUBMITTED","UNDER_REVIEW","REVISION_REQUESTED"].includes(q.status)).map((quote) => (
             <article key={quote.id} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div><h2 className="font-black">{quote.quoteNumber}</h2><p className="mt-1 text-sm font-semibold">{quote.company?.tradeName || quote.companyName}</p><p className="text-xs text-slate-500">NIF {quote.companyNif} · {quote.email} · {new Date(quote.createdAt).toLocaleString("pt-PT")}</p></div>
                 <span className="rounded-full bg-amber-50 px-3 py-1 text-[10px] font-black text-amber-700">{quote.status}</span>
               </div>
               <div className="mt-4 divide-y divide-slate-100 border-y border-slate-100">
-                {quote.items.map((item) => <div key={item.productId} className="flex justify-between gap-4 py-2 text-sm"><span>{item.quantity} × {item.name}</span><strong>{Number(item.subtotal).toLocaleString("pt-AO")} Kz</strong></div>)}
+                {quote.items.map((item) => <div key={item.productId} className="flex justify-between gap-4 py-2 text-sm"><span>{item.quantity} × {item.name}</span><strong>{formatQuoteAmount(item.subtotal, quote.currency || "AOA")}</strong></div>)}
+                <div className="flex justify-between gap-4 py-3 text-sm"><span className="font-bold text-slate-600">Total solicitado · {quote.currency || "AOA"}</span><strong className="font-black">{formatQuoteAmount(quote.items.reduce((sum, item) => sum + Number(item.subtotal), 0), quote.currency || "AOA")}</strong></div>
               </div>
               <div className="mt-4 flex flex-wrap justify-end gap-2">
-                <button disabled={busy === quote.id} onClick={() => void processQuote(quote.id, "REJECT")} className="inline-flex items-center gap-2 rounded-lg border border-rose-200 px-4 py-2 text-xs font-black text-rose-700 hover:bg-rose-50 disabled:opacity-50"><XCircle size={14}/>Rejeitar</button>
-                <button disabled={busy === quote.id} onClick={() => void processQuote(quote.id, "APPROVE")} className="inline-flex items-center gap-2 rounded-lg bg-blue-700 px-4 py-2 text-xs font-black text-white hover:bg-blue-800 disabled:opacity-50"><CheckCircle2 size={14}/>{busy === quote.id ? "A processar..." : "Aprovar cotação"}</button>
+                <button disabled={busy === quote.id} onClick={() => void processQuote(quote.id, "REJECT")} className="inline-flex items-center gap-2 rounded-lg border border-rose-200 px-4 py-2 text-xs font-black text-rose-700 hover:bg-rose-50 disabled:opacity-50"><XCircle size={14}/>Rejeitar pedido</button>
+                <button disabled={busy === quote.id} onClick={() => void processQuote(quote.id, "ISSUE_PROPOSAL")} className="inline-flex items-center gap-2 rounded-lg bg-blue-700 px-4 py-2 text-xs font-black text-white hover:bg-blue-800 disabled:opacity-50"><CheckCircle2 size={14}/>{busy === quote.id ? "A processar..." : "Emitir proposta (15 dias)"}</button>
               </div>
             </article>
           ))}

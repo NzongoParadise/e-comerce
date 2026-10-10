@@ -58,19 +58,19 @@ export default function AccountLayout({ children }: { children: React.ReactNode 
     if (profileResolved && !profile && pathname !== "/account/support") router.replace("/login");
   }, [pathname, profile, profileResolved, router]);
 
-  if (pathname === "/account/support" && profileResolved && !profile) return <>{children}</>;
-  if (profileResolved && !profile) return <main className="flex min-h-screen items-center justify-center bg-[#f6f8fb] text-sm text-slate-500">A redirecionar para o login...</main>;
-
-  const visibleGroups = groups.map((group) => ({
+  const visibleGroups = useMemo(() => groups.map((group) => ({
     ...group,
     items: group.items.filter(({ href }) => {
       if (href === "/account/users" || href === "/admin/stock") return profile?.isAdmin === true;
       if (href === "/account/quotes") return profile?.accountType === "B2B";
       return true;
     }),
-  })).filter((group) => group.items.length);
+  })).filter((group) => group.items.length), [profile]);
+  const activeGroup = useMemo(() => visibleGroups.find((group) => group.items.some((item) => isActivePath(pathname, item.href))), [pathname, visibleGroups]);
 
-  const activeGroup = useMemo(() => visibleGroups.find((group) => group.items.some((item) => isActivePath(pathname, item.href))), [pathname, profile]);
+  if (pathname === "/account/support" && profileResolved && !profile) return <>{children}</>;
+  if (profileResolved && !profile) return <main className="flex min-h-screen items-center justify-center bg-[#f6f8fb] text-sm text-slate-500">A redirecionar para o login...</main>;
+
   const activeItem = activeGroup?.items.find((item) => isActivePath(pathname, item.href));
   const initials = (profile?.name || profile?.email || "CL").split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0].toUpperCase()).join("");
   const closeMobile = () => setSidebarOpen(false);

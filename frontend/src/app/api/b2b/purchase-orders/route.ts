@@ -20,8 +20,18 @@ export async function GET(request: Request) {
   const purchaseOrders = await prisma.purchaseOrder.findMany({
     where: { companyId: membership.companyId },
     include: {
-      quote: { select: { quoteNumber: true, status: true, items: true } },
-      order: { select: { id: true, orderNumber: true, status: true, totalEUR: true } },
+      quote: { select: { quoteNumber: true, status: true, currency: true, items: true } },
+      order: {
+        select: {
+          id: true,
+          orderNumber: true,
+          status: true,
+          totalEUR: true,
+          totalKZ: true,
+          currency: true,
+          payment: { select: { status: true, currency: true } },
+        },
+      },
     },
     orderBy: { createdAt: "desc" },
     take: 100,

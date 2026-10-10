@@ -26,7 +26,7 @@ export async function GET(request: Request) {
       include: {
         category: { select: { id: true, name: true, slug: true } },
         brand: { select: { id: true, name: true, slug: true } },
-        prices: true,
+        prices: { orderBy: { createdAt: "desc" } },
         b2bPriceRules: {
           where: { companyId: membership.companyId, active: true },
           orderBy: { minQuantity: "asc" },

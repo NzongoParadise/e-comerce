@@ -17,13 +17,17 @@ export async function GET(request: Request) {
     orderBy: { createdAt: "desc" },
     take: 100,
   });
-  const totals = payments.reduce((acc, p) => {
-    const amount = Number(p.amountEUR);
-    if (p.status === "PAID") acc.paid += amount;
-    else if (["AWAITING_PAYMENT", "PROCESSING", "CREATED"].includes(p.status)) acc.pending += amount;
-    else if (["FAILED", "EXPIRED", "CANCELLED"].includes(p.status)) acc.failed += amount;
-    return acc;
-  }, { paid: 0, pending: 0, failed: 0 });
+  const totalsByCurrency = payments.reduce((totals, payment) => {
+    const currency = payment.currency === "AOA" ? "AOA" : "EUR";
+    const amount = currency === "AOA" ? Number(payment.amountKZ) : Number(payment.amountEUR);
+    if (payment.status === "PAID") totals[currency].paid += amount;
+    else if (["AWAITING_PAYMENT", "PROCESSING", "CREATED"].includes(payment.status)) totals[currency].pending += amount;
+    else if (["FAILED", "EXPIRED", "CANCELLED"].includes(payment.status)) totals[currency].failed += amount;
+    return totals;
+  }, {
+    AOA: { paid: 0, pending: 0, failed: 0 },
+    EUR: { paid: 0, pending: 0, failed: 0 },
+  });
 
-  return Response.json({ data: { company: membership.company, role: membership.role, totals, payments } });
+  return Response.json({ data: { company: membership.company, role: membership.role, totalsByCurrency, payments } });
 }

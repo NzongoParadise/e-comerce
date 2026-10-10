@@ -1,13 +1,15 @@
 import { prisma } from "@/lib/server/prisma";
 import { authenticate, errorResponse, isAdmin, readJson } from "@/lib/server/api";
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
 
 export const runtime = "nodejs";
 
 const updateSchema = z.object({
   quoteId: z.coerce.number().int().positive(),
-  action: z.enum(["APPROVE", "REJECT"]),
+  action: z.enum(["ISSUE_PROPOSAL", "REJECT"]),
   note: z.string().trim().max(1000).optional(),
+  validForDays: z.number().int().min(1).max(90).default(15),
 });
 
 async function requireAdmin(request: Request) {
@@ -24,8 +26,15 @@ async function requireAdmin(request: Request) {
 export async function GET(request: Request) {
   const auth = await requireAdmin(request);
   if (auth.error) return auth.error;
-  const status = new URL(request.url).searchParams.get("status") || "ALL";
-  const where = status === "ALL" ? {} : { status };
+  const params = new URL(request.url).searchParams;
+  const status = params.get("status") || "ALL";
+  const companyId = params.has("companyId") ? Number(params.get("companyId")) : null;
+  if (companyId !== null && (!Number.isInteger(companyId) || companyId < 1)) return errorResponse("Empresa inválida.", 400);
+  const where = {
+    companyId: { not: null },
+    ...(status === "ALL" ? {} : { status }),
+    ...(companyId === null ? {} : { companyId }),
+  };
 
   try {
     const quotes = await prisma.quote.findMany({
@@ -33,14 +42,19 @@ export async function GET(request: Request) {
       include: {
         company: { select: { id: true, legalName: true, tradeName: true, nif: true, status: true } },
         user: { select: { id: true, name: true, email: true } },
-        items: { select: { productId: true, name: true, quantity: true, unitPrice: true, subtotal: true } },
+        items: { select: { productId: true, name: true, description: true, imageUrl: true, quantity: true, unitPrice: true, subtotal: true } },
+        revisions: { select: { version: true, validUntil: true, createdAt: true, snapshot: true }, orderBy: { version: "desc" } },
         purchaseOrders: { select: { id: true, poNumber: true, status: true, orderId: true } },
       },
       orderBy: { createdAt: "desc" },
       take: 100,
     });
 
-    const counts = await prisma.quote.groupBy({ by: ["status"], _count: { _all: true } });
+    const counts = await prisma.quote.groupBy({
+      by: ["status"],
+      where: { companyId: { not: null } },
+      _count: { _all: true },
+    });
     return Response.json({
       data: quotes,
       stats: Object.fromEntries(counts.map((row) => [row.status, row._count._all])),
@@ -71,61 +85,119 @@ export async function PATCH(request: Request) {
       });
       if (!quote) throw new Error("QUOTE_NOT_FOUND");
       if (!quote.companyId || !quote.company) throw new Error("COMPANY_REQUIRED");
-      if (!["SUBMITTED", "UNDER_REVIEW"].includes(quote.status)) throw new Error("QUOTE_NOT_REVIEWABLE");
-
-      if (action === "REJECT") {
-        const updated = await tx.quote.update({
-          where: { id: quote.id },
-          data: { status: "REJECTED", notes: note ? [quote.notes, note].filter(Boolean).join("\n") : quote.notes },
-        });
-        return { quote: updated, purchaseOrder: null };
+      if (!["SUBMITTED", "UNDER_REVIEW", "REVISION_REQUESTED"].includes(quote.status)) {
+        throw new Error("QUOTE_NOT_REVIEWABLE");
       }
 
-      const existing = quote.purchaseOrders.find((po) => po.status !== "CANCELLED");
-      const po = existing ?? await tx.purchaseOrder.create({
-        data: {
-          companyId: quote.companyId,
+      if (action === "REJECT") {
+        const updated = await tx.quote.updateMany({
+          where: { id: quote.id, status: quote.status, version: quote.version },
+          data: { status: "REJECTED" },
+        });
+        if (!updated.count) throw new Error("QUOTE_NOT_REVIEWABLE");
+        await tx.quoteEvent.create({
+          data: {
+            quoteId: quote.id,
+            version: quote.version,
+            fromStatus: quote.status,
+            toStatus: "REJECTED",
+            action: "ADMIN_REJECTED",
+            note: note || null,
+            actorUserId: auth.user!.id,
+          },
+        });
+        return {
           quoteId: quote.id,
-          poNumber: `PO-${new Date().getFullYear()}-${String(quote.id).padStart(6, "0")}`,
-          status: "APPROVED",
-          approvedBy: auth.user!.id,
-          approvedAt: new Date(),
-          notes: note || null,
+          status: "REJECTED",
+          version: quote.version,
+          validUntil: null,
+        };
+      }
+      if (quote.company.status !== "ACTIVE") throw new Error("COMPANY_NOT_ACTIVE");
+
+      const now = new Date();
+      const validUntil = new Date(now.getTime() + parsed.data.validForDays * 24 * 60 * 60 * 1000);
+      const version = quote.version + 1;
+      const total = quote.items.reduce(
+        (sum, item) => sum.plus(item.subtotal),
+        new Prisma.Decimal(0),
+      );
+      const revision = await tx.quoteRevision.create({
+        data: {
+          quoteId: quote.id,
+          version,
+          validUntil,
+          createdByUserId: auth.user!.id,
+          snapshot: {
+            quoteNumber: quote.quoteNumber,
+            company: {
+              legalName: quote.company.legalName,
+              tradeName: quote.company.tradeName,
+              nif: quote.company.nif,
+              address: quote.company.address,
+              email: quote.company.email,
+              phone: quote.company.phone,
+            },
+            currency: quote.currency,
+            total: total.toFixed(2),
+            items: quote.items.map((item) => ({
+              productId: item.productId,
+              name: item.name,
+              description: item.description,
+              imageUrl: item.imageUrl,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice.toString(),
+              subtotal: item.subtotal.toString(),
+            })),
+          } satisfies Prisma.InputJsonObject,
         },
       });
 
-      if (existing) {
-        await tx.purchaseOrder.update({
-          where: { id: existing.id },
-          data: { status: "APPROVED", approvedBy: auth.user!.id, approvedAt: new Date(), notes: note || existing.notes },
-        });
-      }
-
-      await tx.company.update({
-        where: { id: quote.companyId },
-        data: { status: "ACTIVE" },
+      const updated = await tx.quote.updateMany({
+        where: { id: quote.id, status: quote.status, version: quote.version },
+        data: {
+          status: "SENT",
+          version,
+          validUntil,
+          issuedAt: now,
+          acceptedAt: null,
+          acceptedVersion: null,
+        },
+      });
+      if (!updated.count) throw new Error("QUOTE_NOT_REVIEWABLE");
+      await tx.quoteEvent.create({
+        data: {
+          quoteId: quote.id,
+          revisionId: revision.id,
+          version,
+          fromStatus: quote.status,
+          toStatus: "SENT",
+          action: "PROPOSAL_ISSUED",
+          note: note || null,
+          actorUserId: auth.user!.id,
+        },
       });
 
-      const updated = await tx.quote.update({
-        where: { id: quote.id },
-        data: { status: "APPROVED", notes: note ? [quote.notes, note].filter(Boolean).join("\n") : quote.notes },
-      });
-
-      return { quote: updated, purchaseOrder: po };
+      return { quoteId: quote.id, status: "SENT", version, validUntil };
     });
 
     return Response.json({
       data: {
-        quoteId: result.quote.id,
-        status: result.quote.status,
-        purchaseOrder: result.purchaseOrder,
+        quoteId: result.quoteId,
+        status: result.status,
+        version: result.version,
+        validUntil: result.validUntil,
       },
     });
   } catch (error) {
     const code = error instanceof Error ? error.message : "";
     if (code === "QUOTE_NOT_FOUND") return errorResponse("Cotação não encontrada.", 404);
     if (code === "COMPANY_REQUIRED") return errorResponse("A cotação não está associada a uma empresa.", 409);
+    if (code === "COMPANY_NOT_ACTIVE") return errorResponse("A empresa precisa de estar homologada antes de aprovar cotações.", 409);
     if (code === "QUOTE_NOT_REVIEWABLE") return errorResponse("Esta cotação já foi processada.", 409);
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return errorResponse("A proposta foi atualizada em simultâneo. Atualize a lista antes de tentar novamente.", 409);
+    }
     console.error("Unable to process B2B quote:", error);
     return errorResponse("Não foi possível processar a cotação.", 503);
   }

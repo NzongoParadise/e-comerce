@@ -10,6 +10,7 @@ const orderStatuses = ['AWAITING_PAYMENT', 'PROCESSING', 'PAYMENT_CONFIRMED', 'S
 const querySchema = z.object({
   search: z.string().trim().max(160).default(''),
   status: z.enum(['ALL', ...orderStatuses]).default('ALL'),
+  companyId: z.coerce.number().int().positive().optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
@@ -55,9 +56,10 @@ export async function GET(request: Request) {
   if (auth.error) return auth.error;
   const parsed = querySchema.safeParse(Object.fromEntries(new URL(request.url).searchParams));
   if (!parsed.success) return errorResponse('Invalid order query', 400);
-  const { search, status, page, pageSize } = parsed.data;
+  const { search, status, companyId, page, pageSize } = parsed.data;
   const where: Prisma.OrderWhereInput = {
     ...(status !== 'ALL' ? { status } : {}),
+    ...(companyId === undefined ? {} : { companyId }),
     ...(search ? {
       OR: [
         { orderNumber: { contains: search, mode: 'insensitive' } },

@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/server/prisma';
 import { authenticate, errorResponse, readJson, userSubject } from '@/lib/server/api';
+import { getAppUrl } from '@/lib/server/appUrl';
 import { detachStripePaymentMethod, ensureStripeCustomer, setStripeDefaultPaymentMethod } from '@/lib/server/payments/stripeCustomers';
 import { z } from 'zod';
 
@@ -34,7 +35,8 @@ async function createStripeCardSetup(userId: number, label: string, isDefault: b
   const secretKey = process.env.STRIPE_SECRET_KEY;
   if (!secretKey) throw new Error('STRIPE_NOT_CONFIGURED');
   const customerId = await ensureStripeCustomer(userId);
-  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const frontendUrl = getAppUrl();
+  if (!frontendUrl) throw new Error('FRONTEND_URL_NOT_CONFIGURED');
   const params = new URLSearchParams({
     mode: 'setup',
     customer: customerId,

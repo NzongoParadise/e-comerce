@@ -150,7 +150,9 @@ export default function OrdersAdminPage() {
       setError("");
       try {
         const query = new URLSearchParams({ page: String(page), pageSize: "20", status: statusFilter, search });
-        const response = await fetchWithAuth(`/api/admin/orders?${query}`);
+      const companyId = new URLSearchParams(window.location.search).get("companyId");
+      if (companyId) query.set("companyId", companyId);
+      const response = await fetchWithAuth(`/api/admin/orders?${query}`);
         if (!active) return;
         setOrders(response.data);
         setStats(response.stats);
