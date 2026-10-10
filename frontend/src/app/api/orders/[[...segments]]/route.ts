@@ -498,15 +498,33 @@ export async function GET(request: Request) {
     });
     if (!order) return errorResponse('Order not found', 404);
     let carrierData: unknown = null;
+    let carrierDataError: string | null = null;
     const trackingApiUrl = process.env.TRACKING_API_URL;
     if (trackingApiUrl && order.trackingNumber) {
-      const url = new URL(trackingApiUrl);
-      url.searchParams.set('carrier', order.carrier || process.env.DEFAULT_CARRIER || '');
-      url.searchParams.set('trackingNumber', order.trackingNumber);
-      const response = await fetch(url, { headers: process.env.TRACKING_API_KEY ? { Authorization: `Bearer ${process.env.TRACKING_API_KEY}` } : undefined });
-      if (response.ok) carrierData = await response.json();
+      try {
+        const url = new URL(trackingApiUrl);
+        url.searchParams.set('carrier', order.carrier || process.env.DEFAULT_CARRIER || '');
+        url.searchParams.set('trackingNumber', order.trackingNumber);
+        const response = await fetch(url, {
+          headers: process.env.TRACKING_API_KEY ? { Authorization: `Bearer ${process.env.TRACKING_API_KEY}` } : undefined,
+          signal: AbortSignal.timeout(8000),
+          cache: 'no-store',
+        });
+        if (!response.ok) {
+          carrierDataError = 'A transportadora está temporariamente indisponível. A mostrar o histórico guardado.';
+          logger.error('Carrier tracking request failed', { orderId: order.id, status: response.status });
+        } else {
+          carrierData = await response.json();
+        }
+      } catch (error) {
+        carrierDataError = 'Não foi possível atualizar o tracking externo. A mostrar o histórico guardado.';
+        logger.error('Carrier tracking request failed', {
+          orderId: order.id,
+          error: error instanceof Error ? error.message : error,
+        });
+      }
     }
-    return Response.json({ data: { ...order, carrierData } });
+    return Response.json({ data: { ...order, carrierData, carrierDataError } });
   }
 
   const order = await prisma.order.findFirst({

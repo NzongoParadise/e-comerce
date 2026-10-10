@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 const required = [
   'DATABASE_URL',
   'JWT_SECRET',
-  ...(process.env.VERCEL_ENV === 'preview' ? [] : ['FRONTEND_URL']),
+  ...(process.env.VERCEL !== '1' ? ['FRONTEND_URL'] : []),
 ];
 
 // The app's own login issues HS256 tokens with JWT_SECRET. These settings are
@@ -26,9 +26,8 @@ if (missing.length > 0) {
   process.exit(1);
 }
 
-if (process.env.VERCEL_ENV !== 'preview' && Buffer.byteLength(process.env.CRON_SECRET || '', 'utf8') < 32) {
-  console.error('CRON_SECRET must contain at least 32 characters.');
-  process.exit(1);
+if (process.env.VERCEL_ENV === 'production' && Buffer.byteLength(process.env.CRON_SECRET || '', 'utf8') < 32) {
+  console.warn('CRON_SECRET is not configured. Automatic B2B stock-reservation expiry will remain unavailable until the scheduler is configured.');
 }
 
 const configuredExternalAuth = externalAuth.filter((key) => process.env[key]?.trim());

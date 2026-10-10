@@ -40,6 +40,22 @@ type Article = {
   keywords: string;
 };
 
+type SupportChatMessage = {
+  id: number;
+  content: string;
+  senderRole: string;
+  senderName?: string;
+  createdAt: string;
+};
+
+type SupportChat = {
+  id: number;
+  status: string;
+  subject: string | null;
+  agent?: { id: number; name: string | null } | null;
+  messages: SupportChatMessage[];
+};
+
 const topics: Topic[] = [
   { title: "Encomendas", description: "Acompanhar pedidos, estados e histórico.", icon: Package, href: "/account/orders" },
   { title: "Pagamentos", description: "Métodos de pagamento e questões de cobrança.", icon: WalletCards, href: "/info/payments" },
@@ -133,7 +149,7 @@ export default function SupportPage() {
   const [query, setQuery] = useState("");
   const [faqOpen, setFaqOpen] = useState<number | null>(0);
   const [showAllArticles, setShowAllArticles] = useState(false);
-  const [chat, setChat] = useState<any>(null);
+  const [chat, setChat] = useState<SupportChat | null>(null);
   const [chatLoading, setChatLoading] = useState(true);
   const [chatSending, setChatSending] = useState(false);
   const [chatDraft, setChatDraft] = useState("");
@@ -141,6 +157,7 @@ export default function SupportPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [guestName, setGuestName] = useState("");
   const [guestEmail, setGuestEmail] = useState("");
+  const [supportOrder, setSupportOrder] = useState<{ id: number; orderNumber: string } | null>(null);
 
   const loadChat = async () => {
     try {
@@ -160,10 +177,23 @@ export default function SupportPage() {
   };
 
   useEffect(() => {
-    setIsAuthenticated(Boolean(localStorage.getItem("jwt_token")));
-    loadChat();
+    const initialLoad = window.setTimeout(() => void loadChat(), 0);
     const timer = window.setInterval(loadChat, 4000);
-    return () => window.clearInterval(timer);
+    return () => {
+      window.clearTimeout(initialLoad);
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  useEffect(() => {
+    const orderId = Number(new URLSearchParams(window.location.search).get("orderId"));
+    if (!Number.isSafeInteger(orderId) || orderId <= 0) return;
+    fetchWithAuth(`/api/orders/${orderId}`)
+      .then((response) => {
+        setSupportOrder({ id: orderId, orderNumber: response.data.orderNumber });
+        setChatDraft(`Preciso de ajuda com a encomenda ${response.data.orderNumber}.`);
+      })
+      .catch(() => setChatError("Não foi possível associar esta encomenda ao pedido de suporte. Inicie sessão novamente e tente outra vez."));
   }, []);
 
   const sendChatMessage = async (event: FormEvent) => {
@@ -172,7 +202,7 @@ export default function SupportPage() {
     if (!content || chatSending) return;
     setChatSending(true); setChatError("");
     try {
-      await fetchWithAuth("/api/support/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content, ...(!isAuthenticated && !chat ? { guestName, guestEmail } : {}) }) });
+      await fetchWithAuth("/api/support/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content, ...(supportOrder ? { orderId: supportOrder.id } : {}), ...(!isAuthenticated && !chat ? { guestName, guestEmail } : {}) }) });
       setChatDraft("");
       await loadChat();
     } catch (error) { setChatError(error instanceof Error ? error.message : "Não foi possível enviar a mensagem."); }
@@ -268,6 +298,7 @@ export default function SupportPage() {
         <div className="grid lg:grid-cols-[1fr_280px]">
           <div className="flex min-h-[420px] flex-col">
             <div className="flex-1 space-y-3 overflow-y-auto p-4 sm:p-6">
+              {supportOrder && <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs text-blue-900"><p className="font-bold">Pedido associado à encomenda {supportOrder.orderNumber}</p><p className="mt-1">A equipa de suporte receberá esta referência juntamente com a tua mensagem.</p></div>}
               {chatLoading ? (
                 <div className="flex min-h-[300px] items-center justify-center gap-2 text-sm text-gray-500"><Loader2 className="animate-spin" size={18} /> A ligar ao suporte...</div>
               ) : chat ? (
@@ -289,7 +320,7 @@ export default function SupportPage() {
                       {supportAgentName ? "A acompanhar" : "Suporte"}
                     </span>
                   </div>
-                  {chat.messages?.map((message: any) => {
+                  {chat.messages?.map((message) => {
                     const mine = message.senderRole === "CUSTOMER" || message.senderRole === "GUEST";
                     return <div key={message.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
                       <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm ${mine ? "rounded-br-md bg-[#1d6ac4] text-white" : "rounded-bl-md bg-gray-100 text-gray-800"}`}>

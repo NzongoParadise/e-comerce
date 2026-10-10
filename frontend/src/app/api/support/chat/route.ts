@@ -23,6 +23,7 @@ function unavailableResponse(error: unknown) {
 const messageSchema = z.object({
   content: z.string().trim().min(1, "A mensagem não pode estar vazia.").max(4000),
   subject: z.string().trim().max(160).optional(),
+  orderId: z.number().int().positive().optional(),
   guestName: z.string().trim().min(2).max(100).optional(),
   guestEmail: z.string().trim().email().max(254).transform((value) => value.toLowerCase()).optional(),
 });
@@ -106,6 +107,16 @@ export async function POST(request: Request) {
     if (invalid) return errorResponse("Não autenticado.", 401);
     const parsed = messageSchema.safeParse(await readJson(request));
     if (!parsed.success) return errorResponse(parsed.error.issues[0]?.message || "Mensagem inválida.", 400);
+    if (parsed.data.orderId && !user) return errorResponse("Inicie sessão para pedir ajuda com uma encomenda.", 401);
+
+    const order = parsed.data.orderId
+      ? await prisma.order.findFirst({
+          where: { id: parsed.data.orderId, userId: user!.id },
+          select: { orderNumber: true },
+        })
+      : null;
+    if (parsed.data.orderId && !order) return errorResponse("Encomenda não encontrada.", 404);
+    const content = order ? `[Encomenda ${order.orderNumber}]\n${parsed.data.content}` : parsed.data.content;
 
     let guestToken = user ? null : readGuestToken(request);
     if (!user && !guestToken && (!parsed.data.guestName || !parsed.data.guestEmail)) {
@@ -136,7 +147,7 @@ export async function POST(request: Request) {
           guestName: user ? null : parsed.data.guestName || previousGuestConversation?.guestName,
           guestEmail: user ? null : parsed.data.guestEmail || previousGuestConversation?.guestEmail,
           guestSessionHash,
-          subject: parsed.data.subject || "Pedido de suporte",
+          subject: (order ? `Encomenda ${order.orderNumber} — apoio` : parsed.data.subject) || "Pedido de suporte",
         },
       });
     }
@@ -147,7 +158,7 @@ export async function POST(request: Request) {
           conversationId: conversation!.id,
           senderId: user?.id,
           senderRole: user ? "CUSTOMER" : "GUEST",
-          content: parsed.data.content,
+          content,
         },
         include: { sender: { select: { id: true, name: true } } },
       });

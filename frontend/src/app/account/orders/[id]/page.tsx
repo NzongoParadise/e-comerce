@@ -223,7 +223,7 @@ export default function OrderDetailPage() {
                 })}
               </ol>
             )}
-            {order.status === "SHIPPED" && <Link href={`/account/orders/${order.id}/tracking`} className="btn-primary mt-5"><Truck size={15} /> Acompanhar entrega</Link>}
+            {!cancelled && <Link href={`/account/orders/${order.id}/tracking`} className="btn-primary mt-5"><Truck size={15} /> Acompanhar encomenda</Link>}
           </section>
 
           <section className="card overflow-hidden" aria-labelledby="items-title">
@@ -238,7 +238,7 @@ export default function OrderDetailPage() {
             <div className="order-detail-actions flex flex-wrap gap-2 border-t border-gray-100 p-4">
               <button type="button" onClick={() => setShowPrintSheet(true)} className="btn-secondary py-2 text-xs"><Printer size={14} /> Ver ficha para impressão</button>
               {!cancelled && <Link href="/account/returns" className="btn-secondary py-2 text-xs"><Package size={14} /> Pedir devolução</Link>}
-              <Link href="/account/support" className="btn-secondary py-2 text-xs"><Headphones size={14} /> Pedir ajuda</Link>
+              <Link href={`/account/support?orderId=${order.id}`} className="btn-secondary py-2 text-xs"><Headphones size={14} /> Pedir ajuda com esta encomenda</Link>
             </div>
           </section>
 
@@ -272,7 +272,7 @@ export default function OrderDetailPage() {
             <div className="mt-4 space-y-3 border-b border-gray-100 pb-4 text-xs"><div className="flex justify-between gap-3 text-gray-600"><span>Artigos</span><span>{order.items.reduce((sum, item) => sum + item.quantity, 0)}</span></div><div className="flex justify-between gap-3 text-gray-600"><span>Pagamento</span><span className="text-right font-semibold text-gray-800">{order.paymentMethod}</span></div>{order.payment?.status && <div className="flex justify-between gap-3 text-gray-600"><span>Estado do pagamento</span><span className="text-right font-semibold text-gray-800">{order.payment.status}</span></div>}</div>
             <div className="mt-4 flex items-end justify-between gap-3"><span className="text-sm font-bold text-gray-900">Total</span><strong className="text-lg font-black text-gray-900">{money(total, currency)}</strong></div>
           </section>
-          <section className="card flex items-start gap-3 bg-blue-50 p-4"><ShieldCheck className="shrink-0 text-[#1555d8]" size={22} /><div><p className="text-xs font-bold text-gray-900">Compra protegida</p><p className="mt-1 text-[11px] leading-4 text-gray-600">Precisa de ajuda com o pagamento ou a entrega? A nossa equipa está disponível para ajudar.</p><Link href="/account/support" className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-[#1555d8]"><CreditCard size={13} /> Contactar suporte</Link></div></section>
+          <section className="card flex items-start gap-3 bg-blue-50 p-4"><ShieldCheck className="shrink-0 text-[#1555d8]" size={22} /><div><p className="text-xs font-bold text-gray-900">Apoio pós-venda</p><p className="mt-1 text-[11px] leading-4 text-gray-600">Se surgir algum problema com o pagamento ou a entrega, envie um pedido de ajuda associado a esta encomenda.</p><Link href={`/account/support?orderId=${order.id}`} className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-[#1555d8]"><CreditCard size={13} /> Pedir ajuda</Link></div></section>
         </aside>
       </div>
     </div>
