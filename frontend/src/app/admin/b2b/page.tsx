@@ -219,7 +219,24 @@ export default function AdminB2BPage() {
       {tab === "quotes" ? (
         <section className="space-y-3">
           {quotes.filter(q => ["SUBMITTED","UNDER_REVIEW","REVISION_REQUESTED"].includes(q.status)).length === 0 ? <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500">Não existem cotações pendentes.</div> :
-          quotes.filter(q => ["SUBMITTED","UNDER_REVIEW","REVISION_REQUESTED"].includes(q.status)).map((quote) => (
+          quotes.filter(q => ["SUBMITTED","UNDER_REVIEW","REVISION_REQUESTED"].includes(q.status)).map((quote) => {
+            const edits = proposalEdits[quote.id] ?? {};
+            const proposedLines = quote.items.map((item) => {
+              const edit = edits[item.productId];
+              const quantity = Number(edit?.quantity ?? item.quantity);
+              const unitPrice = Number(edit?.unitPrice ?? (Number(item.unitPrice) > 0 ? String(item.unitPrice) : ""));
+              return { quantity, unitPrice };
+            });
+            const proposalComplete = proposedLines.every((item) =>
+              Number.isInteger(item.quantity) && item.quantity >= 1 && item.quantity <= 100000 &&
+              Number.isFinite(item.unitPrice) && item.unitPrice > 0 && item.unitPrice <= 99999999.99 &&
+              Math.abs(item.unitPrice * 100 - Math.round(item.unitPrice * 100)) <= 0.000001
+            );
+            const proposedTotal = proposedLines.reduce((sum, item) =>
+              sum + (Number.isFinite(item.unitPrice) && item.unitPrice > 0 && Number.isInteger(item.quantity) && item.quantity > 0
+                ? item.unitPrice * item.quantity
+                : 0), 0);
+            return (
             <article key={quote.id} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div><h2 className="font-black">{quote.quoteNumber}</h2><p className="mt-1 text-sm font-semibold">{quote.company?.tradeName || quote.companyName}</p><p className="text-xs text-slate-500">NIF {quote.companyNif} · {quote.email} · {new Date(quote.createdAt).toLocaleString("pt-PT")}</p></div>
@@ -279,14 +296,24 @@ export default function AdminB2BPage() {
                     </div>
                   );
                 })}
-                <div className="flex justify-between gap-4 py-3 text-sm"><span className="font-bold text-slate-600">Total solicitado · {quote.currency || "AOA"}</span><strong className="font-black">{formatQuoteAmount(quote.items.reduce((sum, item) => sum + Number(item.subtotal), 0), quote.currency || "AOA")}</strong></div>
+                <div className="flex justify-between gap-4 py-3 text-sm">
+                  <span className="font-bold text-slate-600">Total da proposta · {quote.currency || "AOA"}</span>
+                  <strong className="text-right font-black">
+                    {proposalComplete
+                      ? formatQuoteAmount(proposedTotal, quote.currency || "AOA")
+                      : proposedTotal > 0
+                        ? `Parcial: ${formatQuoteAmount(proposedTotal, quote.currency || "AOA")}`
+                        : "Preencha os preços"}
+                  </strong>
+                </div>
               </div>
               <div className="mt-4 flex flex-wrap justify-end gap-2">
                 <button disabled={busy === quote.id} onClick={() => void processQuote(quote.id, "REJECT")} className="inline-flex items-center gap-2 rounded-lg border border-rose-200 px-4 py-2 text-xs font-black text-rose-700 hover:bg-rose-50 disabled:opacity-50"><XCircle size={14}/>Rejeitar pedido</button>
                 <button disabled={busy === quote.id} onClick={() => void processQuote(quote.id, "ISSUE_PROPOSAL")} className="inline-flex items-center gap-2 rounded-lg bg-blue-700 px-4 py-2 text-xs font-black text-white hover:bg-blue-800 disabled:opacity-50"><CheckCircle2 size={14}/>{busy === quote.id ? "A processar..." : "Emitir proposta (15 dias)"}</button>
               </div>
             </article>
-          ))}
+            );
+          })}
         </section>
       ) : (
         <section className="space-y-5">
