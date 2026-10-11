@@ -15,6 +15,7 @@ type Quote = {
   email: string;
   phone: string;
   createdAt: string;
+  version: number;
   items: Array<{ productId: number; name: string; quantity: number; unitPrice: string | number; subtotal: string | number }>;
   company?: { id: number; legalName: string; tradeName?: string | null; nif: string; status: string } | null;
   user?: { name?: string | null; email?: string | null } | null;
@@ -53,6 +54,7 @@ export default function AdminB2BPage() {
   const [companyId, setCompanyId] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<number | null>(null);
+  const [proposalEdits, setProposalEdits] = useState<Record<number, Record<number, { quantity: string; unitPrice: string }>>>({});
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [form, setForm] = useState({ companyId: "", productId: "", minQuantity: "1", unitPrice: "", currency: "AOA" });
@@ -98,13 +100,52 @@ export default function AdminB2BPage() {
   }, []);
 
   async function processQuote(quoteId: number, action: "ISSUE_PROPOSAL" | "REJECT") {
+    const quote = quotes.find((item) => item.id === quoteId);
+    if (!quote) {
+      setError("A cotação já não está disponível. Atualize a lista.");
+      return;
+    }
+
+    let items: Array<{ productId: number; quantity: number; unitPrice: number }> | undefined;
+    if (action === "ISSUE_PROPOSAL") {
+      const edits = proposalEdits[quoteId] ?? {};
+      items = quote.items.map((item) => {
+        const edit = edits[item.productId];
+        return {
+          productId: item.productId,
+          quantity: Number(edit?.quantity ?? item.quantity),
+          unitPrice: Number(edit?.unitPrice ?? (Number(item.unitPrice) > 0 ? String(item.unitPrice) : "")),
+        };
+      });
+      const invalidLine = items.find((item) =>
+        !Number.isInteger(item.quantity) ||
+        item.quantity < 1 ||
+        item.quantity > 100000 ||
+        !Number.isFinite(item.unitPrice) ||
+        item.unitPrice <= 0 ||
+        item.unitPrice > 99999999.99 ||
+        Math.abs(item.unitPrice * 100 - Math.round(item.unitPrice * 100)) > 0.000001
+      );
+      if (invalidLine) {
+        setError("Antes de emitir a proposta, indique para cada artigo uma quantidade inteira válida e um preço unitário positivo com até duas casas decimais.");
+        return;
+      }
+    }
+
     setBusy(quoteId); setError(""); setMessage("");
     try {
       const result = await fetchWithAuth("/api/admin/b2b/quotes", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ quoteId, action }),
+        body: JSON.stringify({ quoteId, action, ...(items ? { items } : {}) }),
       });
+      if (action === "ISSUE_PROPOSAL") {
+        setProposalEdits((current) => {
+          const next = { ...current };
+          delete next[quoteId];
+          return next;
+        });
+      }
       setMessage(action === "ISSUE_PROPOSAL"
         ? `Proposta ${result.data.version} enviada. Válida até ${new Date(result.data.validUntil).toLocaleDateString("pt-PT")}.`
         : "Pedido de cotação rejeitado.");
@@ -185,7 +226,59 @@ export default function AdminB2BPage() {
                 <span className="rounded-full bg-amber-50 px-3 py-1 text-[10px] font-black text-amber-700">{quote.status}</span>
               </div>
               <div className="mt-4 divide-y divide-slate-100 border-y border-slate-100">
-                {quote.items.map((item) => <div key={item.productId} className="flex justify-between gap-4 py-2 text-sm"><span>{item.quantity} × {item.name}</span><strong>{formatQuoteAmount(item.subtotal, quote.currency || "AOA")}</strong></div>)}
+                {quote.items.map((item) => {
+                  const edit = proposalEdits[quote.id]?.[item.productId];
+                  const quantity = edit?.quantity ?? String(item.quantity);
+                  const unitPrice = edit?.unitPrice ?? (Number(item.unitPrice) > 0 ? String(item.unitPrice) : "");
+                  return (
+                    <div key={item.productId} className="grid gap-2 py-3 sm:grid-cols-[minmax(0,1fr)_7rem_9rem] sm:items-center">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-slate-900">{item.name}</p>
+                        <p className="mt-1 text-xs text-slate-500">Pedido: {item.quantity} un. · {Number(item.unitPrice) > 0 ? formatQuoteAmount(item.subtotal, quote.currency || "AOA") : "Preço por definir"}</p>
+                      </div>
+                      <label className="text-xs font-semibold text-slate-600">
+                        Quantidade proposta
+                        <input
+                          aria-label={`Quantidade proposta de ${item.name}`}
+                          type="number"
+                          min={1}
+                          max={100000}
+                          step={1}
+                          value={quantity}
+                          onChange={(event) => setProposalEdits((current) => ({
+                            ...current,
+                            [quote.id]: {
+                              ...current[quote.id],
+                              [item.productId]: { quantity: event.target.value, unitPrice },
+                            },
+                          }))}
+                          className="mt-1 w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm font-normal"
+                        />
+                      </label>
+                      <label className="text-xs font-semibold text-slate-600">
+                        Preço unitário ({quote.currency || "AOA"})
+                        <input
+                          aria-label={`Preço unitário de ${item.name}`}
+                          type="number"
+                          min="0.01"
+                          max="99999999.99"
+                          step="0.01"
+                          inputMode="decimal"
+                          value={unitPrice}
+                          onChange={(event) => setProposalEdits((current) => ({
+                            ...current,
+                            [quote.id]: {
+                              ...current[quote.id],
+                              [item.productId]: { quantity, unitPrice: event.target.value },
+                            },
+                          }))}
+                          placeholder="Definir preço"
+                          className="mt-1 w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm font-normal"
+                        />
+                      </label>
+                    </div>
+                  );
+                })}
                 <div className="flex justify-between gap-4 py-3 text-sm"><span className="font-bold text-slate-600">Total solicitado · {quote.currency || "AOA"}</span><strong className="font-black">{formatQuoteAmount(quote.items.reduce((sum, item) => sum + Number(item.subtotal), 0), quote.currency || "AOA")}</strong></div>
               </div>
               <div className="mt-4 flex flex-wrap justify-end gap-2">
