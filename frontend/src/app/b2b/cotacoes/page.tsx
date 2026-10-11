@@ -27,6 +27,7 @@ type Currency = QuoteCurrency;
 type ProductPrice = {
   amount: number | string;
   currency: string;
+  market?: string;
 };
 
 type B2BPriceRule = {
@@ -63,6 +64,15 @@ type PurchaseOrderLink = {
   orderId: number | null;
 };
 
+type QuoteProposalSnapshot = {
+  itemsTotal?: number | string;
+  shippingAmount?: number | string;
+  taxAmount?: number | string;
+  total?: number | string;
+  deliveryDays?: number | null;
+  paymentTerms?: string | null;
+};
+
 type Quote = {
   id: number;
   quoteNumber: string;
@@ -72,6 +82,7 @@ type Quote = {
   createdAt: string;
   version: number;
   validUntil: string | null;
+  proposal: QuoteProposalSnapshot | null;
   items: QuoteItem[];
   events: Array<{ version: number; action: string; note: string | null; createdAt: string }>;
   purchaseOrders: PurchaseOrderLink[];
@@ -85,6 +96,7 @@ type QuoteResponse = {
     legalName: string;
     tradeName: string | null;
     status: string;
+    country: string;
   };
 };
 
@@ -95,6 +107,11 @@ type CatalogResponse = {
 };
 
 type DraftItem = { productId: number; quantity: number };
+
+function marketForCountry(country: string | null | undefined): "AO" | "PT" {
+  const normalized = (country ?? "").trim().toUpperCase();
+  return normalized === "PT" || normalized === "PORTUGAL" ? "PT" : "AO";
+}
 
 const statusLabels: Record<string, string> = {
   DRAFT: "Rascunho",
@@ -259,11 +276,13 @@ export default function B2BQuotesPage() {
   const selectedProduct = products.find(
     (product) => product.id === Number(selectedProductId),
   );
+  const market = marketForCountry(company?.country);
   const selectedUnitPrice = selectedProduct
     ? resolveQuoteUnitPrice(
         selectedProduct,
         Number(selectedQuantity) || 1,
         currency,
+        market,
       )
     : null;
   const draftTotal = useMemo(
@@ -271,13 +290,19 @@ export default function B2BQuotesPage() {
       draftItems.reduce((total, item) => {
         const product = products.find((candidate) => candidate.id === item.productId);
         const unitPrice = product
-          ? resolveQuoteUnitPrice(product, item.quantity, currency)
+          ? resolveQuoteUnitPrice(product, item.quantity, currency, market)
           : null;
         return total + (unitPrice === null ? 0 : unitPrice * item.quantity);
       }, 0),
-    [currency, draftItems, products],
+    [currency, draftItems, products, market],
   );
-  const approvedCount = quotes.filter((quote) => quote.status === "APPROVED").length;
+  const hasUnpricedDraftItem = draftItems.some((item) => {
+    const product = products.find((candidate) => candidate.id === item.productId);
+    return !product || resolveQuoteUnitPrice(product, item.quantity, currency, market) === null;
+  });
+  const acceptedCount = quotes.filter((quote) =>
+    ["ACCEPTED", "CONVERTED_TO_ORDER"].includes(quote.status),
+  ).length;
   const inReviewCount = quotes.filter((quote) =>
     ["SUBMITTED", "UNDER_REVIEW", "REVISION_REQUESTED"].includes(quote.status),
   ).length;
@@ -390,22 +415,6 @@ export default function B2BQuotesPage() {
       setError("Adicione pelo menos um produto à cotação.");
       return;
     }
-    const unpricedProduct = draftItems
-      .map((item) => products.find((product) => product.id === item.productId))
-      .find((product, index) => {
-        const item = draftItems[index];
-        return (
-          product !== undefined &&
-          resolveQuoteUnitPrice(product, item.quantity, currency) === null
-        );
-      });
-    if (unpricedProduct) {
-      setError(
-        `Não existe preço configurado em ${currency} para ${unpricedProduct.name}. Escolha outra moeda ou contacte a equipa comercial.`,
-      );
-      return;
-    }
-
     setSubmitting(true);
     setError("");
     setMessage("");
@@ -545,12 +554,12 @@ export default function B2BQuotesPage() {
         {[
           { label: "Pedidos enviados", value: quotes.length, Icon: FileText, tone: "bg-blue-50 text-blue-700" },
           { label: "Em análise", value: inReviewCount, Icon: Clock3, tone: "bg-amber-50 text-amber-800" },
-          { label: "Aprovadas", value: approvedCount, Icon: CheckCircle2, tone: "bg-emerald-50 text-emerald-700" },
+          { label: "Propostas aceites", value: acceptedCount, Icon: CheckCircle2, tone: "bg-emerald-50 text-emerald-700" },
         ].map(({ label, value, Icon, tone }) => (
           <article
             key={label}
             className={`min-w-0 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:rounded-2xl sm:p-5 ${
-              label === "Aprovadas" ? "col-span-2 sm:col-span-1" : ""
+              label === "Propostas aceites" ? "col-span-2 sm:col-span-1" : ""
             }`}
           >
             <div className="flex items-start justify-between gap-2">
@@ -817,10 +826,12 @@ export default function B2BQuotesPage() {
                   </div>
                   <div className="flex flex-col gap-1 border-t border-slate-200 bg-slate-50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
                     <span className="text-xs font-bold text-slate-600">
-                      Total estimado <span className="font-normal">(sujeito a confirmação comercial)</span>
+                      {hasUnpricedDraftItem ? "Total parcial" : "Total estimado"} <span className="font-normal">(sujeito a confirmação comercial)</span>
                     </span>
                     <strong className="text-sm font-black text-slate-950">
-                      {formatMoney(draftTotal, currency)}
+                      {hasUnpricedDraftItem
+                        ? (draftTotal > 0 ? `${formatMoney(draftTotal, currency)} + preços sob consulta` : "Preço sob consulta")
+                        : formatMoney(draftTotal, currency)}
                     </strong>
                   </div>
                 </div>
@@ -884,10 +895,16 @@ export default function B2BQuotesPage() {
         {quotes.length ? (
           <div className="divide-y divide-slate-100">
             {quotes.map((quote) => {
-              const total = quote.items.reduce(
+              const itemsTotal = quote.items.reduce(
                 (sum, item) => sum + Number(item.subtotal),
                 0,
               );
+              const proposalIssued = quote.version > 0 && ["SENT", "ACCEPTED", "CONVERTED_TO_ORDER", "REVISION_REQUESTED", "EXPIRED", "REJECTED", "APPROVED"].includes(quote.status);
+              const shippingAmount = proposalIssued ? Number(quote.proposal?.shippingAmount ?? 0) : 0;
+              const taxAmount = proposalIssued ? Number(quote.proposal?.taxAmount ?? 0) : 0;
+              const total = proposalIssued && quote.proposal?.total !== undefined
+                ? Number(quote.proposal.total)
+                : itemsTotal + shippingAmount + taxAmount;
               const purchaseOrder = quote.purchaseOrders.find(
                 (po) => po.status !== "CANCELLED",
               );
@@ -916,7 +933,7 @@ export default function B2BQuotesPage() {
                       </p>
                     </div>
                     <strong className="text-sm font-black text-slate-950 sm:text-right">
-                      {formatMoney(total, quote.currency === "EUR" ? "EUR" : "AOA")}
+                      {proposalIssued ? formatMoney(total, quote.currency === "EUR" ? "EUR" : "AOA") : "A determinar"}
                     </strong>
                   </div>
 
@@ -939,13 +956,13 @@ export default function B2BQuotesPage() {
                           {item.quantity} un.
                         </span>
                         <span className="hidden text-right text-slate-600 sm:block">
-                          {formatMoney(item.unitPrice, quote.currency === "EUR" ? "EUR" : "AOA")}
+                          {proposalIssued ? formatMoney(item.unitPrice, quote.currency === "EUR" ? "EUR" : "AOA") : "Preço sob consulta"}
                         </span>
                         <span className="col-span-2 flex justify-between font-black text-slate-900 sm:col-span-1 sm:block sm:text-right">
                           <span className="font-medium text-slate-500 sm:hidden">
                             Subtotal
                           </span>
-                          {formatMoney(item.subtotal, quote.currency === "EUR" ? "EUR" : "AOA")}
+                          {proposalIssued ? formatMoney(item.subtotal, quote.currency === "EUR" ? "EUR" : "AOA") : "A determinar"}
                         </span>
                       </div>
                     ))}
@@ -971,6 +988,34 @@ export default function B2BQuotesPage() {
                           </p>
                         )}
                       </div>
+                      {proposalIssued && quote.proposal && (
+                        <div className="mt-3 rounded-xl border border-blue-100 bg-white p-3 text-xs">
+                          <div className="flex justify-between gap-3 py-1 text-slate-600">
+                            <span>Artigos</span>
+                            <span>{formatMoney(quote.proposal.itemsTotal ?? itemsTotal, quote.currency)}</span>
+                          </div>
+                          <div className="flex justify-between gap-3 py-1 text-slate-600">
+                            <span>Transporte</span>
+                            <span>{formatMoney(shippingAmount, quote.currency)}</span>
+                          </div>
+                          <div className="flex justify-between gap-3 py-1 text-slate-600">
+                            <span>IVA / impostos adicionais</span>
+                            <span>{formatMoney(taxAmount, quote.currency)}</span>
+                          </div>
+                          {quote.proposal.deliveryDays && (
+                            <p className="py-1 text-slate-600">Prazo previsto: {quote.proposal.deliveryDays} dias</p>
+                          )}
+                          {quote.proposal.paymentTerms && (
+                            <p className="mt-2 border-t border-slate-100 pt-2 leading-5 text-slate-700">
+                              <strong>Condições de pagamento:</strong> {quote.proposal.paymentTerms}
+                            </p>
+                          )}
+                          <div className="mt-2 flex justify-between gap-3 border-t border-slate-100 pt-2 font-black text-slate-950">
+                            <span>Total da proposta</span>
+                            <span>{formatMoney(total, quote.currency)}</span>
+                          </div>
+                        </div>
+                      )}
                       {quote.events.find(
                         (event) =>
                           event.version === quote.version &&

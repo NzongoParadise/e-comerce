@@ -20,7 +20,20 @@ export async function GET(request: Request) {
   const purchaseOrders = await prisma.purchaseOrder.findMany({
     where: { companyId: membership.companyId },
     include: {
-      quote: { select: { quoteNumber: true, status: true, currency: true, items: true } },
+      quote: {
+        select: {
+          quoteNumber: true,
+          status: true,
+          currency: true,
+          version: true,
+          items: true,
+          revisions: {
+            orderBy: { version: "desc" },
+            take: 1,
+            select: { version: true, snapshot: true },
+          },
+        },
+      },
       order: {
         select: {
           id: true,
@@ -28,6 +41,10 @@ export async function GET(request: Request) {
           status: true,
           totalEUR: true,
           totalKZ: true,
+          shippingTotalEUR: true,
+          shippingTotalKZ: true,
+          taxTotalEUR: true,
+          taxTotalKZ: true,
           currency: true,
           payment: { select: { status: true, currency: true } },
         },
@@ -37,5 +54,14 @@ export async function GET(request: Request) {
     take: 100,
   });
 
-  return Response.json({ data: purchaseOrders, role: membership.role, company: membership.company });
+  return Response.json({
+    data: purchaseOrders.map((purchaseOrder) => ({
+      ...purchaseOrder,
+      quote: purchaseOrder.quote
+        ? { ...purchaseOrder.quote, proposal: purchaseOrder.quote.revisions[0]?.snapshot ?? null }
+        : null,
+    })),
+    role: membership.role,
+    company: membership.company,
+  });
 }

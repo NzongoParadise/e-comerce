@@ -10,6 +10,11 @@ import {
 
 export const runtime = "nodejs";
 
+function marketForCountry(country: string | null | undefined): "AO" | "PT" {
+  const normalized = (country ?? "").trim().toUpperCase();
+  return normalized === "PT" || normalized === "PORTUGAL" ? "PT" : "AO";
+}
+
 const quoteSchema = z.object({
   currency: z.enum(["AOA", "EUR"]),
   items: z
@@ -77,13 +82,17 @@ export async function GET(request: Request) {
     });
 
     return Response.json({
-      data: quotes,
+      data: quotes.map((quote) => ({
+        ...quote,
+        proposal: quote.revisions.find((revision) => revision.version === quote.version)?.snapshot ?? null,
+      })),
       role: context.membership.role,
       company: {
         id: context.membership.company.id,
         legalName: context.membership.company.legalName,
         tradeName: context.membership.company.tradeName,
         status: context.membership.company.status,
+        country: context.membership.company.country,
       },
     });
   } catch (error) {
@@ -136,6 +145,7 @@ export async function PATCH(request: Request) {
       if (!quote) throw new Error("QUOTE_NOT_FOUND");
 
       if (
+        action === "ACCEPT" &&
         ["ACCEPTED", "CONVERTED_TO_ORDER"].includes(quote.status) &&
         quote.acceptedVersion === version
       ) {
@@ -220,7 +230,7 @@ export async function PATCH(request: Request) {
             poNumber: `PO-${quote.id}-${version}`,
             status: "APPROVED",
             currency: quote.currency,
-            approvedBy: revision.createdByUserId,
+            approvedBy: context.user.id,
             approvedAt: now,
           },
         });
@@ -289,6 +299,7 @@ export async function POST(request: Request) {
     }
 
     const productIds = parsed.data.items.map((item) => item.productId);
+    const market = marketForCountry(context.membership.company.country);
     const [products, priceRules, prices] = await Promise.all([
       prisma.product.findMany({
         where: { id: { in: productIds } },
@@ -304,7 +315,11 @@ export async function POST(request: Request) {
         orderBy: { minQuantity: "desc" },
       }),
       prisma.price.findMany({
-        where: { productId: { in: productIds }, currency: parsed.data.currency },
+        where: {
+          productId: { in: productIds },
+          currency: parsed.data.currency,
+          market,
+        },
         orderBy: { createdAt: "desc" },
       }),
     ]);
@@ -326,21 +341,15 @@ export async function POST(request: Request) {
         },
         requestedItem.quantity,
         parsed.data.currency,
+        market,
       );
 
       return { requestedItem, product, unitPrice };
     });
 
-    const unpricedProducts = applicableItems
-      .filter((item) => item.unitPrice === null)
-      .map((item) => item.product.name);
-    if (unpricedProducts.length) {
-      return errorResponse(
-        `Não há preço configurado em ${parsed.data.currency} para: ${unpricedProducts.join(", ")}.`,
-        422,
-      );
-    }
-
+    // An RFQ is allowed to include items with no catalog price. A zero value is
+    // only a storage placeholder until the commercial team issues a priced,
+    // versioned proposal; the customer UI must display it as "sob consulta".
     const quoteNumber = `COT-${new Date().getFullYear()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
     const quote = await prisma.$transaction(async (tx) => {
       const created = await tx.quote.create({
@@ -364,9 +373,9 @@ export async function POST(request: Request) {
                 name: product.name,
                 description: product.description,
                 imageUrl: product.imageUrl,
-                unitPrice,
+                unitPrice: new Prisma.Decimal(unitPrice ?? 0),
                 quantity: requestedItem.quantity,
-                subtotal: new Prisma.Decimal(unitPrice).mul(requestedItem.quantity),
+                subtotal: new Prisma.Decimal(unitPrice ?? 0).mul(requestedItem.quantity),
               };
             }),
           },

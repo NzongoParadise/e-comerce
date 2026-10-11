@@ -354,6 +354,10 @@ model Order {
   purchaseOrders PurchaseOrder[]
   discountTotalEUR Decimal @default(0) @db.Decimal(10,2)
   discountTotalKZ  Decimal @default(0) @db.Decimal(12,2)
+  shippingTotalEUR Decimal @default(0) @db.Decimal(10,2)
+  shippingTotalKZ  Decimal @default(0) @db.Decimal(12,2)
+  taxTotalEUR      Decimal @default(0) @db.Decimal(10,2)
+  taxTotalKZ       Decimal @default(0) @db.Decimal(12,2)
 }
 
 model SystemSetting {

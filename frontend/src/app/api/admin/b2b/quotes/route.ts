@@ -5,11 +5,65 @@ import { z } from "zod";
 
 export const runtime = "nodejs";
 
+const proposalLineSchema = z.object({
+  productId: z.number().int().positive(),
+  quantity: z.number().int().min(1).max(100000),
+  unitPrice: z.number().finite().positive().max(99999999.99),
+});
+
 const updateSchema = z.object({
   quoteId: z.coerce.number().int().positive(),
   action: z.enum(["ISSUE_PROPOSAL", "REJECT"]),
   note: z.string().trim().max(1000).optional(),
   validForDays: z.number().int().min(1).max(90).default(15),
+  items: z.array(proposalLineSchema).min(1).max(50).optional(),
+  shippingAmount: z.number().finite().nonnegative().max(9999999999.99).optional(),
+  taxAmount: z.number().finite().nonnegative().max(9999999999.99).optional(),
+  deliveryDays: z.number().int().min(1).max(365).optional(),
+  paymentTerms: z.string().trim().max(500).optional(),
+}).superRefine((value, context) => {
+  if (value.action === "ISSUE_PROPOSAL" && !value.items) {
+    context.addIssue({
+      code: "custom",
+      path: ["items"],
+      message: "Informe o preço e a quantidade de cada artigo antes de emitir a proposta.",
+    });
+  }
+  if (value.action === "ISSUE_PROPOSAL" && (!value.paymentTerms || value.paymentTerms.length < 3)) {
+    context.addIssue({
+      code: "custom",
+      path: ["paymentTerms"],
+      message: "Indique as condições de pagamento da proposta.",
+    });
+  }
+  for (const [field, amount] of [["shippingAmount", value.shippingAmount], ["taxAmount", value.taxAmount]] as const) {
+    if (amount !== undefined && Math.abs(amount * 100 - Math.round(amount * 100)) > 0.000001) {
+      context.addIssue({
+        code: "custom",
+        path: [field],
+        message: "O valor deve ter no máximo duas casas decimais.",
+      });
+    }
+  }
+  if (value.items) {
+    const productIds = value.items.map((item) => item.productId);
+    if (new Set(productIds).size !== productIds.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["items"],
+        message: "Cada produto deve aparecer apenas uma vez na proposta.",
+      });
+    }
+    value.items.forEach((item, index) => {
+      if (Math.abs(item.unitPrice * 100 - Math.round(item.unitPrice * 100)) > 0.000001) {
+        context.addIssue({
+          code: "custom",
+          path: ["items", index, "unitPrice"],
+          message: "O preço unitário deve ter no máximo duas casas decimais.",
+        });
+      }
+    });
+  }
 });
 
 async function requireAdmin(request: Request) {
@@ -118,10 +172,53 @@ export async function PATCH(request: Request) {
       const now = new Date();
       const validUntil = new Date(now.getTime() + parsed.data.validForDays * 24 * 60 * 60 * 1000);
       const version = quote.version + 1;
-      const total = quote.items.reduce(
+      const submittedLines = parsed.data.items;
+      if (!submittedLines || submittedLines.length !== quote.items.length) {
+        throw new Error("INVALID_PROPOSAL_ITEMS");
+      }
+      const proposalByProductId = new Map(submittedLines.map((item) => [item.productId, item]));
+      const currentProductIds = new Set(quote.items.map((item) => item.productId));
+      if (
+        proposalByProductId.size !== currentProductIds.size ||
+        [...proposalByProductId.keys()].some((productId) => !currentProductIds.has(productId))
+      ) {
+        throw new Error("INVALID_PROPOSAL_ITEMS");
+      }
+
+      const proposalItems = quote.items.map((item) => {
+        const submitted = proposalByProductId.get(item.productId);
+        if (!submitted) throw new Error("INVALID_PROPOSAL_ITEMS");
+        const unitPrice = new Prisma.Decimal(submitted.unitPrice.toFixed(2));
+        return {
+          ...item,
+          quantity: submitted.quantity,
+          unitPrice,
+          subtotal: unitPrice.mul(submitted.quantity),
+        };
+      });
+      const shippingAmount = new Prisma.Decimal((parsed.data.shippingAmount ?? 0).toFixed(2));
+      const taxAmount = new Prisma.Decimal((parsed.data.taxAmount ?? 0).toFixed(2));
+      const itemsTotal = proposalItems.reduce(
         (sum, item) => sum.plus(item.subtotal),
         new Prisma.Decimal(0),
       );
+      const total = itemsTotal.plus(shippingAmount).plus(taxAmount);
+      const maximumTotal = quote.currency === "EUR"
+        ? new Prisma.Decimal("99999999.99")
+        : new Prisma.Decimal("9999999999.99");
+      if (!total.gt(0) || total.gt(maximumTotal)) throw new Error("INVALID_PROPOSAL_TOTAL");
+
+      for (const item of proposalItems) {
+        await tx.quoteItem.update({
+          where: { id: item.id },
+          data: {
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            subtotal: item.subtotal,
+          },
+        });
+      }
+
       const revision = await tx.quoteRevision.create({
         data: {
           quoteId: quote.id,
@@ -139,8 +236,13 @@ export async function PATCH(request: Request) {
               phone: quote.company.phone,
             },
             currency: quote.currency,
+            itemsTotal: itemsTotal.toFixed(2),
+            shippingAmount: shippingAmount.toFixed(2),
+            taxAmount: taxAmount.toFixed(2),
             total: total.toFixed(2),
-            items: quote.items.map((item) => ({
+            deliveryDays: parsed.data.deliveryDays ?? null,
+            paymentTerms: parsed.data.paymentTerms!.trim(),
+            items: proposalItems.map((item) => ({
               productId: item.productId,
               name: item.name,
               description: item.description,
@@ -194,6 +296,8 @@ export async function PATCH(request: Request) {
     if (code === "QUOTE_NOT_FOUND") return errorResponse("Cotação não encontrada.", 404);
     if (code === "COMPANY_REQUIRED") return errorResponse("A cotação não está associada a uma empresa.", 409);
     if (code === "COMPANY_NOT_ACTIVE") return errorResponse("A empresa precisa de estar homologada antes de aprovar cotações.", 409);
+    if (code === "INVALID_PROPOSAL_ITEMS") return errorResponse("Os artigos da proposta têm de corresponder exatamente aos artigos pedidos.", 400);
+    if (code === "INVALID_PROPOSAL_TOTAL") return errorResponse("O total da proposta não é válido.", 422);
     if (code === "QUOTE_NOT_REVIEWABLE") return errorResponse("Esta cotação já foi processada.", 409);
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       return errorResponse("A proposta foi atualizada em simultâneo. Atualize a lista antes de tentar novamente.", 409);

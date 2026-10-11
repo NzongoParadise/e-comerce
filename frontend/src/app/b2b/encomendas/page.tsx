@@ -26,12 +26,24 @@ type Order = {
   status: string;
   totalEUR: number | string;
   totalKZ: number | string;
+  shippingTotalEUR: number | string;
+  shippingTotalKZ: number | string;
+  taxTotalEUR: number | string;
+  taxTotalKZ: number | string;
   currency: string;
   createdAt: string;
   payment: Payment | null;
   items: OrderItem[];
 };
 type QuoteItem = { id: number; quantity: number; name: string; unitPrice: number | string; subtotal: number | string };
+type ProposalSnapshot = {
+  itemsTotal?: number | string;
+  shippingAmount?: number | string;
+  taxAmount?: number | string;
+  total?: number | string;
+  deliveryDays?: number | null;
+  paymentTerms?: string | null;
+};
 type PurchaseOrder = {
   id: number;
   poNumber: string;
@@ -40,8 +52,8 @@ type PurchaseOrder = {
   orderId: number | null;
   createdAt: string;
   notes: string | null;
-  quote: { quoteNumber: string; status: string; currency: string; items: QuoteItem[] } | null;
-  order: { id: number; orderNumber: string; status: string; totalEUR: number | string; totalKZ: number | string; currency: string; payment: Payment | null } | null;
+  quote: { quoteNumber: string; status: string; currency: string; version: number; items: QuoteItem[]; proposal: ProposalSnapshot | null } | null;
+  order: { id: number; orderNumber: string; status: string; totalEUR: number | string; totalKZ: number | string; shippingTotalEUR: number | string; shippingTotalKZ: number | string; taxTotalEUR: number | string; taxTotalKZ: number | string; currency: string; payment: Payment | null } | null;
 };
 type OrdersData = {
   orders: Order[];
@@ -338,7 +350,44 @@ export default function B2BOrdersPage() {
                           <span className="col-span-2 flex justify-between text-right font-black text-slate-900 sm:col-span-1 sm:block"><span className="font-medium text-slate-500 sm:hidden">Subtotal</span>{formatMoney(item.subtotal, po.currency)}</span>
                         </div>
                       ))}
-                      {order && <div className="flex justify-between gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3 text-xs"><span className="font-bold text-slate-600">Total da encomenda</span><strong className="font-black text-slate-950">{formatMoney(orderTotal(order), order.currency)}</strong></div>}
+                      {order && Number(order.shippingTotalEUR || 0) > 0 && order.currency === "EUR" && (
+                        <div className="flex justify-between gap-3 border-t border-slate-100 px-4 py-2.5 text-xs text-slate-600"><span>Transporte</span><span>{formatMoney(order.shippingTotalEUR, order.currency)}</span></div>
+                      )}
+                      {order && Number(order.shippingTotalKZ || 0) > 0 && order.currency === "AOA" && (
+                        <div className="flex justify-between gap-3 border-t border-slate-100 px-4 py-2.5 text-xs text-slate-600"><span>Transporte</span><span>{formatMoney(order.shippingTotalKZ, order.currency)}</span></div>
+                      )}
+                      {order && Number(order.taxTotalEUR || 0) > 0 && order.currency === "EUR" && (
+                        <div className="flex justify-between gap-3 border-t border-slate-100 px-4 py-2.5 text-xs text-slate-600"><span>IVA / impostos adicionais</span><span>{formatMoney(order.taxTotalEUR, order.currency)}</span></div>
+                      )}
+                      {order && Number(order.taxTotalKZ || 0) > 0 && order.currency === "AOA" && (
+                        <div className="flex justify-between gap-3 border-t border-slate-100 px-4 py-2.5 text-xs text-slate-600"><span>IVA / impostos adicionais</span><span>{formatMoney(order.taxTotalKZ, order.currency)}</span></div>
+                      )}
+                      {!order && po.quote?.proposal && Number(po.quote.proposal.shippingAmount || 0) > 0 && (
+                        <div className="flex justify-between gap-3 border-t border-slate-100 px-4 py-2.5 text-xs text-slate-600"><span>Transporte</span><span>{formatMoney(po.quote.proposal.shippingAmount!, po.currency)}</span></div>
+                      )}
+                      {!order && po.quote?.proposal && Number(po.quote.proposal.taxAmount || 0) > 0 && (
+                        <div className="flex justify-between gap-3 border-t border-slate-100 px-4 py-2.5 text-xs text-slate-600"><span>IVA / impostos adicionais</span><span>{formatMoney(po.quote.proposal.taxAmount!, po.currency)}</span></div>
+                      )}
+                      {po.quote?.proposal?.deliveryDays && (
+                        <div className="border-t border-slate-100 px-4 py-2.5 text-xs text-slate-600">Prazo previsto: {po.quote.proposal.deliveryDays} dias</div>
+                      )}
+                      {po.quote?.proposal?.paymentTerms && (
+                        <div className="border-t border-slate-100 px-4 py-2.5 text-xs text-slate-600"><strong>Condições de pagamento:</strong> {po.quote.proposal.paymentTerms}</div>
+                      )}
+                      <div className="flex justify-between gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3 text-xs">
+                        <span className="font-bold text-slate-600">{order ? "Total da encomenda" : "Total da proposta"}</span>
+                        <strong className="font-black text-slate-950">
+                          {order
+                            ? formatMoney(orderTotal(order), order.currency)
+                            : formatMoney(
+                                po.quote?.proposal?.total ??
+                                  (po.quote?.items.reduce((sum, item) => sum + Number(item.subtotal), 0) ?? 0) +
+                                    Number(po.quote?.proposal?.shippingAmount || 0) +
+                                    Number(po.quote?.proposal?.taxAmount || 0),
+                                po.currency,
+                              )}
+                        </strong>
+                      </div>
                     </div>
                   ) : <p className="mt-4 text-xs text-slate-500">A cotação associada não tem artigos para apresentar.</p>}
                 </article>
