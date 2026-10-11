@@ -58,7 +58,12 @@ export async function GET(request: Request) {
     data: purchaseOrders.map((purchaseOrder) => ({
       ...purchaseOrder,
       quote: purchaseOrder.quote
-        ? { ...purchaseOrder.quote, proposal: purchaseOrder.quote.revisions[0]?.snapshot ?? null }
+        ? {
+            ...purchaseOrder.quote,
+            proposal: purchaseOrder.quote.revisions.find(
+              (revision) => revision.version === purchaseOrder.quote?.version,
+            )?.snapshot ?? null,
+          }
         : null,
     })),
     role: membership.role,
