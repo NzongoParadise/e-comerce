@@ -208,16 +208,8 @@ export async function PATCH(request: Request) {
         : new Prisma.Decimal("9999999999.99");
       if (!total.gt(0) || total.gt(maximumTotal)) throw new Error("INVALID_PROPOSAL_TOTAL");
 
-      for (const item of proposalItems) {
-        await tx.quoteItem.update({
-          where: { id: item.id },
-          data: {
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            subtotal: item.subtotal,
-          },
-        });
-      }
+      // Keep the customer's original RFQ lines immutable. Commercial terms live
+      // exclusively in the versioned QuoteRevision snapshot.
 
       const revision = await tx.quoteRevision.create({
         data: {
