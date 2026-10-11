@@ -129,7 +129,7 @@ export default function ProductDetailsPage() {
 
   const activeMarketPrice = market === "AO" ? Number(aoPrice) : Number(ptPrice);
   const activeMarketOffer = market === "AO" ? kwanzaOffer : euroOffer;
-  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://rubricadeligente.pt").replace(/\/$/, "");
+  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://e-comerce-sepia.vercel.app").replace(/\/$/, "");
   const structuredData = {
     "@context": "https://schema.org",
     "@type": "Product",
