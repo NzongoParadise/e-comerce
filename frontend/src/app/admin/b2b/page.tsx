@@ -256,11 +256,6 @@ export default function AdminB2BPage() {
               const unitPrice = Number(edit?.unitPrice ?? (Number(item.unitPrice) > 0 ? String(item.unitPrice) : ""));
               return { quantity, unitPrice };
             });
-            const proposalComplete = proposedLines.every((item) =>
-              Number.isInteger(item.quantity) && item.quantity >= 1 && item.quantity <= 100000 &&
-              Number.isFinite(item.unitPrice) && item.unitPrice > 0 && item.unitPrice <= 99999999.99 &&
-              Math.abs(item.unitPrice * 100 - Math.round(item.unitPrice * 100)) <= 0.000001
-            );
             const currentTerms = proposalTerms[quote.id] ?? { shippingAmount: "0", taxAmount: "0", deliveryDays: "", paymentTerms: "" };
             const shippingAmount = Number(currentTerms.shippingAmount || "0");
             const taxAmount = Number(currentTerms.taxAmount || "0");
