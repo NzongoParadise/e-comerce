@@ -43,6 +43,7 @@ export async function POST(request: Request) {
           quote: {
             include: {
               items: true,
+              revisions: { orderBy: { version: "desc" }, take: 1, select: { version: true, snapshot: true } },
               company: {
                 select: {
                   country: true,
