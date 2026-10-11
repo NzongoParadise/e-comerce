@@ -57,6 +57,7 @@ export async function POST(request: Request) {
                   address: true,
                   legalName: true,
                   tradeName: true,
+                  phone: true,
                 },
               },
             },
