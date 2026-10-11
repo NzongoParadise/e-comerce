@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   BookOpen,
@@ -18,6 +18,7 @@ import {
   Search,
   Send,
   Loader2,
+  Paperclip,
   ShieldCheck,
   Truck,
   UserRound,
@@ -25,6 +26,8 @@ import {
   X,
 } from "lucide-react";
 import { fetchWithAuth } from "@/lib/api";
+import { SupportAttachmentLink } from "@/components/support/SupportAttachmentLink";
+import { VoiceMessageRecorder } from "@/components/support/VoiceMessageRecorder";
 
 type Topic = {
   title: string;
@@ -46,6 +49,7 @@ type SupportChatMessage = {
   senderRole: string;
   senderName?: string;
   createdAt: string;
+  attachment?: { name: string; type: string; size: number } | null;
 };
 
 type SupportChat = {
@@ -153,6 +157,9 @@ export default function SupportPage() {
   const [chatLoading, setChatLoading] = useState(true);
   const [chatSending, setChatSending] = useState(false);
   const [chatDraft, setChatDraft] = useState("");
+  const [chatAttachment, setChatAttachment] = useState<File | null>(null);
+  const [voiceRecording, setVoiceRecording] = useState<File | null>(null);
+  const chatAttachmentInput = useRef<HTMLInputElement>(null);
   const [chatError, setChatError] = useState("");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [guestName, setGuestName] = useState("");
@@ -199,11 +206,22 @@ export default function SupportPage() {
   const sendChatMessage = async (event: FormEvent) => {
     event.preventDefault();
     const content = chatDraft.trim();
-    if (!content || chatSending) return;
+    if ((!content && !chatAttachment && !voiceRecording) || chatSending) return;
     setChatSending(true); setChatError("");
     try {
-      await fetchWithAuth("/api/support/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content, ...(supportOrder ? { orderId: supportOrder.id } : {}), ...(!isAuthenticated && !chat ? { guestName, guestEmail } : {}) }) });
+      const body = new FormData();
+      body.append("content", content);
+      if (supportOrder) body.append("orderId", String(supportOrder.id));
+      if (!isAuthenticated && !chat) {
+        body.append("guestName", guestName);
+        body.append("guestEmail", guestEmail);
+      }
+      if (chatAttachment || voiceRecording) body.append("attachment", chatAttachment || voiceRecording!);
+      await fetchWithAuth("/api/support/chat", { method: "POST", body });
       setChatDraft("");
+      setChatAttachment(null);
+      setVoiceRecording(null);
+      if (chatAttachmentInput.current) chatAttachmentInput.current.value = "";
       await loadChat();
     } catch (error) { setChatError(error instanceof Error ? error.message : "Não foi possível enviar a mensagem."); }
     finally { setChatSending(false); }
@@ -325,7 +343,8 @@ export default function SupportPage() {
                     return <div key={message.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
                       <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm ${mine ? "rounded-br-md bg-[#1d6ac4] text-white" : "rounded-bl-md bg-gray-100 text-gray-800"}`}>
                         {!mine && <p className="mb-1 text-[10px] font-bold text-gray-500">{message.senderName || supportAgentName || "Suporte"}</p>}
-                        <p className="whitespace-pre-wrap leading-6">{message.content}</p>
+                        {message.content && <p className="whitespace-pre-wrap leading-6">{message.content}</p>}
+                        {message.attachment && <SupportAttachmentLink messageId={message.id} name={message.attachment.name} type={message.attachment.type} inverse={mine} />}
                         <p className={`mt-1 text-[10px] ${mine ? "text-blue-100" : "text-gray-400"}`}>{new Date(message.createdAt).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })}</p>
                       </div>
                     </div>;
@@ -348,13 +367,28 @@ export default function SupportPage() {
             </div>
             {!chatLoading && <form onSubmit={sendChatMessage} className="border-t border-gray-100 p-4">
               {!chat && !isAuthenticated && <div className="mb-3 grid gap-2 sm:grid-cols-2"><input value={guestName} onChange={(e) => setGuestName(e.target.value)} required minLength={2} maxLength={100} autoComplete="name" placeholder="O seu nome" className="h-10 min-w-0 rounded-lg border border-gray-200 px-3 text-xs outline-none focus:border-[#1d6ac4]" aria-label="O seu nome" /><input value={guestEmail} onChange={(e) => setGuestEmail(e.target.value)} required type="email" maxLength={254} autoComplete="email" placeholder="O seu e-mail" className="h-10 min-w-0 rounded-lg border border-gray-200 px-3 text-xs outline-none focus:border-[#1d6ac4]" aria-label="O seu e-mail" /></div>}
+              {chatAttachment && <div className="mb-2 flex items-center justify-between gap-3 rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-900"><span className="truncate">{chatAttachment.name} · {(chatAttachment.size / (1024 * 1024)).toFixed(1)} MB</span><button type="button" onClick={() => { setChatAttachment(null); if (chatAttachmentInput.current) chatAttachmentInput.current.value = ""; }} className="shrink-0 font-bold underline">Remover</button></div>}
+              {voiceRecording && <p className="mb-2 truncate rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-900">Mensagem de voz pronta para enviar: {voiceRecording.name}</p>}
               <div className="flex items-end gap-2 rounded-xl border border-gray-200 bg-white p-2 focus-within:border-[#1d6ac4] focus-within:ring-4 focus-within:ring-blue-50">
+                <input ref={chatAttachmentInput} type="file" accept="application/pdf,image/jpeg,image/png" className="sr-only" aria-label="Anexar ficheiro" onChange={(event) => {
+                  const file = event.target.files?.[0] || null;
+                  if (file && (file.size > 3 * 1024 * 1024 || !["application/pdf", "image/jpeg", "image/png"].includes(file.type))) {
+                    setChatError(file.size > 3 * 1024 * 1024 ? "O ficheiro não pode exceder 3 MB." : "Formato não permitido. Envie PDF, JPG ou PNG.");
+                    event.target.value = "";
+                    return;
+                  }
+                  setChatError("");
+                  setChatAttachment(file);
+                  if (file) setVoiceRecording(null);
+                }} />
+                <button type="button" onClick={() => chatAttachmentInput.current?.click()} disabled={chatSending} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 disabled:opacity-40" aria-label="Anexar ficheiro"><Paperclip size={18} /></button>
+                <VoiceMessageRecorder recording={voiceRecording} disabled={chatSending || Boolean(chatAttachment)} onRecordingChange={(file) => { setVoiceRecording(file); if (file) { setChatAttachment(null); if (chatAttachmentInput.current) chatAttachmentInput.current.value = ""; } }} />
                 <textarea value={chatDraft} onChange={(e) => setChatDraft(e.target.value)} maxLength={4000} rows={2} placeholder="Escreva a sua mensagem..." className="min-h-[44px] flex-1 resize-none bg-transparent px-2 py-2 text-sm text-gray-900 outline-none" aria-label="Mensagem para o suporte" />
-                <button type="submit" disabled={!chatDraft.trim() || chatSending} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#1d6ac4] text-white transition hover:bg-[#155099] disabled:cursor-not-allowed disabled:opacity-40" aria-label="Enviar mensagem">
+                <button type="submit" disabled={(!chatDraft.trim() && !chatAttachment && !voiceRecording) || chatSending} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#1d6ac4] text-white transition hover:bg-[#155099] disabled:cursor-not-allowed disabled:opacity-40" aria-label="Enviar mensagem">
                   {chatSending ? <Loader2 className="animate-spin" size={17} /> : <Send size={17} />}
                 </button>
               </div>
-              <p className="mt-2 text-[10px] text-gray-400">Nunca partilhe palavras-passe, códigos de autenticação ou dados de cartão.</p>
+              <p className="mt-2 text-[10px] text-gray-400">Anexe PDF, JPG ou PNG até 3 MB, ou grave uma mensagem de voz até 5 minutos e 3 MB. Nunca partilhe palavras-passe, códigos de autenticação ou dados de cartão.</p>
             </form>}
           </div>
           <aside className="border-t border-gray-100 bg-gray-50 p-5 lg:border-l lg:border-t-0">

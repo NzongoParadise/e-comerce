@@ -122,7 +122,7 @@ const pages: Record<string, InfoPage> = {
       },
       {
         title: "Cookies de análise e publicidade",
-        body: "Atualmente, a aplicação não instala cookies nem carrega serviços próprios de análise ou publicidade. O banner permite registar a sua escolha para estas categorias, mas aceitar não ativa ferramentas que não estão instaladas. Se forem adicionados serviços opcionais, a política e a implementação serão atualizadas para respeitar a escolha antes de os carregar.",
+        body: "A análise opcional só é ativada quando aceita esta categoria. Nesse caso, guardamos no armazenamento local um identificador aleatório e registamos páginas visitadas, produtos vistos, favoritos adicionados ou removidos, adições ao carrinho e início do checkout para apresentar estatísticas agregadas à equipa da loja. Não associamos estes eventos ao nome, email ou endereço IP, e não guardamos o IP nos eventos. Ao rejeitar ou retirar o consentimento, a recolha para e o identificador local é removido. A publicidade não está ativa.",
       },
       {
         title: "Como controlar ou apagar",

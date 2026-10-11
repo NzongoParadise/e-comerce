@@ -6,7 +6,7 @@ import { logger } from '@/lib/server/logger';
 import { isStripeCurrencySupported, matchesStripePayment } from '@/lib/server/payments/stripeAmounts';
 import { authenticate, errorResponse, readJson, userSubject } from '@/lib/server/api';
 import { setStripeDefaultPaymentMethod } from '@/lib/server/payments/stripeCustomers';
-import { createNotificationIfAllowed } from '@/lib/server/notifications';
+import { createNotificationIfAllowed, createStaffNotification } from '@/lib/server/notifications';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -319,7 +319,7 @@ async function handleStripeWebhook(request: Request) {
           message: `O reembolso da encomenda foi confirmado pelo Stripe.`,
           link: `/account/orders/${refund.orderId}`,
           dedupeKey: `refund:${refund.id}:stripe-succeeded`,
-        }).catch(() => undefined);
+        }).catch((notificationError) => console.error('Unable to create Stripe refund completion notification:', notificationError));
       }
     });
 
@@ -395,8 +395,9 @@ async function handleStripeWebhook(request: Request) {
     return Response.json({ received: true });
   }
   if (session.payment_status !== 'paid') return Response.json({ received: true, pending: true });
+  let orderOutcome: 'PAYMENT_CONFIRMED' | 'PAYMENT_REVIEW_REQUIRED' | 'UNCHANGED' = 'UNCHANGED';
   try {
-    await prisma.$transaction(async (transaction) => {
+    orderOutcome = await prisma.$transaction(async (transaction) => {
       await transaction.paymentEvent.create({ data: {
         paymentId: payment.id,
         providerEventId: event.id as string,
@@ -411,12 +412,14 @@ async function handleStripeWebhook(request: Request) {
         where: { id: orderId, status: 'AWAITING_PAYMENT' },
         data: { status: 'PAYMENT_CONFIRMED' },
       });
+      let outcome: typeof orderOutcome = awaitingOrder.count ? 'PAYMENT_CONFIRMED' : 'UNCHANGED';
       if (!awaitingOrder.count) {
         const cancelledOrder = await transaction.order.updateMany({
           where: { id: orderId, status: 'CANCELLED' },
           data: { status: 'PAYMENT_REVIEW_REQUIRED' },
         });
         if (cancelledOrder.count) {
+          outcome = 'PAYMENT_REVIEW_REQUIRED';
           await transaction.trackingEvent.create({ data: {
             orderId,
             status: 'PAYMENT_REVIEW_REQUIRED',
@@ -426,10 +429,39 @@ async function handleStripeWebhook(request: Request) {
         }
       }
       await transaction.payment.update({ where: { id: payment.id }, data: { ...statusUpdates('PAID'), reference: sessionId } });
+      return outcome;
     });
   } catch (error) {
     if (error instanceof Error && error.message.includes('Unique constraint')) return Response.json({ received: true, duplicate: true });
     throw error;
+  }
+  if (orderOutcome === 'PAYMENT_CONFIRMED') {
+    await createNotificationIfAllowed({
+      userId: payment.order.userId,
+      channel: 'orderUpdates',
+      type: 'ORDER_PAYMENT_CONFIRMED',
+      title: 'Pagamento confirmado',
+      message: `O pagamento da encomenda ${payment.order.orderNumber} foi confirmado.`,
+      link: `/account/orders/${orderId}`,
+      dedupeKey: `order:${orderId}:payment:PAID`,
+    }).catch((notificationError) => console.error('Unable to create Stripe payment confirmation notification:', notificationError));
+  } else if (orderOutcome === 'PAYMENT_REVIEW_REQUIRED') {
+    await createStaffNotification({
+      type: 'PAYMENT_REVIEW_REQUIRED',
+      title: 'Pagamento precisa de revisão',
+      message: `A encomenda ${payment.order.orderNumber} foi paga após o cancelamento e precisa de revisão manual.`,
+      link: '/admin/finance/review',
+      dedupeKey: `order:${orderId}:payment-review-required`,
+    }).catch((notificationError) => console.error('Unable to create payment review alert:', notificationError));
+    await createNotificationIfAllowed({
+      userId: payment.order.userId,
+      channel: 'orderUpdates',
+      type: 'PAYMENT_REVIEW_REQUIRED',
+      title: 'Pagamento em revisão',
+      message: `Recebemos o pagamento da encomenda ${payment.order.orderNumber}. A equipa está a verificar o pedido antes de o processar.`,
+      link: `/account/orders/${orderId}`,
+      dedupeKey: `order:${orderId}:payment-review`,
+    }).catch((notificationError) => console.error('Unable to create customer payment review notification:', notificationError));
   }
   return Response.json({ received: true });
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState } from "react";
+import { trackStorefrontEvent } from "@/lib/analytics";
 
 export type CartItem = {
   id: string; // Unique ID (product_id + variants)
@@ -59,6 +60,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   }, [items, isLoaded]);
 
   const addToCart = (newItem: CartItem) => {
+    trackStorefrontEvent("ADD_TO_CART", { productId: newItem.productId });
     setItems((prev) => {
       const existing = prev.find((item) => item.id === newItem.id);
       if (existing) {

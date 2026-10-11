@@ -1,16 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Image from "next/image";
 import { fetchWithAuth } from "@/lib/api";
 import { useCart } from "@/context/CartContext";
 import { useMarket } from "@/context/MarketContext";
 import { useFavorites } from "@/context/FavoritesContext";
 import { getPromotionalUnitPrice } from "@/lib/promotions/pricing";
 import { usePublicPromotions } from "@/lib/promotions/usePublicPromotions";
+import { getAnalyticsConsentSnapshot, subscribeToAnalyticsConsent, trackStorefrontEvent } from "@/lib/analytics";
 import Link from "next/link";
 import { RecommendationRail } from "@/components/features/catalog/RecommendationRail";
-import { ShoppingCart, Heart, Package, Truck, ShieldCheck, Zap, CreditCard, Maximize2, MapPin, CheckCircle2 } from "lucide-react";
+import { ShoppingCart, Heart, Package, Truck, ShieldCheck, Zap, CreditCard, MapPin, CheckCircle2, ChevronLeft, ChevronRight, X, ZoomIn } from "lucide-react";
 
 type ProductDetails = {
   id: number;
@@ -19,6 +21,7 @@ type ProductDetails = {
   description: string;
   basePrice: string;
   imageUrl: string;
+  images?: { id: number; url: string; position: number }[];
   stock: number;
   category: { id: number; name: string; slug: string };
   brand: { id: number; name: string; slug: string };
@@ -33,11 +36,21 @@ export default function ProductDetailsPage() {
   const { market } = useMarket();
   const { isFavorite, toggleFavorite } = useFavorites();
   const promotions = usePublicPromotions();
+  const analyticsEnabled = useSyncExternalStore(subscribeToAnalyticsConsent, getAnalyticsConsentSnapshot, () => false);
+  const trackedProductId = useRef<number | null>(null);
   
   const [product, setProduct] = useState<ProductDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
   const [cartMessage, setCartMessage] = useState("");
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [imageModalOpen, setImageModalOpen] = useState(false);
+  const [imageZoomed, setImageZoomed] = useState(false);
+  const zoomImageRef = useRef<HTMLImageElement>(null);
+  const galleryImages = product
+    ? [...new Set([product.imageUrl, ...(product.images ?? []).map((image) => image.url)].filter((url): url is string => Boolean(url)))]
+    : [];
+  const selectedImage = galleryImages[Math.min(selectedImageIndex, Math.max(galleryImages.length - 1, 0))];
 
   // The API currently does not expose product variants; do not invent selectable options in the storefront.
   const [purchaseMode, setPurchaseMode] = useState<"retail" | "wholesale">("retail");
@@ -45,13 +58,43 @@ export default function ProductDetailsPage() {
 
   useEffect(() => {
     fetchWithAuth(`/api/products/${slug}`)
-      .then((res) => setProduct(res.data))
+      .then((res) => {
+        setProduct(res.data);
+        setSelectedImageIndex(0);
+        setImageModalOpen(false);
+        setImageZoomed(false);
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [slug]);
 
+  const moveGallery = useCallback((direction: number) => {
+    if (galleryImages.length < 2) return;
+    setSelectedImageIndex((current) => (current + direction + galleryImages.length) % galleryImages.length);
+  }, [galleryImages.length]);
+
+  useEffect(() => {
+    if (!imageModalOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setImageModalOpen(false);
+      if (event.key === "ArrowLeft") moveGallery(-1);
+      if (event.key === "ArrowRight") moveGallery(1);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [imageModalOpen, moveGallery]);
+
   useEffect(() => {
     if (!product) return;
+    if (analyticsEnabled && trackedProductId.current !== product.id) {
+      trackedProductId.current = product.id;
+      trackStorefrontEvent("PRODUCT_VIEW", { productId: product.id });
+    }
     try {
       const key = "rd_recently_viewed";
       const stored = JSON.parse(localStorage.getItem(key) || "[]") as Array<{
@@ -68,7 +111,7 @@ export default function ProductDetailsPage() {
     } catch {
       // local browsing history is a progressive enhancement only.
     }
-  }, [product]);
+  }, [analyticsEnabled, product]);
 
 
   if (loading) {
@@ -136,7 +179,7 @@ export default function ProductDetailsPage() {
     "@id": siteUrl + "/products/" + product.slug,
     name: product.name,
     description: product.description || product.name,
-    image: product.imageUrl ? [product.imageUrl.startsWith("http") ? product.imageUrl : siteUrl + product.imageUrl] : undefined,
+    image: galleryImages.length ? galleryImages.map((imageUrl) => imageUrl.startsWith("http") ? imageUrl : siteUrl + imageUrl) : undefined,
     sku: String(product.id),
     brand: { "@type": "Brand", name: product.brand.name },
     category: product.category.name,
@@ -169,19 +212,37 @@ export default function ProductDetailsPage() {
       <div className="mb-12 grid grid-cols-1 gap-6 md:grid-cols-12 lg:gap-8">
         
         {/* Left: Gallery */}
-        <div className="order-2 flex flex-row gap-2 overflow-x-auto md:order-1 md:col-span-1 md:flex-col">
-           {[1,2,3,4].map((i) => (
-             <button type="button" key={i} aria-label={`Selecionar vista ${i} de ${product.name}`} className={`h-16 w-16 shrink-0 overflow-hidden rounded-xl border bg-white p-1.5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm ${i===1 ? 'border-[#1d6ac4] ring-2 ring-[#1d6ac4]/10' : 'border-gray-200 hover:border-[#1d6ac4]'}`}>
-               {product.imageUrl ? <img src={product.imageUrl} alt={`${product.name} vista ${i}`} className="h-full w-full object-contain" /> : <Package size={24} className="text-gray-300" />}
+        <div aria-label="Galeria de imagens do produto" className="order-2 flex max-h-[420px] flex-row gap-2 overflow-x-auto md:order-1 md:col-span-1 md:flex-col md:overflow-y-auto">
+           {galleryImages.map((imageUrl, index) => (
+             <button type="button" key={`${imageUrl}-${index}`} onClick={() => { setSelectedImageIndex(index); setImageZoomed(false); }} aria-label={`Ver imagem ${index + 1} de ${galleryImages.length}`} aria-pressed={selectedImageIndex === index} className={`h-16 w-16 shrink-0 overflow-hidden rounded-xl border bg-white p-1.5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm ${selectedImageIndex === index ? "border-[#1d6ac4] ring-2 ring-[#1d6ac4]/10" : "border-gray-200 hover:border-[#1d6ac4]"}`}>
+               <Image src={imageUrl} alt="" width={64} height={64} unoptimized className="h-full w-full object-contain" />
              </button>
            ))}
         </div>
 
         {/* Center: Main Image */}
-          <div className="relative order-1 flex min-h-[380px] items-center justify-center overflow-hidden rounded-xl border border-gray-200 bg-white p-8 shadow-sm transition-transform duration-300 hover:-translate-y-0.5 md:order-2 md:col-span-5">
-            <span className="absolute left-5 top-5 rounded-md bg-[#1d6ac4] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white">Novo</span>
-           {product.imageUrl ? <img src={product.imageUrl} alt={product.name} className="max-h-[330px] w-full object-contain transition-transform duration-500 hover:scale-[1.02]" /> : <Package size={160} className="text-gray-200" />}
-            <button type="button" className="absolute bottom-4 right-4 rounded-lg border border-gray-200 bg-white p-2 text-gray-500 shadow-sm transition hover:border-[#1d6ac4] hover:text-[#1d6ac4]" aria-label="Ver imagem em ecrã inteiro"><Maximize2 size={16} /></button>
+          <div className="relative order-1 min-h-[320px] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm md:order-2 md:col-span-5 md:min-h-[420px]">
+            <button
+              type="button"
+              onClick={() => selectedImage && setImageModalOpen(true)}
+              onPointerEnter={(event) => { if (event.pointerType === "mouse") setImageZoomed(true); }}
+              onPointerLeave={() => setImageZoomed(false)}
+              onPointerMove={(event) => {
+                if (event.pointerType !== "mouse") return;
+                const bounds = event.currentTarget.getBoundingClientRect();
+                if (zoomImageRef.current) {
+                  zoomImageRef.current.style.transformOrigin = `${((event.clientX - bounds.left) / bounds.width) * 100}% ${((event.clientY - bounds.top) / bounds.height) * 100}%`;
+                }
+              }}
+              aria-label={`Ampliar imagem de ${product.name}`}
+              className="group absolute inset-0 flex w-full items-center justify-center overflow-hidden p-6 sm:p-10"
+            >
+              {selectedImage
+                ? <Image ref={zoomImageRef} src={selectedImage} alt={product.name} width={1200} height={1200} unoptimized className={`max-h-[330px] w-full object-contain transition-transform duration-300 md:max-h-[360px] ${imageZoomed ? "scale-[1.8] cursor-zoom-in" : "scale-100"}`} />
+                : <Package size={160} className="text-gray-200" />}
+              {selectedImage && <span className="absolute bottom-4 right-4 inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white/95 px-3 py-2 text-xs font-semibold text-gray-600 shadow-sm transition group-hover:border-[#1d6ac4] group-hover:text-[#1d6ac4]"><ZoomIn size={15} /> Ampliar</span>}
+              {galleryImages.length > 1 && <span className="absolute bottom-4 left-4 rounded-md bg-black/60 px-2 py-1 text-[11px] font-semibold text-white">{selectedImageIndex + 1} / {galleryImages.length}</span>}
+            </button>
         </div>
 
         {/* Right: Product Info & Buy Panel */}
@@ -339,24 +400,34 @@ export default function ProductDetailsPage() {
           </div>
         </section>
 
-        <aside className="card p-5"><div className="mb-4 flex items-center justify-between"><h2 className="font-bold text-gray-900">Também pode gostar</h2><Link href="/products" className="text-xs font-bold text-[#1d6ac4]">Ver mais →</Link></div><div className="grid grid-cols-2 gap-3 lg:grid-cols-1">{[{ name: "MacBook Air M2 13\"", price: 1299, image: "/Apple.jpg" }, { name: "Magic Mouse", price: 99, image: "/ASUS.jpg" }].map((item) => <div key={item.name} className="rounded-lg border border-gray-100 p-2"><div className="flex h-24 items-center justify-center rounded bg-gray-50"><img src={item.image} alt="" className="h-full w-full object-contain" /></div><p className="mt-2 line-clamp-1 text-xs font-bold text-gray-900">{item.name}</p><p className="text-xs font-black text-gray-900">€ {item.price.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}</p></div>)}</div></aside>
       </div>
 
-      <section className="relative mt-6 min-h-[150px] overflow-hidden rounded-lg bg-[#06233d] text-white">
-        <div className="relative z-10 max-w-md px-6 py-6 sm:px-8">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-200">Acessórios para o seu setup</p>
-          <h2 className="mt-1 text-xl font-black sm:text-2xl">Complemente o seu {product.brand.name}</h2>
-          <p className="mt-1 text-xs text-blue-100 sm:text-sm">Acessórios originais para máxima produtividade.</p>
-          <Link href="/products?category=acessorios" className="mt-4 inline-flex rounded-full bg-white px-4 py-2 text-xs font-bold text-[#06233d] transition hover:bg-blue-100">
-            Ver acessórios
-          </Link>
+    {imageModalOpen && selectedImage && (
+      <div
+        role="presentation"
+        onClick={() => setImageModalOpen(false)}
+        className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/95 p-4 sm:p-8"
+      >
+        <div role="dialog" aria-modal="true" aria-label={`Imagem de ${product.name}`} onClick={(event) => event.stopPropagation()} className="relative flex h-full max-h-[900px] w-full max-w-6xl flex-col items-center justify-center">
+          <button type="button" autoFocus onClick={() => setImageModalOpen(false)} aria-label="Fechar imagem ampliada" className="absolute right-0 top-0 z-10 inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20">
+            <X size={22} />
+          </button>
+          {galleryImages.length > 1 && (
+            <>
+              <button type="button" onClick={() => moveGallery(-1)} aria-label="Imagem anterior" className="absolute left-0 top-1/2 z-10 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20 sm:left-2">
+                <ChevronLeft size={24} />
+              </button>
+              <button type="button" onClick={() => moveGallery(1)} aria-label="Imagem seguinte" className="absolute right-0 top-1/2 z-10 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20 sm:right-2">
+                <ChevronRight size={24} />
+              </button>
+            </>
+          )}
+          <Image src={selectedImage} alt={`${product.name} — imagem ${selectedImageIndex + 1}`} width={1600} height={1600} unoptimized className="max-h-[calc(100%-5rem)] max-w-full object-contain" />
+          <p className="mt-4 text-sm font-medium text-white/80">{product.name}{galleryImages.length > 1 ? ` · ${selectedImageIndex + 1} de ${galleryImages.length}` : ""}</p>
         </div>
-        <div className="absolute inset-y-0 right-0 flex w-1/2 items-center justify-end gap-2 pr-4 sm:gap-5 sm:pr-10">
-          {["/Acessorio.png", "/Componentes.png", "/monitor.png"].map((image, index) => (
-            <img key={image} src={image} alt="" className={`h-20 w-20 object-contain drop-shadow-xl sm:h-28 sm:w-28 ${index === 1 ? "hidden sm:block" : ""}`} />
-          ))}
-        </div>
-      </section>
+      </div>
+    )}
+
     <RecommendationRail
       title="Também pode gostar"
       description="Sugestões calculadas a partir das características deste produto e do catálogo disponível."

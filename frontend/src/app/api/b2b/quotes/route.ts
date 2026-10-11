@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { createStaffNotification } from "@/lib/server/notifications";
 import { Prisma } from "@prisma/client";
 import { authenticate, errorResponse, readJson, userSubject } from "@/lib/server/api";
 import { prisma } from "@/lib/server/prisma";
@@ -391,6 +392,16 @@ export async function POST(request: Request) {
         },
       });
       return created;
+    });
+
+    await createStaffNotification({
+      type: "B2B_QUOTE",
+      title: "Novo pedido de cotação",
+      message: `A cotação ${quote.quoteNumber} foi submetida e aguarda análise.`,
+      link: "/admin/b2b",
+      dedupeKey: `quote:${quote.id}:submitted`,
+    }).catch((notificationError) => {
+      console.error("Unable to notify staff about B2B quote:", notificationError);
     });
 
     return Response.json({ data: quote }, { status: 201 });

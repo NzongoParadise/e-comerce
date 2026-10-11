@@ -138,7 +138,7 @@ export default function CookieConsent() {
               )}
             </div>
             <p className="mt-1 max-w-4xl text-sm leading-6 text-slate-600">
-              Usamos cookies necessários para funcionalidades pedidas por si. Não temos ferramentas de análise ou publicidade opcionais ativas neste momento. Pode guardar a sua escolha ou alterá-la mais tarde nas definições de cookies.
+              Usamos armazenamento necessário para as funcionalidades pedidas. Se autorizar análise, registamos visitas e ações da loja de forma pseudonimizada para melhorar a experiência. Pode alterar esta escolha mais tarde nas definições de cookies.
               {" "}
               <Link href="/info/cookies" className="font-semibold text-blue-700 underline underline-offset-2 hover:text-blue-900">
                 Saiba mais na Política de cookies
@@ -160,7 +160,7 @@ export default function CookieConsent() {
                     Análise e desempenho
                     <input type="checkbox" checked={analytics} onChange={(event) => setAnalytics(event.target.checked)} className="h-4 w-4 accent-blue-700" />
                   </span>
-                  <span className="mt-1 block text-xs leading-5 text-slate-600">Atualmente não usamos ferramentas desta categoria.</span>
+                  <span className="mt-1 block text-xs leading-5 text-slate-600">Regista páginas e ações (produtos vistos, favoritos, carrinho e checkout) com um identificador aleatório. Não guardamos nome, email nem IP nos eventos.</span>
                 </label>
                 <label className="cursor-pointer rounded-xl border border-slate-200 p-3">
                   <span className="flex items-center justify-between gap-2 text-sm font-bold">

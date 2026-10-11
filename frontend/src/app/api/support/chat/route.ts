@@ -1,7 +1,9 @@
 import { createHash, randomBytes } from "node:crypto";
-import { authenticate, errorResponse, rateLimit, readJson, userSubject } from "@/lib/server/api";
+import { authenticate, errorResponse, rateLimit, userSubject } from "@/lib/server/api";
 import { prisma } from "@/lib/server/prisma";
 import { z } from "zod";
+import { createStaffNotification, notificationMessagePreview } from "@/lib/server/notifications";
+import { readSupportChatRequest, serializeSupportAttachment } from "@/lib/server/supportAttachments";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,14 +23,25 @@ function unavailableResponse(error: unknown) {
   return errorResponse(unavailableMessage, 503);
 }
 const messageSchema = z.object({
-  content: z.string().trim().min(1, "A mensagem não pode estar vazia.").max(4000),
+  content: z.string().trim().max(4000).optional(),
   subject: z.string().trim().max(160).optional(),
-  orderId: z.number().int().positive().optional(),
+  orderId: z.coerce.number().int().positive().optional(),
   guestName: z.string().trim().min(2).max(100).optional(),
   guestEmail: z.string().trim().email().max(254).transform((value) => value.toLowerCase()).optional(),
 });
 
 type SupportUser = { id: number; name: string | null; email: string | null };
+type ChatMessageRecord = {
+  id: number;
+  content: string;
+  senderId: number | null;
+  senderRole: string;
+  createdAt: Date;
+  attachmentName: string | null;
+  attachmentType: string | null;
+  attachmentSize: number | null;
+  sender: { id: number; name: string | null } | null;
+};
 
 async function getAuthenticatedUser(request: Request): Promise<{ user: SupportUser | null; invalid: boolean }> {
   if (!request.headers.has("authorization")) return { user: null, invalid: false };
@@ -57,7 +70,7 @@ function setGuestCookie(response: Response, token: string) {
 
 function serializeConversation(conversation: {
   id: number; status: string; subject: string | null; agent: { id: number; name: string | null } | null;
-  messages: Array<{ id: number; content: string; senderId: number | null; senderRole: string; createdAt: Date; sender: { id: number; name: string | null } | null }>;
+  messages: ChatMessageRecord[];
 }) {
   return {
     id: conversation.id,
@@ -71,6 +84,7 @@ function serializeConversation(conversation: {
       senderRole: message.senderRole,
       senderName: message.sender?.name || (message.senderRole === "AGENT" ? "Suporte" : "Cliente"),
       createdAt: message.createdAt,
+      ...serializeSupportAttachment(message),
     })),
   };
 }
@@ -89,7 +103,15 @@ export async function GET(request: Request) {
       orderBy: { updatedAt: "desc" },
       include: {
         agent: { select: { id: true, name: true } },
-        messages: { orderBy: { createdAt: "asc" }, take: 200, include: { sender: { select: { id: true, name: true } } } },
+        messages: {
+          orderBy: { createdAt: "asc" },
+          take: 200,
+          select: {
+            id: true, content: true, senderId: true, senderRole: true, createdAt: true,
+            attachmentName: true, attachmentType: true, attachmentSize: true,
+            sender: { select: { id: true, name: true } },
+          },
+        },
       },
     });
     return Response.json({ data: conversation ? serializeConversation(conversation) : null });
@@ -105,8 +127,17 @@ export async function POST(request: Request) {
 
     const { user, invalid } = await getAuthenticatedUser(request);
     if (invalid) return errorResponse("Não autenticado.", 401);
-    const parsed = messageSchema.safeParse(await readJson(request));
+    const payload = await readSupportChatRequest(request);
+    if (payload.error) return errorResponse(payload.error, 400);
+    const fields = { ...payload.fields };
+    if (fields.orderId === "") delete fields.orderId;
+    const parsed = messageSchema.safeParse(fields);
     if (!parsed.success) return errorResponse(parsed.error.issues[0]?.message || "Mensagem inválida.", 400);
+    if (!parsed.data.content && !payload.attachment) return errorResponse("Escreva uma mensagem ou anexe um ficheiro.", 400);
+    if (payload.attachment) {
+      const attachmentLimit = rateLimit(request, "support:chat:attachments", 8, 60 * 60_000);
+      if (attachmentLimit) return attachmentLimit;
+    }
     if (parsed.data.orderId && !user) return errorResponse("Inicie sessão para pedir ajuda com uma encomenda.", 401);
 
     const order = parsed.data.orderId
@@ -116,7 +147,9 @@ export async function POST(request: Request) {
         })
       : null;
     if (parsed.data.orderId && !order) return errorResponse("Encomenda não encontrada.", 404);
-    const content = order ? `[Encomenda ${order.orderNumber}]\n${parsed.data.content}` : parsed.data.content;
+    const content = order
+      ? `[Encomenda ${order.orderNumber}]${parsed.data.content ? `\n${parsed.data.content}` : ""}`
+      : parsed.data.content || "";
 
     let guestToken = user ? null : readGuestToken(request);
     if (!user && !guestToken && (!parsed.data.guestName || !parsed.data.guestEmail)) {
@@ -159,26 +192,34 @@ export async function POST(request: Request) {
           senderId: user?.id,
           senderRole: user ? "CUSTOMER" : "GUEST",
           content,
+          ...(payload.attachment ? {
+            attachmentName: payload.attachment.name,
+            attachmentType: payload.attachment.type,
+            attachmentSize: payload.attachment.size,
+            attachmentData: Buffer.from(payload.attachment.data),
+          } : {}),
         },
-        include: { sender: { select: { id: true, name: true } } },
+        select: {
+          id: true, content: true, senderId: true, senderRole: true, createdAt: true,
+          attachmentName: true, attachmentType: true, attachmentSize: true,
+        },
       });
       await tx.supportConversation.update({
         where: { id: conversation!.id },
         data: { lastMessageAt: created.createdAt, status: "OPEN" },
       });
-      if (conversation!.agentId) {
-        await tx.notification.create({
-          data: {
-            userId: conversation!.agentId,
-            type: "SUPPORT_CHAT",
-            title: "Nova mensagem de suporte",
-            message: "Novo pedido de suporte de " + (user?.name || user?.email || parsed.data.guestName || "visitante") + ".",
-            link: "/admin/support",
-            dedupeKey: `support-chat-${conversation!.id}-${created.id}`,
-          },
-        });
-      }
       return created;
+    });
+
+    await createStaffNotification({
+      type: "SUPPORT_CHAT",
+      title: "Nova mensagem de suporte",
+      message: `${user?.name || user?.email || parsed.data.guestName || "Visitante"}: "${notificationMessagePreview(message.content || (message.attachmentName ? `📎 ${message.attachmentName}` : ""))}"`,
+      link: "/admin/support",
+      dedupeKey: `support-chat-${conversation!.id}-${message.id}`,
+      accessRoles: ["ADMIN", "SUPPORT"],
+    }).catch((notificationError) => {
+      console.error("Unable to notify staff about support chat message:", notificationError);
     });
 
     const response = Response.json({
@@ -187,8 +228,9 @@ export async function POST(request: Request) {
         content: message.content,
         senderId: message.senderId,
         senderRole: message.senderRole,
-        senderName: message.sender?.name || parsed.data.guestName || "Cliente",
+        senderName: user?.name || parsed.data.guestName || "Cliente",
         createdAt: message.createdAt,
+        ...serializeSupportAttachment(message),
       },
     }, { status: 201 });
     return newGuestSession && guestToken ? setGuestCookie(response, guestToken) : response;

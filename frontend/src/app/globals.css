@@ -189,44 +189,36 @@ a, button, input, textarea {
 }
 
 .storefront-header {
-  box-shadow: 0 8px 24px rgba(20, 22, 25, 0.08);
+  box-shadow: 0 2px 8px rgba(38, 58, 54, 0.06);
 }
 
 .storefront-header > div:first-child {
-  background-color: #17191c !important;
-  color: #d4d5d7;
+  background-color: #f5f7f6 !important;
+  color: #52615d;
 }
 
 .storefront-header > div:nth-child(2) {
-  border-color: #e8e8e6;
+  border-color: #e4e9e6;
   background-color: #fff;
-  color: #17191c;
+  color: #263a36;
 }
 
 .storefront-header > div:nth-child(2) > div {
-  color: #17191c;
-}
-
-.storefront-header > div:nth-child(2) .text-white {
-  color: #17191c !important;
-}
-
-.storefront-header .text-blue-100 {
-  color: #8a5b00 !important;
+  color: #263a36;
 }
 
 .storefront-header > div:nth-child(2) > div > form {
-  border-color: #dedfdf;
-  background-color: #f4f5f5;
+  border-color: #d9e2de;
+  background-color: #fff;
 }
 
 .storefront-header > div:nth-child(2) > div > form button {
-  background-color: #f5a800;
-  color: #17191c;
+  background-color: #087e76;
+  color: #fff;
 }
 
 .storefront-header > div:nth-child(2) > div > form button:hover {
-  background-color: #ffc43d;
+  background-color: #066a64;
 }
 
 .storefront-header > div:nth-child(3) {
@@ -236,82 +228,86 @@ a, button, input, textarea {
 }
 
 .storefront-header > div:nth-child(3) a {
-  color: #34383d;
+  color: #52615d;
 }
 
 .storefront-header > div:nth-child(3) a[href="/promotions"] {
-  border-radius: 0;
+  border-radius: 0.5rem;
 }
 
 .storefront-header > div:nth-child(3) a:hover {
-  background-color: #f5f5f3;
-  color: #17191c;
+  background-color: #e5f2ed;
+  color: #087e76;
 }
 
 .storefront-header > div:nth-child(3) > div > div:first-child > button {
-  background-color: #f5a800;
-  color: #17191c;
+  background-color: #e5f2ed;
+  color: #087e76;
 }
 
 .storefront-header > div:nth-child(3) > div > div:first-child > button:hover {
-  background-color: #ffc43d;
+  background-color: #d6ebe3;
 }
 
 .storefront-mobile-nav > div { width: 100%; }
 
 .storefront-mobile-nav a[aria-current="page"] {
   background-color: transparent !important;
-  color: #8a5b00 !important;
+  color: #087e76 !important;
 }
 
-.storefront-public [class*="text-[#1d6ac4]"] { color: #8a5b00 !important; }
-.storefront-public [class*="bg-[#1d6ac4]"] { background-color: #f5a800 !important; color: #17191c !important; }
-.storefront-public [class*="border-[#1d6ac4]"] { border-color: #f5a800 !important; }
-.storefront-public [class*="ring-[#1d6ac4]"] { --tw-ring-color: #f5a800 !important; }
-.storefront-public [class*="hover:text-[#1d6ac4]"]:hover { color: #8a5b00 !important; }
-.storefront-public [class*="hover:bg-[#155099]"]:hover { background-color: #d99100 !important; color: #17191c !important; }
-.storefront-public [class*="hover:bg-[#e8f0fc]"]:hover { background-color: #fff4d4 !important; }
-.storefront-public [class*="hover:border-[#1d6ac4]"]:hover { border-color: #f5a800 !important; }
+.storefront-public [class*="text-[#1d6ac4]"] { color: #087e76 !important; }
+.storefront-public [class*="bg-[#1d6ac4]"] { background-color: #087e76 !important; color: #fff !important; }
+.storefront-public [class*="border-[#1d6ac4]"] { border-color: #087e76 !important; }
+.storefront-public [class*="ring-[#1d6ac4]"] { --tw-ring-color: #087e76 !important; }
+.storefront-public [class*="hover:text-[#1d6ac4]"]:hover { color: #066a64 !important; }
+.storefront-public [class*="hover:bg-[#155099]"]:hover { background-color: #066a64 !important; color: #fff !important; }
+.storefront-public [class*="hover:bg-[#e8f0fc]"]:hover { background-color: #e5f2ed !important; }
+.storefront-public [class*="hover:border-[#1d6ac4]"]:hover { border-color: #087e76 !important; }
 .storefront-public [class*="focus:border-[#1d6ac4]"]:focus,
-.storefront-public [class*="focus-within:border-[#1d6ac4]"]:focus-within { border-color: #f5a800 !important; }
+.storefront-public [class*="focus-within:border-[#1d6ac4]"]:focus-within { border-color: #087e76 !important; }
 
 .storefront-public [class~="bg-blue-50"],
 .storefront-public [class*="bg-blue-50/"],
 .storefront-public [class~="bg-blue-100"],
-.storefront-public [class*="bg-blue-100/"] { background-color: #fff4d4 !important; }
+.storefront-public [class*="bg-blue-100/"] { background-color: #e5f2ed !important; }
 .storefront-public [class~="text-blue-500"],
 .storefront-public [class~="text-blue-600"],
 .storefront-public [class~="text-blue-700"],
 .storefront-public [class~="text-blue-800"],
-.storefront-public [class~="text-blue-900"] { color: #8a5b00 !important; }
-.storefront-public [class*="border-blue-"] { border-color: #f5dea5 !important; }
-.storefront-public [class*="ring-blue-"] { --tw-ring-color: #f5dea5 !important; }
+.storefront-public [class~="text-blue-900"] { color: #087e76 !important; }
+.storefront-public [class*="border-blue-"] { border-color: #c9e3d9 !important; }
+.storefront-public [class*="ring-blue-"] { --tw-ring-color: #c9e3d9 !important; }
 .storefront-public [class~="bg-blue-600"],
-.storefront-public [class~="bg-blue-700"] { background-color: #f5a800 !important; color: #17191c !important; }
+.storefront-public [class~="bg-blue-700"] { background-color: #087e76 !important; color: #fff !important; }
 .storefront-public [class~="hover:bg-blue-500"]:hover,
 .storefront-public [class~="hover:bg-blue-600"]:hover,
-.storefront-public [class~="hover:bg-blue-700"]:hover { background-color: #ffc43d !important; color: #17191c !important; }
-.storefront-public [class*="hover:text-blue-"]:hover { color: #6b4500 !important; }
+.storefront-public [class~="hover:bg-blue-700"]:hover { background-color: #066a64 !important; color: #fff !important; }
+.storefront-public [class*="hover:text-blue-"]:hover { color: #066a64 !important; }
 .storefront-public [class~="focus:border-blue-500"]:focus,
 .storefront-public [class~="focus:border-blue-600"]:focus,
 .storefront-public [class~="focus-within:border-blue-500"]:focus-within,
-.storefront-public [class~="focus-within:border-blue-600"]:focus-within { border-color: #f5a800 !important; }
+.storefront-public [class~="focus-within:border-blue-600"]:focus-within { border-color: #087e76 !important; }
 
-.storefront-public footer { background-color: #17191c !important; }
+.storefront-public footer {
+  border-top-color: #e1e8e4;
+  background-color: #fff !important;
+  color: #52615d;
+}
 
 .storefront-public .btn-primary {
-  background-color: #f5a800;
-  color: #17191c;
+  background-color: #087e76;
+  color: #fff;
 }
 
-.storefront-public .btn-primary:hover { background-color: #ffc43d; }
+.storefront-public .btn-primary:hover { background-color: #066a64; }
 
 .storefront-public .btn-secondary {
-  border-color: #d99100;
-  color: #8a5b00;
+  border-color: #087e76;
+  color: #087e76;
 }
 
-.storefront-public .btn-secondary:hover { background-color: #fff4d4; }
+.storefront-public .btn-secondary:hover { background-color: #e5f2ed; }
 
 .soft-card {
   box-shadow: 0 16px 36px rgba(15, 23, 42, 0.06);
@@ -787,14 +783,14 @@ a, button, input, textarea {
 .storefront-public .card-hover:hover,
 .storefront-public .storefront-product-card:hover {
   transform: translateY(-2px);
-  border-color: rgba(29, 106, 196, 0.35);
+  border-color: rgba(8, 126, 118, 0.28);
   box-shadow: 0 12px 26px rgba(15, 23, 42, 0.10);
 }
 
 .storefront-public .storefront-product-card {
   min-width: 0;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
+  border: 1px solid #e6ebe8;
+  border-radius: 12px;
   background: #fff;
   overflow: hidden;
   transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
@@ -807,7 +803,7 @@ a, button, input, textarea {
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  background: #f8fafc;
+  background: #f7f9f8;
 }
 
 .storefront-public .storefront-product-card .storefront-product-media img {
@@ -819,7 +815,7 @@ a, button, input, textarea {
 }
 
 .storefront-public .storefront-price {
-  color: #df1f2d;
+  color: #263a36;
   letter-spacing: -0.02em;
 }
 
@@ -842,15 +838,90 @@ a, button, input, textarea {
 
 .storefront-public .storefront-cta {
   min-height: 38px;
-  border-radius: 6px;
-  background: var(--storefront-yellow);
-  color: var(--storefront-navy);
+  border-radius: 8px;
+  background: #087e76;
+  color: #fff;
   font-size: 11px;
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .storefront-public .storefront-cta:hover {
-  background: #ffd166;
+  background: #066a64;
+}
+
+.storefront-public .storefront-featured-grid {
+  align-items: stretch;
+}
+
+.storefront-public .storefront-featured-grid .storefront-product-card {
+  height: 100%;
+  border-radius: 16px;
+  border-color: #e4ebe7;
+  box-shadow: 0 2px 8px rgba(25, 52, 45, 0.035);
+}
+
+.storefront-public .storefront-featured-grid .storefront-product-card:hover {
+  border-color: rgba(8, 126, 118, 0.3);
+  box-shadow: 0 12px 28px rgba(25, 52, 45, 0.1);
+  transform: translateY(-3px);
+}
+
+.storefront-public .storefront-featured-grid .storefront-product-media {
+  min-height: 0;
+  aspect-ratio: 1 / 0.92;
+  border-radius: 0;
+  border-bottom: 1px solid #edf1ef;
+  background: #f7f9f8;
+}
+
+.storefront-public .storefront-featured-grid .storefront-product-card > div:nth-child(2) {
+  padding: 12px;
+}
+
+.storefront-public .storefront-featured-grid .storefront-product-card > div:nth-child(2) > a:first-child {
+  color: #71807c;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+}
+
+.storefront-public .storefront-featured-grid .storefront-product-card > div:nth-child(2) > a:nth-child(2) {
+  min-height: 2.6em;
+  color: #263a36;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.storefront-public .storefront-featured-grid .storefront-product-card > div:nth-child(2) > a:nth-child(2):hover {
+  color: #087e76;
+}
+
+.storefront-public .storefront-featured-grid .storefront-product-card > div:nth-child(2) > div:first-of-type {
+  margin-top: 5px;
+  color: #87938f;
+}
+
+.storefront-public .storefront-featured-grid .storefront-product-card > div:nth-child(2) > div:last-child {
+  padding-top: 12px;
+}
+
+.storefront-public .storefront-featured-grid .storefront-product-card .storefront-price {
+  font-size: 17px;
+  font-weight: 750;
+}
+
+.storefront-public .storefront-featured-grid .storefront-product-card .storefront-cta {
+  min-height: 40px;
+  margin-top: 12px;
+}
+
+@media (min-width: 640px) {
+  .storefront-public .storefront-featured-grid .storefront-product-card > div:nth-child(2) {
+    padding: 14px;
+  }
+
+  .storefront-public .storefront-featured-grid .storefront-product-media {
+    aspect-ratio: 1 / 0.9;
+  }
 }
 
 .storefront-public .storefront-section {

@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { BarChart3, Boxes, ClipboardList, LayoutDashboard, Menu, Megaphone, Package, Search, ShieldCheck, ShoppingBag, Truck, Users, Wallet, X, Building2, MessageCircle } from "lucide-react";
 import { getDashboardDestination } from "@/lib/auth";
 import { fetchWithAuth } from "@/lib/api";
+import { NotificationBell } from "@/components/layout/NotificationBell";
 
 const groups = [
   { label: "Operação", items: [["Visão geral", "/admin", LayoutDashboard], ["Vendas", "/admin/orders", ShoppingBag], ["Produtos", "/admin/products", Package], ["Stock", "/admin/stock", Boxes], ["Fornecedores", "/admin/suppliers", Truck]] },
@@ -59,6 +60,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
           <div className="ml-auto flex items-center gap-2">
             <Link href="/admin/finance/review" className="hidden items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] font-bold text-amber-800 hover:bg-amber-100 sm:inline-flex"><ShieldCheck size={14} />Revisões</Link>
+            <NotificationBell variant="admin" />
             <Link href="/admin/users" className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-900 text-[10px] font-black text-white ring-2 ring-white" aria-label="Abrir utilizadores">AD</Link>
           </div>
         </div>

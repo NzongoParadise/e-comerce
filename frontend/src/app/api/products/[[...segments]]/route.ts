@@ -17,6 +17,11 @@ const productSchema = z.object({
   description: z.string().trim().max(2000).nullable().optional(),
   basePrice: z.coerce.number().nonnegative(),
   imageUrl: z.string().trim().max(500).nullable().optional(),
+  images: z.array(z.string().trim().min(1).max(500)).max(12).superRefine((images, context) => {
+    if (new Set(images).size !== images.length) {
+      context.addIssue({ code: 'custom', message: 'As imagens não podem estar repetidas' });
+    }
+  }).optional(),
   stock: z.coerce.number().int().nonnegative(),
   categoryId: z.coerce.number().int().positive(),
   brandId: z.coerce.number().int().positive(),
@@ -59,7 +64,7 @@ export async function GET(request: Request) {
     try {
       const product = await prisma.product.findUnique({
         where: { slug: segment },
-        include: { category: true, brand: true, prices: true, attributes: true },
+        include: { category: true, brand: true, prices: true, attributes: true, images: { orderBy: { position: 'asc' } } },
       });
       if (!product) return errorResponse('Product not found', 404);
       return Response.json({ data: product });
@@ -100,6 +105,7 @@ export async function GET(request: Request) {
           brand: true,
           prices: market ? { where: { market } } : true,
           attributes: true,
+          images: { orderBy: { position: 'asc' } },
         },
         skip: (page - 1) * pageSize,
         take: pageSize,
@@ -113,6 +119,7 @@ export async function GET(request: Request) {
       description: product.description,
       basePrice: product.basePrice,
       imageUrl: product.imageUrl,
+      images: product.images,
       stock: product.stock,
       category: { id: product.category.id, name: product.category.name, slug: product.category.slug },
       brand: { id: product.brand.id, name: product.brand.name, slug: product.brand.slug },
@@ -131,11 +138,18 @@ export async function POST(request: Request) {
   if (authError) return authError;
   const parsed = productSchema.safeParse(await readJson(request));
   if (!parsed.success) return errorResponse('Invalid product data', 400, parsed.error.flatten().fieldErrors);
-  const { prices, attributes, ...productData } = parsed.data;
+  const { prices, attributes, images, ...productData } = parsed.data;
+  const imageUrls = images ?? (productData.imageUrl ? [productData.imageUrl] : []);
+  const productDataWithPrimary = images ? { ...productData, imageUrl: imageUrls[0] ?? null } : productData;
   try {
     const product = await prisma.product.create({
-      data: { ...productData, prices: prices ? { create: prices } : undefined, attributes: attributes ? { create: attributes } : undefined },
-      include: { category: true, brand: true, prices: true, attributes: true },
+      data: {
+        ...productDataWithPrimary,
+        prices: prices ? { create: prices } : undefined,
+        attributes: attributes ? { create: attributes } : undefined,
+        images: imageUrls.length ? { create: imageUrls.map((url, position) => ({ url, position })) } : undefined,
+      },
+      include: { category: true, brand: true, prices: true, attributes: true, images: { orderBy: { position: 'asc' } } },
     });
 
     await createNotificationsForChannel({
@@ -165,11 +179,19 @@ export async function PATCH(request: Request) {
   if (!segment || !Number.isInteger(id)) return errorResponse('Invalid product id', 400);
   const parsed = productSchema.partial().safeParse(await readJson(request));
   if (!parsed.success || !Object.keys(parsed.data).length) return errorResponse('Invalid product data', 400);
-  const { prices, attributes, ...productData } = parsed.data;
+  const { prices, attributes, images, ...productData } = parsed.data;
+  const productDataWithPrimary = images === undefined ? productData : { ...productData, imageUrl: images[0] ?? null };
 
   try {
     const product = await prisma.$transaction(async (transaction) => {
-      await transaction.product.update({ where: { id }, data: productData });
+      await transaction.product.update({ where: { id }, data: productDataWithPrimary });
+      if (images !== undefined || productDataWithPrimary.imageUrl !== undefined) {
+        const imageUrls = images ?? (productDataWithPrimary.imageUrl ? [productDataWithPrimary.imageUrl] : []);
+        await transaction.productImage.deleteMany({ where: { productId: id } });
+        if (imageUrls.length) {
+          await transaction.productImage.createMany({ data: imageUrls.map((url, position) => ({ productId: id, url, position })) });
+        }
+      }
       if (prices) {
         await transaction.price.deleteMany({ where: { productId: id } });
         await transaction.price.createMany({ data: prices.map((price) => ({ ...price, productId: id })) });
@@ -178,7 +200,7 @@ export async function PATCH(request: Request) {
         await transaction.productAttribute.deleteMany({ where: { productId: id } });
         await transaction.productAttribute.createMany({ data: attributes.map((attribute) => ({ ...attribute, productId: id })) });
       }
-      return transaction.product.findUnique({ where: { id }, include: { category: true, brand: true, prices: true, attributes: true } });
+      return transaction.product.findUnique({ where: { id }, include: { category: true, brand: true, prices: true, attributes: true, images: { orderBy: { position: 'asc' } } } });
     });
     return Response.json({ data: product });
   } catch (error) {

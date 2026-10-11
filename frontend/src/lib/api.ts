@@ -1,4 +1,4 @@
-export async function fetchWithAuth(url: string, options: RequestInit = {}) {
+export async function fetchWithAuthResponse(url: string, options: RequestInit = {}) {
   // In a real app, this might come from next-auth, cookies, or a context.
   // For this demo, we'll try to get it from localStorage if running in browser.
   let token = '';
@@ -39,6 +39,11 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}) {
     throw new Error(message);
   }
 
+  return response;
+}
+
+export async function fetchWithAuth(url: string, options: RequestInit = {}) {
+  const response = await fetchWithAuthResponse(url, options);
   if (response.status === 204) return null;
   return response.json();
 }

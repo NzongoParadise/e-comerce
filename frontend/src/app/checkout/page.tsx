@@ -3,13 +3,14 @@
 import { useCart } from "@/context/CartContext";
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { ShieldCheck, Truck, Zap, Store, CreditCard, Building2, Banknote, LockKeyhole, ChevronLeft, Package, type LucideIcon } from "lucide-react";
 import { fetchWithAuth } from "@/lib/api";
 import { useMarket } from "@/context/MarketContext";
 import { calculatePortugalShipping, estimateCartWeightKg } from "@/lib/shipping";
 import { AddressSelector, type SavedAddress } from "@/components/features/checkout/AddressSelector";
+import { getAnalyticsConsentSnapshot, subscribeToAnalyticsConsent, trackStorefrontEvent } from "@/lib/analytics";
 
 const paymentBrands = {
   multicaixa: { name: "MULTICAIXA", src: "/payment-logos/multicaixa.svg", width: 210, height: 39, imageClassName: "h-4 w-[72px]", tileClassName: "bg-[#002133]" },
@@ -34,6 +35,8 @@ export default function CheckoutPage() {
   const { items, isLoaded, cartTotalEUR, cartTotalKZ, clearCart } = useCart();
   const { market: country } = useMarket();
   const router = useRouter();
+  const analyticsEnabled = useSyncExternalStore(subscribeToAnalyticsConsent, getAnalyticsConsentSnapshot, () => false);
+  const checkoutTracked = useRef(false);
   
   const [shippingMethod, setShippingMethod] = useState<"standard" | "express" | "pickup">("standard");
   const [deliveryMode, setDeliveryMode] = useState<"address" | "pickup" | "business">("address");
@@ -49,6 +52,12 @@ export default function CheckoutPage() {
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!analyticsEnabled || checkoutTracked.current) return;
+    checkoutTracked.current = true;
+    trackStorefrontEvent("CHECKOUT_START");
+  }, [analyticsEnabled]);
 
   useEffect(() => {
     const token = localStorage.getItem("jwt_token");
@@ -505,4 +514,3 @@ export default function CheckoutPage() {
     </div>
   );
 }
-

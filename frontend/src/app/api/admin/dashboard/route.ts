@@ -18,6 +18,10 @@ function monthLabel(date: Date) {
   return new Intl.DateTimeFormat('pt-PT', { month: 'short', timeZone: 'UTC' }).format(date);
 }
 
+function dayKey(date: Date) {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
+}
+
 async function requireAdmin(request: Request) {
   const user = await authenticate(request);
   if (!user) return errorResponse('Authentication required', 401);
@@ -92,6 +96,9 @@ export async function GET(request: Request) {
       trendOrders,
       expensesAOA,
       expensesEUR,
+      visitorDaily,
+      visitorSummary,
+      popularProducts,
     ] = await prisma.$transaction([
       prisma.payment.aggregate({ where: { ...currentPaidWhere, currency: 'AOA' }, _sum: { amountKZ: true }, _count: { _all: true } }),
       prisma.payment.aggregate({ where: { ...currentPaidWhere, currency: 'EUR' }, _sum: { amountEUR: true }, _count: { _all: true } }),
@@ -133,6 +140,47 @@ export async function GET(request: Request) {
       }),
       prisma.financeEntry.aggregate({ where: { type: 'EXPENSE', currency: 'AOA', status: 'CONFIRMED', transactionDate: { gte: range.from, lte: range.to } }, _sum: { amount: true } }),
       prisma.financeEntry.aggregate({ where: { type: 'EXPENSE', currency: 'EUR', status: 'CONFIRMED', transactionDate: { gte: range.from, lte: range.to } }, _sum: { amount: true } }),
+      prisma.$queryRaw<Array<{ day: Date; visitors: bigint; pageViews: bigint; productViews: bigint; favoritesAdded: bigint; cartAdds: bigint; checkoutStarts: bigint }>>`
+        SELECT date_trunc('day', "createdAt") AS day,
+          COUNT(DISTINCT "visitorId") AS visitors,
+          COUNT(*) FILTER (WHERE "eventType" = 'PAGE_VIEW') AS "pageViews",
+          COUNT(*) FILTER (WHERE "eventType" = 'PRODUCT_VIEW') AS "productViews",
+          COUNT(*) FILTER (WHERE "eventType" = 'FAVORITE_ADD') AS "favoritesAdded",
+          COUNT(*) FILTER (WHERE "eventType" = 'ADD_TO_CART') AS "cartAdds",
+          COUNT(*) FILTER (WHERE "eventType" = 'CHECKOUT_START') AS "checkoutStarts"
+        FROM "StorefrontEvent"
+        WHERE "createdAt" >= ${range.from} AND "createdAt" <= ${range.to}
+        GROUP BY date_trunc('day', "createdAt")
+        ORDER BY day ASC
+      `,
+      prisma.$queryRaw<Array<{ visitors: bigint; pageViews: bigint; productViews: bigint; productVisitors: bigint; favoriteVisitors: bigint; cartVisitors: bigint; checkoutVisitors: bigint; favoritesAdded: bigint; favoritesRemoved: bigint; cartAdds: bigint; checkoutStarts: bigint }>>`
+        SELECT COUNT(DISTINCT "visitorId") AS visitors,
+          COUNT(*) FILTER (WHERE "eventType" = 'PAGE_VIEW') AS "pageViews",
+          COUNT(*) FILTER (WHERE "eventType" = 'PRODUCT_VIEW') AS "productViews",
+          COUNT(DISTINCT "visitorId") FILTER (WHERE "eventType" = 'PRODUCT_VIEW') AS "productVisitors",
+          COUNT(DISTINCT "visitorId") FILTER (WHERE "eventType" = 'FAVORITE_ADD') AS "favoriteVisitors",
+          COUNT(DISTINCT "visitorId") FILTER (WHERE "eventType" = 'ADD_TO_CART') AS "cartVisitors",
+          COUNT(DISTINCT "visitorId") FILTER (WHERE "eventType" = 'CHECKOUT_START') AS "checkoutVisitors",
+          COUNT(*) FILTER (WHERE "eventType" = 'FAVORITE_ADD') AS "favoritesAdded",
+          COUNT(*) FILTER (WHERE "eventType" = 'FAVORITE_REMOVE') AS "favoritesRemoved",
+          COUNT(*) FILTER (WHERE "eventType" = 'ADD_TO_CART') AS "cartAdds",
+          COUNT(*) FILTER (WHERE "eventType" = 'CHECKOUT_START') AS "checkoutStarts"
+        FROM "StorefrontEvent"
+        WHERE "createdAt" >= ${range.from} AND "createdAt" <= ${range.to}
+      `,
+      prisma.$queryRaw<Array<{ productId: number; name: string; imageUrl: string | null; views: bigint; favorites: bigint }>>`
+        SELECT p."id" AS "productId", p."name", p."imageUrl",
+          COUNT(*) FILTER (WHERE e."eventType" = 'PRODUCT_VIEW') AS views,
+          COUNT(*) FILTER (WHERE e."eventType" = 'FAVORITE_ADD') AS favorites
+        FROM "StorefrontEvent" e
+        INNER JOIN "Product" p ON p."id" = e."productId"
+        WHERE e."createdAt" >= ${range.from} AND e."createdAt" <= ${range.to}
+          AND e."eventType" IN ('PRODUCT_VIEW', 'FAVORITE_ADD')
+        GROUP BY p."id", p."name", p."imageUrl"
+        HAVING COUNT(*) FILTER (WHERE e."eventType" IN ('PRODUCT_VIEW', 'FAVORITE_ADD')) > 0
+        ORDER BY favorites DESC, views DESC
+        LIMIT 5
+      `,
     ]);
 
     for (const payment of trendPayments) {
@@ -151,6 +199,34 @@ export async function GET(request: Request) {
     const currentEUR = Number(currentRevenueEUR._sum.amountEUR || 0);
     const previousAOA = Number(previousRevenueAOA._sum.amountKZ || 0);
     const previousEUR = Number(previousRevenueEUR._sum.amountEUR || 0);
+    const analyticsSummary = visitorSummary[0];
+    const dailyAnalyticsByDay = new Map(visitorDaily.map((item) => [dayKey(item.day), item]));
+    const dailyAnalytics: Array<{
+      day: string;
+      visitors: number;
+      pageViews: number;
+      productViews: number;
+      favoritesAdded: number;
+      cartAdds: number;
+      checkoutStarts: number;
+    }> = [];
+    const firstAnalyticsDay = new Date(range.from);
+    firstAnalyticsDay.setUTCHours(0, 0, 0, 0);
+    const lastAnalyticsDay = new Date(range.to);
+    lastAnalyticsDay.setUTCHours(0, 0, 0, 0);
+    for (const date = new Date(firstAnalyticsDay); date <= lastAnalyticsDay; date.setUTCDate(date.getUTCDate() + 1)) {
+      const key = dayKey(date);
+      const item = dailyAnalyticsByDay.get(key);
+      dailyAnalytics.push({
+        day: key,
+        visitors: Number(item?.visitors || 0),
+        pageViews: Number(item?.pageViews || 0),
+        productViews: Number(item?.productViews || 0),
+        favoritesAdded: Number(item?.favoritesAdded || 0),
+        cartAdds: Number(item?.cartAdds || 0),
+        checkoutStarts: Number(item?.checkoutStarts || 0),
+      });
+    }
     return Response.json({
       data: {
         period: range.label,
@@ -181,6 +257,29 @@ export async function GET(request: Request) {
         recentOrders,
         bestSellers: bestSellers.map((item) => ({ productId: item.productId, name: item.name, imageUrl: item.imageUrl, units: item._sum?.quantity || 0 })),
         trend: [...trendMap.values()],
+        visitorAnalytics: {
+          summary: {
+            visitors: Number(analyticsSummary?.visitors || 0),
+            pageViews: Number(analyticsSummary?.pageViews || 0),
+            productViews: Number(analyticsSummary?.productViews || 0),
+            productVisitors: Number(analyticsSummary?.productVisitors || 0),
+            favoriteVisitors: Number(analyticsSummary?.favoriteVisitors || 0),
+            cartVisitors: Number(analyticsSummary?.cartVisitors || 0),
+            checkoutVisitors: Number(analyticsSummary?.checkoutVisitors || 0),
+            favoritesAdded: Number(analyticsSummary?.favoritesAdded || 0),
+            favoritesRemoved: Number(analyticsSummary?.favoritesRemoved || 0),
+            cartAdds: Number(analyticsSummary?.cartAdds || 0),
+            checkoutStarts: Number(analyticsSummary?.checkoutStarts || 0),
+          },
+          daily: dailyAnalytics,
+          popularProducts: popularProducts.map((product) => ({
+            productId: product.productId,
+            name: product.name,
+            imageUrl: product.imageUrl,
+            views: Number(product.views),
+            favorites: Number(product.favorites),
+          })),
+        },
       },
     });
   } catch (error) {

@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState } from "react";
+import { trackStorefrontEvent } from "@/lib/analytics";
 
 export type FavoriteProduct = {
   id: number;
@@ -46,7 +47,9 @@ export function FavoritesProvider({ children }: { children: React.ReactNode }) {
   }, [favorites, loaded]);
 
   function toggleFavorite(product: FavoriteProduct) {
-    setFavorites((current) => current.some((item) => item.id === product.id)
+    const removing = favorites.some((item) => item.id === product.id);
+    trackStorefrontEvent(removing ? "FAVORITE_REMOVE" : "FAVORITE_ADD", { productId: product.id });
+    setFavorites((current) => removing
       ? current.filter((item) => item.id !== product.id)
       : [...current, product]);
   }

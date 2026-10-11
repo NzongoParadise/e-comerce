@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Building2, FileText, LayoutDashboard, Package, Settings, ShoppingBag, Users, WalletCards, Menu, X, Search, ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import { fetchWithAuth } from "@/lib/api";
+import { NotificationBell } from "@/components/layout/NotificationBell";
 
 const groups = [
   { label: "Empresa", items: [
@@ -22,6 +23,7 @@ const groups = [
     { href: "/b2b/empresa", label: "Empresa", Icon: Building2 },
     { href: "/b2b/utilizadores", label: "Utilizadores", Icon: Users },
     { href: "/b2b/conta", label: "Definições", Icon: Settings },
+    { href: "/account/settings", label: "Preferências de comunicação", Icon: Settings },
   ]},
 ];
 
@@ -31,6 +33,7 @@ function isActive(pathname: string, href: string) {
 
 export default function B2BLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [authResolved, setAuthResolved] = useState(false);
@@ -39,7 +42,9 @@ export default function B2BLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let active = true;
     if (!localStorage.getItem("jwt_token")) {
-      setAuthResolved(true);
+      queueMicrotask(() => {
+        if (active) setAuthResolved(true);
+      });
       return () => { active = false; };
     }
     fetchWithAuth("/api/auth/me")
@@ -66,10 +71,11 @@ export default function B2BLayout({ children }: { children: React.ReactNode }) {
           </Link>
           <div className="relative hidden max-w-2xl flex-1 md:block">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && search.trim()) window.location.href = `/b2b/catalogo?search=${encodeURIComponent(search.trim())}`; }} placeholder="Pesquisar no catálogo, encomendas ou cotações..." className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-3 text-xs outline-none transition focus:border-[#f5a800] focus:bg-white focus:ring-2 focus:ring-[#f5a800]/20" aria-label="Pesquisa empresarial" />
+            <input value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && search.trim()) router.push(`/b2b/catalogo?search=${encodeURIComponent(search.trim())}`); }} placeholder="Pesquisar no catálogo, encomendas ou cotações..." className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-3 text-xs outline-none transition focus:border-[#f5a800] focus:bg-white focus:ring-2 focus:ring-[#f5a800]/20" aria-label="Pesquisa empresarial" />
           </div>
           <div className="ml-auto flex items-center gap-2">
             <Link href="/products" className="hidden items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-bold text-slate-700 hover:bg-slate-50 sm:inline-flex">Loja</Link>
+            <NotificationBell variant="admin" />
             <Link href="/b2b/empresa" className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-900 text-[10px] font-black text-white ring-2 ring-white" aria-label="Abrir empresa">B2</Link>
           </div>
         </div>

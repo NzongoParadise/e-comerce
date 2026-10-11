@@ -9,7 +9,7 @@ import { calculateShipping, estimateCartWeightKg } from '@/lib/shipping';
 import { evaluateOrderPromotions, legacyCouponDiscount, reservePromotionUsages } from '@/lib/server/promotions/engine';
 import { ensureStripeCustomer } from '@/lib/server/payments/stripeCustomers';
 import { z } from 'zod';
-import { createNotificationIfAllowed } from '@/lib/server/notifications';
+import { createNotificationIfAllowed, createStaffNotification } from '@/lib/server/notifications';
 import { getAppUrl } from '@/lib/server/appUrl';
 
 export const runtime = 'nodejs';
@@ -430,8 +430,21 @@ export async function POST(request: Request) {
       title: "Encomenda recebida",
       message: `A encomenda ${order.orderNumber} foi recebida e está em processamento.`,
       link: `/account/orders/${order.id}`,
+      dedupeKey: `order:${order.id}:created`,
     }).catch((notificationError) => {
       logger.error("Failed to create order notification", {
+        orderId: order.id,
+        error: notificationError instanceof Error ? notificationError.message : notificationError,
+      });
+    });
+    await createStaffNotification({
+      type: "NEW_ORDER",
+      title: "Nova encomenda",
+      message: `A encomenda ${order.orderNumber} foi criada e aguarda acompanhamento.`,
+      link: "/admin/orders",
+      dedupeKey: `order:${order.id}:staff-created`,
+    }).catch((notificationError) => {
+      logger.error("Failed to create staff order notification", {
         orderId: order.id,
         error: notificationError instanceof Error ? notificationError.message : notificationError,
       });

@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/server/prisma';
 import { authenticate, errorResponse, isAdmin, readJson, userSubject } from '@/lib/server/api';
 import { z } from 'zod';
+import { createNotificationIfAllowed } from '@/lib/server/notifications';
 
 export const runtime = 'nodejs';
 
@@ -204,6 +205,17 @@ export async function POST(request: Request) {
           trackingEvents: { orderBy: { occurredAt: 'desc' }, take: 5 },
         },
       });
+    });
+    await createNotificationIfAllowed({
+      userId: order.user.id,
+      channel: 'orderUpdates',
+      type: 'ORDER_CREATED',
+      title: 'Nova encomenda na sua conta',
+      message: `A encomenda ${order.orderNumber} foi registada pela equipa e está em processamento.`,
+      link: `/account/orders/${order.id}`,
+      dedupeKey: `order:${order.id}:created`,
+    }).catch((notificationError) => {
+      console.error('Unable to notify customer about manually created order:', notificationError);
     });
     return Response.json({ data: order }, { status: 201 });
   } catch (error) {

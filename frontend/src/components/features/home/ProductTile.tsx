@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Heart, ShoppingCart, Truck } from "lucide-react";
+import { Heart, ShoppingCart } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { useFavorites } from "@/context/FavoritesContext";
 import { useMarket } from "@/context/MarketContext";
@@ -20,8 +20,8 @@ export type Product = {
   prices?: { market: string; amount: string | number; currency: string }[];
 };
 
-export function ProductTile({ product }: { product: Product }) {
-  const { market, formatPrice, eurToKz } = useMarket();
+export function ProductTile({ product, showQuickAdd = true }: { product: Product; showQuickAdd?: boolean }) {
+  const { market, eurToKz } = useMarket();
   const { addToCart } = useCart();
   const { isFavorite, toggleFavorite } = useFavorites();
 
@@ -32,7 +32,7 @@ export function ProductTile({ product }: { product: Product }) {
   return (
     <article className="storefront-product-card group relative flex min-w-0 flex-col">
       {product.stock > 0 && product.stock <= 3 && (
-        <span className="absolute left-2 top-2 z-10 rounded bg-[#fff3cf] px-1.5 py-1 text-[9px] font-black text-[#8a5a00]">
+        <span className="absolute left-2 top-2 z-10 rounded-full bg-white/95 px-2.5 py-1.5 text-[10px] font-semibold text-[#176b64] shadow-sm">
           Últimas {product.stock}
         </span>
       )}
@@ -52,14 +52,14 @@ export function ProductTile({ product }: { product: Product }) {
         }
         aria-label={favorite ? `Remover ${product.name} dos favoritos` : `Adicionar ${product.name} aos favoritos`}
         className={
-          "absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full border bg-white/95 shadow-sm backdrop-blur " +
-          (favorite ? "border-red-200 text-red-600" : "border-slate-200 text-slate-500 opacity-100 sm:opacity-0 sm:group-hover:opacity-100")
+          "absolute right-2 top-2 z-10 flex h-9 w-9 items-center justify-center rounded-full border bg-white/95 shadow-sm backdrop-blur transition " +
+          (favorite ? "border-red-200 text-red-600" : "border-white text-slate-500 opacity-100 sm:opacity-0 sm:group-hover:opacity-100")
         }
       >
         <Heart size={15} fill={favorite ? "currentColor" : "none"} />
       </button>
 
-      <Link href={`/products/${product.slug}`} className="storefront-product-media min-h-[185px]">
+      <Link href={`/products/${product.slug}`} className="storefront-product-media aspect-square min-h-0">
         <Image
           src={product.imageUrl || "/file.svg"}
           alt={product.name}
@@ -70,33 +70,21 @@ export function ProductTile({ product }: { product: Product }) {
         />
       </Link>
 
-      <div className="flex min-h-0 flex-1 flex-col p-3">
-        <Link href={`/products?brand=${product.brand.slug}`} className="mb-1 text-[9px] font-black uppercase tracking-[0.12em] text-[#1d6ac4] hover:text-[#155099]">
+      <div className="flex min-h-0 flex-1 flex-col p-3 sm:p-3.5">
+        <Link href={`/products?brand=${product.brand.slug}`} className="mb-1 text-[9px] font-bold uppercase tracking-[0.12em] text-[#71807c] hover:text-[#087e76]">
           {product.brand.name}
         </Link>
-        <Link href={`/products/${product.slug}`} className="line-clamp-2 min-h-9 text-xs font-bold leading-[1.35] text-slate-900 hover:text-[#1d6ac4]">
+        <Link href={`/products/${product.slug}`} className="line-clamp-2 min-h-9 text-sm font-semibold leading-[1.35] text-[#263a36] hover:text-[#087e76]">
           {product.name}
         </Link>
-        <div className="mt-1 flex items-center gap-1.5 text-[9px] text-slate-400">
-          <span>{product.category.name}</span>
-          <span aria-hidden="true">·</span>
-          <span>{product.stock > 0 ? "Disponível" : "Indisponível"}</span>
-        </div>
 
         <div className="mt-auto pt-3">
-          <p className="text-lg font-black tracking-tight text-[#df1f2d]">{formatPrice(euroPrice)}</p>
-          <p className="mt-0.5 text-[9px] text-slate-400">
-            {market === "PT"
+          <p className="text-base font-bold tracking-tight text-[#263a36] sm:text-lg">
+            {market === "AO"
               ? `Kz ${kwanzaPrice.toLocaleString("pt-AO")}`
               : `€ ${euroPrice.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}`}
           </p>
-          <div className="mt-2 flex items-center justify-between gap-2 text-[9px]">
-            <span className={product.stock > 0 ? "font-bold text-emerald-600" : "font-bold text-red-600"}>
-              {product.stock > 0 ? `${product.stock} em stock` : "Sem stock"}
-            </span>
-            <span className="inline-flex items-center gap-1 text-slate-400"><Truck size={11} />AO · PT</span>
-          </div>
-          <button
+          {showQuickAdd ? <button
             type="button"
             disabled={product.stock <= 0}
             onClick={() =>
@@ -111,11 +99,14 @@ export function ProductTile({ product }: { product: Product }) {
                 imageUrl: product.imageUrl || undefined,
               })
             }
+            aria-label={`Adicionar ${product.name} ao carrinho`}
             className="storefront-cta mt-3 flex w-full items-center justify-center gap-2 px-3"
           >
-            <ShoppingCart size={14} strokeWidth={2.4} />
-            Adicionar ao carrinho
-          </button>
+            <ShoppingCart size={14} strokeWidth={2} />
+            Adicionar
+          </button> : <Link href={`/products/${product.slug}`} className="mt-2 inline-flex items-center text-xs font-semibold text-[#087e76] hover:underline">
+            {product.stock > 0 ? "Ver produto" : "Indisponível"}
+          </Link>}
         </div>
       </div>
     </article>

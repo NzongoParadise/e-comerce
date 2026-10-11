@@ -81,7 +81,7 @@ export async function POST(request: Request) {
       message: `O reembolso da encomenda ${payment.order.orderNumber} foi registado e aguarda processamento.`,
       link: `/account/orders/${payment.orderId}`,
       dedupeKey: `refund:${refund.id}:requested`,
-    }).catch(() => undefined);
+    }).catch((notificationError) => console.error("Unable to create refund request notification:", notificationError));
     return Response.json({ data: refund }, { status: 201 });
   }
 
@@ -133,7 +133,7 @@ export async function POST(request: Request) {
         message: `O reembolso da encomenda ${payment.order.orderNumber} foi processado com sucesso.`,
         link: `/account/orders/${payment.orderId}`,
         dedupeKey: `refund:${refund.id}:succeeded`,
-      }).catch(() => undefined);
+      }).catch((notificationError) => console.error("Unable to create refund completion notification:", notificationError));
     }
     return Response.json({ data: updated }, { status: 201 });
   } catch (error) {

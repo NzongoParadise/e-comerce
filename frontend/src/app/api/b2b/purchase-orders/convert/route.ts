@@ -4,6 +4,7 @@ import { authenticate, errorResponse, userSubject } from "@/lib/server/api";
 import { canTransitionQuote } from "@/lib/b2b/quoteWorkflow";
 import { B2B_STOCK_RESERVATION_DURATION_MS } from "@/lib/server/orders/inventory";
 import { z } from "zod";
+import { createNotificationIfAllowed, createStaffNotification } from "@/lib/server/notifications";
 export const runtime = "nodejs";
 
 function decimalFromSnapshot(value: unknown): Prisma.Decimal {
@@ -301,6 +302,28 @@ export async function POST(request: Request) {
       }
       return { order, po };
     }, { timeout: 15000 });
+    await Promise.all([
+      createNotificationIfAllowed({
+        userId: result.order.userId,
+        channel: "orderUpdates",
+        type: "ORDER_CREATED",
+        title: "Encomenda empresarial criada",
+        message: `A encomenda ${result.order.orderNumber} foi criada a partir do seu Purchase Order.`,
+        link: "/b2b/encomendas",
+        dedupeKey: `order:${result.order.id}:created`,
+      }).catch((notificationError) => {
+        console.error("Unable to notify B2B customer about converted order:", notificationError);
+      }),
+      createStaffNotification({
+        type: "NEW_ORDER",
+        title: "Nova encomenda empresarial",
+        message: `A encomenda ${result.order.orderNumber} foi criada a partir de um Purchase Order.`,
+        link: "/admin/orders",
+        dedupeKey: `order:${result.order.id}:staff-created`,
+      }).catch((notificationError) => {
+        console.error("Unable to notify staff about converted B2B order:", notificationError);
+      }),
+    ]);
     return Response.json({ data: result }, { status: result.po.orderId ? 200 : 201 });
   } catch (error) {
     const code = error instanceof Error ? error.message : "";

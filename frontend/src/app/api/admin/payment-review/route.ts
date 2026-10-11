@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { prisma } from '@/lib/server/prisma';
 import { authenticate, errorResponse, isAdmin, readJson, userSubject } from '@/lib/server/api';
 import { z } from 'zod';
+import { createNotificationIfAllowed } from '@/lib/server/notifications';
 
 export const runtime = 'nodejs';
 
@@ -102,6 +103,23 @@ export async function PATCH(request: Request) {
 
     if (result.kind === 'NOT_FOUND') return errorResponse('Order not found', 404);
     if (result.kind === 'NOT_REVIEWABLE') return errorResponse('Order is no longer available for payment review', 409);
+    const reviewedOrder = await prisma.order.findUnique({
+      where: { id: parsed.data.orderId },
+      select: { id: true, orderNumber: true, userId: true },
+    });
+    if (reviewedOrder) {
+      await createNotificationIfAllowed({
+        userId: reviewedOrder.userId,
+        channel: 'orderUpdates',
+        type: 'ORDER_PAYMENT_CONFIRMED',
+        title: 'Pagamento confirmado',
+        message: `O pagamento da encomenda ${reviewedOrder.orderNumber} foi revisto e confirmado.`,
+        link: `/account/orders/${reviewedOrder.id}`,
+        dedupeKey: `order:${reviewedOrder.id}:payment:review-confirmed`,
+      }).catch((notificationError) => {
+        console.error('Unable to create payment review notification:', notificationError);
+      });
+    }
     return Response.json({ data: { orderId: parsed.data.orderId, status: 'PAYMENT_CONFIRMED' } });
   } catch (error) {
     if (error instanceof Error && error.message.startsWith('REVIEW_STOCK_UNAVAILABLE:')) {

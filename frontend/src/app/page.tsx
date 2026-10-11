@@ -3,40 +3,38 @@
 import Image from "next/image";
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
-import { Apple, Building2, ChevronRight, CreditCard, Gamepad2, Headphones, Headset, Heart, Laptop, Mail, MessageCircle, Monitor, Package, Settings, ShieldCheck, Smartphone, Truck, type LucideIcon } from "lucide-react";
-import { useCart } from "@/context/CartContext";
-import { useFavorites } from "@/context/FavoritesContext";
+import { Apple, ArrowRight, ChevronRight, CreditCard, Gamepad2, Headphones, Laptop, Mail, MessageCircle, Monitor, Package, RefreshCcw, Settings, Smartphone, Truck, type LucideIcon } from "lucide-react";
 import { useMarket } from "@/context/MarketContext";
-import { ProductTile, type Product } from "@/components/features/home/ProductTile";
-import { RecommendationRail } from "@/components/features/catalog/RecommendationRail";
+import { ProductCard, type CatalogProduct } from "@/components/features/catalog/ProductCard";
 import { Stars } from "@/components/features/home/Stars";
 import { fetchWithAuth } from "@/lib/api";
+import { storefrontCollections } from "@/lib/storefrontCollections";
 
 type Category = { id: number; name: string; slug: string; productCount: number };
 type Brand = { id: number; name: string; slug: string };
 type Testimonial = { id: number; name: string; location: string; text: string; stars: number };
-const categoryIcons: Record<string, { Icon: LucideIcon; subtitle: string }> = {
-  computadores: { Icon: Laptop, subtitle: "Portáteis e desktops" }, iphone: { Icon: Smartphone, subtitle: "Todos os modelos" }, apple: { Icon: Apple, subtitle: "Mac, iPad e acessórios" }, smartphones: { Icon: Smartphone, subtitle: "Todas as marcas" }, gaming: { Icon: Gamepad2, subtitle: "Gaming e entretenimento" }, monitores: { Icon: Monitor, subtitle: "Trabalho e entretenimento" }, componentes: { Icon: Settings, subtitle: "RAM, SSD e componentes" }, acessorios: { Icon: Headphones, subtitle: "Tudo para o seu setup" },
+const categoryIcons: Record<string, LucideIcon> = {
+  computadores: Laptop, iphone: Smartphone, apple: Apple, smartphones: Smartphone, gaming: Gamepad2, monitores: Monitor, componentes: Settings, acessorios: Headphones,
 };
-const brandImages: Record<string, string> = { apple: "/Apple.jpg", dell: "/Dell.jpg", hp: "/HP.jpg", lenovo: "/Lenovo.jpg", asus: "/ASUS.jpg", samsung: "/Samsung.jpg", xiaomi: "/Xiaomi.jpg", canon: "/Canon.jpg", epson: "/Epson.jpg", microsoft: "/Microsoft.jpg" };
-const banners = ["/banner_principal0.jpg", "/banner_principal1.png", "/banner_principal2.png", "/banner_principal3.png", "/banner_principal4.png", "/banner_principal5.png", "/banner_principal6.png", "/banner_principal7.png"];
-const popularTerms = ["Impressoras", "Computadores", "Mochilas", "Cabos", "Monitores", "Adaptadores", "Teclados", "Ratos", "Tablets"];
-const benefits: { icon: LucideIcon; title: string; detail: string }[] = [
-  { icon: CreditCard, title: "Multicaixa", detail: "Express ou Referência" },
-  { icon: Headset, title: "Suporte online", detail: "Apoio especializado" },
-  { icon: Truck, title: "Envio nacional", detail: "Entrega segura em dias úteis" },
-  { icon: ShieldCheck, title: "Compra protegida", detail: "Produtos originais e garantia" },
-];
+const categoryImages: Record<string, string> = {
+  computadores: "/pc_01.png",
+  iphone: "/conjunto de Iphone.png",
+  apple: "/conjunto de Apple.png",
+  smartphones: "/Iphone_15.png",
+  gaming: "/game.png",
+  monitores: "/monitor.png",
+  componentes: "/Componentes.png",
+  acessorios: "/Acessorio.png",
+};
 
 export default function HomePage() {
-  const [banner, setBanner] = useState(0);
-  const [products, setProducts] = useState<Product[]>([]);
+  const { market } = useMarket();
+  const [products, setProducts] = useState<CatalogProduct[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [category, setCategory] = useState("Todos");
   const [email, setEmail] = useState("");
   const [newsletterMessage, setNewsletterMessage] = useState("");
   const [newsletterLoading, setNewsletterLoading] = useState(false);
@@ -45,17 +43,24 @@ export default function HomePage() {
   const [reviewMessage, setReviewMessage] = useState("");
 
   useEffect(() => {
-    const timer = window.setInterval(() => setBanner((current) => (current + 1) % banners.length), 6000);
-    return () => window.clearInterval(timer);
-  }, []);
-  useEffect(() => {
     Promise.all([fetchWithAuth("/api/products?page=1&pageSize=100"), fetchWithAuth("/api/categories"), fetchWithAuth("/api/brands"), fetchWithAuth("/api/testimonials")])
       .then(([productResult, categoryResult, brandResult, reviewResult]) => { setProducts(productResult.data); setCategories(categoryResult.data); setBrands(brandResult.data); setTestimonials(reviewResult.data); })
       .catch(() => setError("Não foi possível carregar a loja. Verifique a ligação e tente novamente."))
       .finally(() => setLoading(false));
   }, []);
 
-  const visibleProducts = products.filter((product) => category === "Todos" || product.category.slug === category);
+  const marketName = market === "AO" ? "Angola" : "Portugal";
+  const marketCurrency = market === "AO" ? "Kz" : "€";
+  const inStockProducts = products.filter((product) => product.stock > 0);
+  const seenProductImages = new Set<string>();
+  const distinctProducts = (inStockProducts.length ? inStockProducts : products)
+    .filter((product) => {
+      const imageKey = product.imageUrl || product.slug;
+      if (seenProductImages.has(imageKey)) return false;
+      seenProductImages.add(imageKey);
+      return true;
+    })
+    .slice(0, 8);
   async function subscribe(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setNewsletterLoading(true); setNewsletterMessage("");
     try { const result = await fetchWithAuth("/api/newsletter", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) }); setNewsletterMessage(result.data ? "Subscrição confirmada. Obrigado!" : "Subscrição registada."); setEmail(""); }
@@ -68,60 +73,137 @@ export default function HomePage() {
     catch { setReviewMessage("Não foi possível enviar a avaliação."); }
   }
 
-  return <div className="bg-transparent">
-    <section className="container mx-auto grid grid-cols-1 gap-4 px-4 py-5 lg:grid-cols-[minmax(0,1fr)_270px]">
-      <div className="hero-glow relative min-h-[340px] overflow-hidden rounded-[28px] bg-[#17191c] md:min-h-[410px]">
-        {banners.map((src, index) => <div key={src} className={`absolute inset-0 transition-opacity duration-700 ${index === banner ? "opacity-100" : "pointer-events-none opacity-0"}`}><Image src={src} alt={`Campanha RUBRICA DILIGENTE (SU), LDA ${index + 1}`} fill sizes="(max-width: 1024px) 100vw, 75vw" priority={index === 0} className="object-cover" /></div>)}
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(246,183,60,0.30),_transparent_28%),linear-gradient(90deg,rgba(7,21,37,0.90)_0%,rgba(7,21,37,0.72)_38%,rgba(7,21,37,0.20)_100%)]" />
-        <div className="relative z-10 flex min-h-[340px] max-w-xl flex-col justify-center px-6 py-9 text-white md:min-h-[410px] md:px-10">
-          <p className="mb-3 text-xs font-black uppercase tracking-[0.18em] text-[#f5a800]">RUBRICA DILIGENTE (SU), LDA</p>
-          <h1 className="max-w-md text-4xl font-black leading-[1.02] sm:text-5xl">Tecnologia para avançar.</h1>
-          <p className="mt-4 max-w-sm text-sm leading-6 text-blue-50 sm:text-base">Equipamentos originais, preços competitivos e entrega segura em Angola e Portugal.</p>
-          <div className="mt-6 flex flex-wrap gap-2">
-            <Link href="/products" className="inline-flex items-center gap-2 rounded-xl bg-[#f5a800] px-5 py-3 text-sm font-black text-[#17191c] hover:bg-[#ffc43d]">Explorar produtos <ChevronRight size={17} /></Link>
-            <Link href="/promotions" className="inline-flex items-center gap-2 rounded-xl border border-white/60 bg-white/5 px-5 py-3 text-sm font-bold text-white hover:bg-white/10">Ofertas</Link>
+  return <div className="bg-[#f4f6f5]">
+    <section className="container mx-auto px-4 pb-3 pt-4 sm:pb-4 sm:pt-6">
+      <div className="grid overflow-hidden rounded-[1.25rem] bg-[#edf3f0] md:grid-cols-[0.92fr_1.08fr]">
+        <div className="flex flex-col items-start justify-center px-6 py-7 sm:px-10 sm:py-9 lg:px-14">
+          <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.14em] text-[#087e76]">Angola <span className="mx-1 text-[#9caaa5]">/</span> Portugal</p>
+          <h1 className="max-w-lg text-3xl font-bold leading-[1.12] tracking-tight text-[#172b29] sm:text-4xl lg:text-[2.8rem]">Tecnologia para o seu dia a dia.</h1>
+          <p className="mt-4 max-w-md text-sm leading-6 text-[#52615d] sm:text-base">
+            Computadores, telemóveis e acessórios para trabalho, estudo e lazer.
+          </p>
+          <div className="mt-6 flex flex-wrap items-center gap-4">
+            <Link href="/products" className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[#087e76] px-5 text-sm font-bold text-white transition hover:bg-[#066a64] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#087e76] focus-visible:ring-offset-2">
+              Ver produtos <ArrowRight size={16} />
+            </Link>
+            <Link href="/promotions" className="text-sm font-semibold text-[#176b64] underline-offset-4 hover:underline">Ver ofertas</Link>
           </div>
         </div>
-        <div className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 gap-2">{banners.map((_, index) => <button key={index} onClick={() => setBanner(index)} aria-label={`Campanha ${index + 1}`} className={`h-1.5 rounded-full transition-all ${index === banner ? "w-7 bg-[#f5a800]" : "w-1.5 bg-white/70"}`} />)}</div>
-        <button type="button" onClick={() => setBanner((banner + banners.length - 1) % banners.length)} aria-label="Campanha anterior" className="absolute left-3 top-1/2 z-20 hidden -translate-y-1/2 rounded-full bg-white/80 p-2 text-gray-900 shadow-md hover:bg-white md:block">‹</button>
-        <button type="button" onClick={() => setBanner((banner + 1) % banners.length)} aria-label="Próxima campanha" className="absolute right-3 top-1/2 z-20 hidden -translate-y-1/2 rounded-full bg-white/80 p-2 text-gray-900 shadow-md hover:bg-white md:block">›</button>
+        <div className="relative min-h-[170px] bg-[#101b2b] sm:min-h-[230px] md:min-h-[330px]">
+          <Image
+            src="/banner_principal2.png"
+            alt="Computadores, telemóvel e acessórios de tecnologia"
+            fill
+            priority
+            sizes="(max-width: 768px) 100vw, 60vw"
+            className="object-cover object-center"
+          />
+        </div>
       </div>
-
-      <aside className="grid grid-cols-2 gap-3 lg:grid-cols-1">
-        <Link href="/promotions" className="soft-card group rounded-[22px] bg-white/90 p-4 hover:-translate-y-0.5 hover:border-[#d99100]/40">
-          <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#d99100]">Ofertas da semana</p>
-          <h2 className="mt-2 text-lg font-black text-gray-900">Tecnologia a melhor preço</h2>
-          <p className="mt-1 text-xs leading-5 text-gray-500">Descubra campanhas e oportunidades atuais.</p>
-          <span className="mt-4 inline-flex items-center text-xs font-bold text-[#d99100]">Ver ofertas <ChevronRight size={14} className="transition-transform group-hover:translate-x-0.5" /></span>
-        </Link>
-        <Link href="/register?accountType=B2B" className="soft-card rounded-[22px] bg-gradient-to-br from-[#17191c] to-[#2b2d30] p-4 text-white hover:-translate-y-0.5">
-          <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[#f5a800]">Para empresas</p>
-          <h2 className="mt-2 text-lg font-black">Condições B2B</h2>
-          <p className="mt-1 text-xs leading-5 text-blue-100">Cotações rápidas e apoio comercial.</p>
-          <span className="mt-4 inline-flex items-center text-xs font-bold text-[#f5a800]">Criar conta empresarial <ChevronRight size={14} /></span>
-        </Link>
-      </aside>
     </section>
 
-    <section className="border-y border-gray-200 bg-white/70 backdrop-blur-sm"><div className="container mx-auto grid grid-cols-2 gap-3 px-4 py-3 md:grid-cols-4">{benefits.map(({ icon: Icon, title, detail }) => <div key={title} className="soft-card flex items-center gap-3 rounded-2xl bg-white px-3 py-4 sm:px-5"><Icon size={21} className="shrink-0 text-[#d99100]" /><span><strong className="block text-xs text-gray-900">{title}</strong><small className="text-[10px] text-gray-500">{detail}</small></span></div>)}</div></section>
+    <section className="container mx-auto px-4 pb-2 pt-1" aria-label="Informações de compra">
+      <div className="grid gap-2 sm:grid-cols-3 sm:gap-3">
+        <Link href="/info/payments" className="group flex min-w-0 items-center gap-3 rounded-xl border border-[#e0e7e3] bg-white p-3.5 transition hover:border-[#b8d6cb] hover:bg-[#fbfdfc] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#087e76] sm:px-4">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#eaf4f0] text-[#087e76]"><CreditCard size={17} /></span>
+          <span className="min-w-0 flex-1"><strong className="block text-xs font-semibold text-[#263a36]">Pagamento em {marketName}</strong><span className="mt-0.5 block text-[11px] leading-4 text-[#71807c]">Opções para o mercado selecionado ({marketCurrency}).</span></span>
+          <ChevronRight size={15} className="shrink-0 text-[#9aa7a2] transition group-hover:translate-x-0.5 group-hover:text-[#087e76]" />
+        </Link>
+        <Link href="/info/shipping" className="group flex min-w-0 items-center gap-3 rounded-xl border border-[#e0e7e3] bg-white p-3.5 transition hover:border-[#b8d6cb] hover:bg-[#fbfdfc] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#087e76] sm:px-4">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#eaf4f0] text-[#087e76]"><Truck size={17} /></span>
+          <span className="min-w-0 flex-1"><strong className="block text-xs font-semibold text-[#263a36]">Entrega para {marketName}</strong><span className="mt-0.5 block text-[11px] leading-4 text-[#71807c]">Consulta opções, custos e estimativas no checkout.</span></span>
+          <ChevronRight size={15} className="shrink-0 text-[#9aa7a2] transition group-hover:translate-x-0.5 group-hover:text-[#087e76]" />
+        </Link>
+        <Link href="/info/returns" className="group flex min-w-0 items-center gap-3 rounded-xl border border-[#e0e7e3] bg-white p-3.5 transition hover:border-[#b8d6cb] hover:bg-[#fbfdfc] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#087e76] sm:px-4">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#eaf4f0] text-[#087e76]"><RefreshCcw size={17} /></span>
+          <span className="min-w-0 flex-1"><strong className="block text-xs font-semibold text-[#263a36]">Trocas e devoluções</strong><span className="mt-0.5 block text-[11px] leading-4 text-[#71807c]">Conhece o processo de apoio pós-compra.</span></span>
+          <ChevronRight size={15} className="shrink-0 text-[#9aa7a2] transition group-hover:translate-x-0.5 group-hover:text-[#087e76]" />
+        </Link>
+      </div>
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 px-1">
+        <p className="text-[11px] text-[#71807c]">Confirma os detalhes da encomenda antes de concluir a compra.</p>
+        <Link href="/register?accountType=B2B" className="inline-flex items-center gap-1 text-xs font-semibold text-[#087e76] hover:underline">
+          Compras para empresas <ArrowRight size={14} />
+        </Link>
+      </div>
+    </section>
 
-    <section className="border-b border-gray-200 bg-white py-8"><div className="container mx-auto px-4"><div className="mb-5 flex items-end justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#d99100]">Explore a loja</p><h2 className="mt-1 text-2xl font-black text-gray-900">Compre por categoria</h2></div><Link href="/categories" className="text-xs font-bold text-[#d99100] hover:underline">Todas as categorias <ChevronRight size={13} className="inline" /></Link></div><div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">{categories.map((item) => { const visual = categoryIcons[item.slug] || { Icon: Package, subtitle: `${item.productCount} produtos` }; return <Link key={item.id} href={`/products?category=${item.slug}`} className="group flex min-h-28 flex-col items-center justify-center border border-gray-200 bg-white p-3 text-center hover:border-[#d99100] hover:shadow-sm"><span className="mb-2 flex h-11 w-11 items-center justify-center rounded-full bg-[#f1f5f9] text-[#d99100] group-hover:bg-[#fff4d4]"><visual.Icon size={23} /></span><strong className="text-xs text-gray-800">{item.name}</strong><small className="mt-1 hidden text-[9px] text-gray-500 sm:block">{visual.subtitle}</small></Link>; })}</div></div></section>
+    <section className="container mx-auto px-4 py-5 sm:py-6">
+      <div className="mb-4 flex items-end justify-between gap-3">
+        <div><p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.13em] text-[#71807c]">Encontra o que precisas</p><h2 className="text-xl font-bold tracking-tight text-[#263a36] sm:text-2xl">Explorar categorias</h2></div>
+        <Link href="/categories" className="text-xs font-semibold text-[#087e76] hover:underline">Ver todas <ChevronRight size={13} className="inline" /></Link>
+      </div>
+      <div className="flex gap-3 overflow-x-auto pb-2 sm:grid sm:grid-cols-4 sm:gap-3 lg:grid-cols-4">
+        {categories.map((item) => {
+          const Icon = categoryIcons[item.slug] || Package;
+          return <Link key={item.id} href={`/products?category=${item.slug}`} className="group flex w-[116px] shrink-0 items-center gap-3 rounded-xl bg-white p-2.5 text-left transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#087e76] sm:w-auto">
+            <span className="relative flex h-[58px] w-[58px] shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#f4f7f5] text-[#087e76]">
+              {categoryImages[item.slug]
+                ? <Image src={categoryImages[item.slug]} alt="" fill sizes="58px" className="object-contain p-1.5 transition-transform duration-200 group-hover:scale-105" />
+                : <Icon size={25} strokeWidth={1.7} />}
+            </span>
+            <span className="min-w-0">
+              <strong className="block line-clamp-2 text-xs font-semibold leading-4 text-[#344743]">{item.name}</strong>
+              <small className="mt-1 block text-[10px] text-[#87938f]">{item.productCount} {item.productCount === 1 ? "produto" : "produtos"}</small>
+            </span>
+          </Link>;
+        })}
+      </div>
+    </section>
 
-    <section className="border-b border-gray-200 bg-[#f7f8f8] py-5"><div className="container mx-auto flex flex-col gap-3 px-4 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="text-sm font-black text-gray-900">Termos mais procurados</h2><p className="text-xs text-gray-500">Pesquise rapidamente no catálogo.</p></div><div className="flex flex-wrap gap-2">{popularTerms.map((term, index) => <Link key={term} href={`/search?q=${encodeURIComponent(term)}`} className="border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 hover:border-[#d99100] hover:text-[#d99100]">{index + 1}. {term}</Link>)}</div></div></section>
+    <section className="storefront-featured-products container mx-auto px-4 py-8 sm:py-11">
+      <div className="mb-5 flex flex-col justify-between gap-3 sm:mb-6 sm:flex-row sm:items-end">
+        <div>
+          <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[#087e76]">Escolhas da loja</p>
+          <h2 className="text-xl font-bold tracking-tight text-[#263a36] sm:text-2xl">Produtos em destaque</h2>
+          <p className="mt-1.5 text-xs leading-5 text-[#71807c] sm:text-sm">Tecnologia selecionada, pronta para o teu dia a dia.</p>
+        </div>
+        <Link href="/products" className="inline-flex min-h-9 w-fit items-center gap-1 rounded-lg border border-[#dce6e1] bg-white px-3 text-xs font-semibold text-[#176b64] transition hover:border-[#087e76] hover:bg-[#f5faf8] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#087e76]">
+          Ver catálogo <ChevronRight size={14} />
+        </Link>
+      </div>
+      {loading ? <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-5 xl:grid-cols-4">{Array.from({ length: 8 }, (_, index) => <div key={index} className="h-80 animate-pulse rounded-2xl border border-[#e6ebe8] bg-white" />)}</div>
+        : error ? <div className="rounded-xl bg-white p-8 text-center text-sm text-red-700">{error}</div>
+          : distinctProducts.length ? <div className="storefront-featured-grid grid grid-cols-2 gap-x-3 gap-y-5 sm:grid-cols-3 sm:gap-5 xl:grid-cols-4">{distinctProducts.map((product) => <ProductCard key={product.id} product={product} />)}</div>
+            : <div className="rounded-xl bg-white p-8 text-center text-sm text-gray-500">Não existem produtos disponíveis de momento.</div>}
+    </section>
 
-    <section className="container mx-auto px-4 py-8"><div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-end"><div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#d99100]">Escolhas RUBRICA DILIGENTE (SU), LDA</p><h2 className="mt-1 text-2xl font-black text-gray-900">Produtos em destaque</h2></div><Link href="/products" className="text-xs font-bold text-[#d99100]">Ver catálogo completo <ChevronRight size={13} className="inline" /></Link></div><div className="mb-4 flex gap-2 overflow-x-auto pb-1"><button type="button" onClick={() => setCategory("Todos")} className={`whitespace-nowrap px-4 py-2 text-xs font-bold ${category === "Todos" ? "bg-[#232f3e] text-white" : "border border-gray-300 bg-white text-gray-600"}`}>Todos</button>{categories.map((item) => <button type="button" key={item.id} onClick={() => setCategory(item.slug)} className={`whitespace-nowrap px-4 py-2 text-xs font-bold ${category === item.slug ? "bg-[#232f3e] text-white" : "border border-gray-300 bg-white text-gray-600"}`}>{item.name}</button>)}</div>{loading ? <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">{Array.from({ length: 6 }, (_, index) => <div key={index} className="h-80 animate-pulse bg-white" />)}</div> : error ? <div className="bg-white p-8 text-center text-sm text-red-700">{error}</div> : visibleProducts.length ? <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">{visibleProducts.slice(0, 12).map((product) => <ProductTile key={product.id} product={product} />)}</div> : <div className="bg-white p-8 text-center text-sm text-gray-500">Não existem produtos nesta categoria.</div>}</section>
+    <section className="container mx-auto px-4 pb-8 sm:pb-11" aria-labelledby="collections-heading">
+      <div className="mb-5">
+        <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[#087e76]">Descobre por objetivo</p>
+        <h2 id="collections-heading" className="text-xl font-bold tracking-tight text-[#263a36] sm:text-2xl">Encontra o que precisas</h2>
+        <p className="mt-1.5 text-xs leading-5 text-[#71807c] sm:text-sm">Seleções organizadas para diferentes formas de usar a tecnologia.</p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
+        {storefrontCollections.map((collection) => {
+          const availableCount = inStockProducts.filter((product) => collection.categorySlugs.includes(product.category.slug)).length;
+          if (!availableCount) return null;
+          return <Link
+            key={collection.slug}
+            href={`/products?collection=${collection.slug}`}
+            className="group relative flex min-h-40 items-center overflow-hidden rounded-2xl border border-[#e2eae6] bg-white p-4 transition hover:-translate-y-0.5 hover:border-[#b8d6cb] hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#087e76] sm:min-h-48 sm:p-5"
+          >
+            <span className="relative z-10 max-w-[70%]">
+              <span className="block text-[9px] font-bold uppercase tracking-[0.12em] text-[#087e76]">{collection.eyebrow}</span>
+              <strong className="mt-1.5 block text-sm font-bold leading-5 text-[#263a36] sm:text-base">{collection.title}</strong>
+              <span className="mt-1.5 block text-[11px] leading-4 text-[#71807c]">{collection.description}</span>
+              <span className="mt-3 inline-flex items-center gap-1 text-[11px] font-semibold text-[#087e76]">
+                Explorar seleção <ArrowRight size={13} className="transition-transform group-hover:translate-x-0.5" />
+              </span>
+              <span className="mt-1 block text-[10px] text-[#87938f]">{availableCount} {availableCount === 1 ? "produto disponível" : "produtos disponíveis"}</span>
+            </span>
+            <Image src={collection.image} alt="" fill sizes="(max-width: 640px) 60vw, 30vw" className="object-contain object-right p-2 opacity-20 transition duration-200 group-hover:scale-[1.03] group-hover:opacity-30 sm:p-3" />
+            <span className="absolute inset-0 bg-gradient-to-r from-white via-white/90 to-white/20" aria-hidden="true" />
+          </Link>;
+        })}
+      </div>
+    </section>
 
-    <RecommendationRail
-      title="Sugestões do catálogo"
-      description="Produtos relacionados e disponíveis no catálogo atual, para ajudar a descobrir alternativas sem sair da loja."
-      limit={6}
-    />
+    <section className="border-y border-[#e6ebe8] bg-white py-7"><div className="container mx-auto px-4"><div className="mb-4 flex items-center justify-between"><div><p className="mb-1 text-[10px] font-bold uppercase tracking-[0.13em] text-[#71807c]">Encontra a tua marca</p><h2 className="text-xl font-bold tracking-tight text-[#263a36]">Marcas disponíveis</h2></div><Link href="/products" className="text-xs font-semibold text-[#087e76]">Ver catálogo <ChevronRight size={13} className="inline" /></Link></div><div className="flex flex-wrap gap-2">{brands.map((brand) => <Link key={brand.id} href={`/products?brand=${brand.slug}`} className="rounded-full border border-[#e1e8e4] bg-white px-4 py-2 text-xs font-semibold text-[#52615d] transition hover:border-[#087e76] hover:bg-[#f6faf8] hover:text-[#087e76]">{brand.name}</Link>)}</div></div></section>
 
-    <section className="border-y border-gray-200 bg-white py-8"><div className="container mx-auto px-4"><div className="mb-5 flex items-end justify-between"><div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#d99100]">Marcas disponíveis</p><h2 className="mt-1 text-2xl font-black text-gray-900">Explore por marca</h2></div><Link href="/products" className="text-xs font-bold text-[#d99100]">Ver marcas <ChevronRight size={13} className="inline" /></Link></div><div className="grid grid-cols-3 gap-3 sm:grid-cols-5 lg:grid-cols-10">{brands.map((brand) => <Link key={brand.id} href={`/products?brand=${brand.slug}`} className="group flex min-h-20 flex-col items-center justify-center gap-2 border border-gray-200 p-3 hover:border-[#d99100]">{brandImages[brand.slug] ? <Image src={brandImages[brand.slug]} alt={brand.name} width={54} height={40} className="h-10 w-14 object-contain" /> : <span className="flex h-10 w-14 items-center justify-center bg-gray-50 text-xs font-black text-gray-600">{brand.name.slice(0, 3)}</span>}<span className="text-[10px] font-semibold text-gray-600 group-hover:text-[#d99100]">{brand.name}</span></Link>)}</div></div></section>
+    <section className="container mx-auto px-4 py-8 sm:py-10"><div className="mb-5 flex items-center justify-between gap-3"><div><p className="mb-1 text-[10px] font-bold uppercase tracking-[0.13em] text-[#71807c]">Opiniões partilhadas</p><h2 className="text-xl font-bold tracking-tight text-[#263a36] sm:text-2xl">O que dizem os clientes</h2></div><button type="button" onClick={() => setReviewOpen((open) => !open)} className="rounded-lg border border-[#d9e2de] bg-white px-3 py-2 text-xs font-semibold text-[#087e76] hover:bg-[#e5f2ed]">Deixar avaliação</button></div>{testimonials.length ? <div className="grid gap-3 md:grid-cols-3">{testimonials.slice(0, 3).map((review) => <article key={review.id} className="rounded-xl border border-[#e6ebe8] bg-white p-5"><Stars count={review.stars} /><p className="mt-3 text-sm leading-6 text-[#52615d]">“{review.text}”</p><div className="mt-4 border-t border-[#edf1ef] pt-3"><strong className="block text-xs text-[#263a36]">{review.name}</strong><span className="text-[10px] text-[#71807c]">{review.location}</span></div></article>)}</div> : <p className="rounded-xl border border-[#e6ebe8] bg-white p-5 text-sm text-[#71807c]">Ainda não existem avaliações publicadas.</p>}{reviewOpen && <form onSubmit={submitReview} className="mt-4 rounded-xl border border-[#e6ebe8] bg-white p-5"><h3 className="mb-3 text-sm font-semibold text-[#263a36]">Partilhe a sua experiência</h3><div className="grid gap-3 sm:grid-cols-2"><input required minLength={2} value={reviewForm.name} onChange={(event) => setReviewForm({ ...reviewForm, name: event.target.value })} placeholder="Nome" className="rounded-lg border border-[#d9e2de] px-3 py-2.5 text-sm" /><input required minLength={2} value={reviewForm.location} onChange={(event) => setReviewForm({ ...reviewForm, location: event.target.value })} placeholder="Cidade, país" className="rounded-lg border border-[#d9e2de] px-3 py-2.5 text-sm" /></div><textarea required minLength={10} value={reviewForm.text} onChange={(event) => setReviewForm({ ...reviewForm, text: event.target.value })} placeholder="Escreva a sua avaliação" rows={3} className="mt-3 w-full rounded-lg border border-[#d9e2de] px-3 py-2.5 text-sm" /><div className="mt-3 flex flex-wrap items-center gap-3"><button className="rounded-lg bg-[#087e76] px-4 py-2.5 text-xs font-semibold text-white hover:bg-[#066a64]">Enviar avaliação</button>{reviewMessage && <span role="status" className="text-xs text-[#52615d]">{reviewMessage}</span>}</div></form>}</section>
 
-    <section className="container mx-auto px-4 py-9"><div className="mb-5 flex items-center justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-[#d99100]">Experiências reais</p><h2 className="mt-1 text-2xl font-black text-gray-900">O que dizem os nossos clientes</h2></div><button type="button" onClick={() => setReviewOpen((open) => !open)} className="border border-[#d99100] bg-white px-3 py-2 text-xs font-bold text-[#d99100] hover:bg-[#fff4d4]">Deixar avaliação</button></div>{testimonials.length ? <div className="grid gap-3 md:grid-cols-3">{testimonials.slice(0, 3).map((review) => <article key={review.id} className="border border-gray-200 bg-white p-5"><Stars count={review.stars} /><p className="mt-3 text-sm leading-6 text-gray-700">“{review.text}”</p><div className="mt-4 border-t border-gray-100 pt-3"><strong className="block text-xs text-gray-900">{review.name}</strong><span className="text-[10px] text-gray-500">{review.location}</span></div></article>)}</div> : <p className="border border-gray-200 bg-white p-5 text-sm text-gray-500">Ainda não existem avaliações publicadas.</p>}{reviewOpen && <form onSubmit={submitReview} className="mt-4 border border-gray-200 bg-white p-5"><h3 className="mb-3 text-sm font-black">Partilhe a sua experiência</h3><div className="grid gap-3 sm:grid-cols-2"><input required minLength={2} value={reviewForm.name} onChange={(event) => setReviewForm({ ...reviewForm, name: event.target.value })} placeholder="Nome" className="border border-gray-300 px-3 py-2.5 text-sm" /><input required minLength={2} value={reviewForm.location} onChange={(event) => setReviewForm({ ...reviewForm, location: event.target.value })} placeholder="Cidade, país" className="border border-gray-300 px-3 py-2.5 text-sm" /></div><textarea required minLength={10} value={reviewForm.text} onChange={(event) => setReviewForm({ ...reviewForm, text: event.target.value })} placeholder="Escreva a sua avaliação" rows={3} className="mt-3 w-full border border-gray-300 px-3 py-2.5 text-sm" /><div className="mt-3 flex flex-wrap items-center gap-3"><button className="bg-[#f5a800] px-4 py-2.5 text-xs font-black text-[#17191c]">Enviar avaliação</button>{reviewMessage && <span role="status" className="text-xs text-gray-600">{reviewMessage}</span>}</div></form>}</section>
-
-    <section className="border-y border-gray-200 bg-white py-6"><div className="container mx-auto flex flex-col gap-4 px-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center bg-[#fff4d4] text-[#d99100]"><Mail size={19} /></span><span><strong className="block text-sm text-gray-900">Receba novidades e promoções</strong><small className="text-xs text-gray-500">Ofertas e novos produtos diretamente no seu email.</small></span></div>{newsletterMessage ? <p role="status" className="text-sm font-semibold text-gray-700">{newsletterMessage}</p> : <form onSubmit={subscribe} className="flex w-full sm:w-auto"><input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="O seu email" className="min-w-0 flex-1 border border-gray-300 px-3 py-2.5 text-sm sm:w-64" /><button disabled={newsletterLoading} className="bg-[#f5a800] px-4 py-2.5 text-xs font-black text-[#17191c] disabled:opacity-60">{newsletterLoading ? "A enviar..." : "Subscrever"}</button></form>}</div></section>
+    <section className="border-y border-[#e6ebe8] bg-white py-6"><div className="container mx-auto flex flex-col gap-4 px-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#e5f2ed] text-[#087e76]"><Mail size={19} /></span><span><strong className="block text-sm text-[#263a36]">Novidades e campanhas</strong><small className="text-xs text-[#71807c]">Recebe novidades e campanhas da loja no teu email.</small></span></div>{newsletterMessage ? <p role="status" className="text-sm font-semibold text-[#52615d]">{newsletterMessage}</p> : <form onSubmit={subscribe} className="flex w-full sm:w-auto"><input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="O teu email" className="min-w-0 flex-1 rounded-l-lg border border-[#d9e2de] px-3 py-2.5 text-sm sm:w-64" /><button disabled={newsletterLoading} className="rounded-r-lg bg-[#087e76] px-4 py-2.5 text-xs font-semibold text-white hover:bg-[#066a64] disabled:opacity-60">{newsletterLoading ? "A enviar..." : "Subscrever"}</button></form>}</div></section>
     <a href="https://wa.me/244940370723" target="_blank" rel="noreferrer" aria-label="Falar com suporte no WhatsApp" className="fixed bottom-5 right-5 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-[#25d366] text-white shadow-lg transition-transform hover:scale-105"><MessageCircle size={23} /></a>
   </div>;
 }

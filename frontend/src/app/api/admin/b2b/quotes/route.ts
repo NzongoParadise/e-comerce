@@ -2,6 +2,7 @@ import { prisma } from "@/lib/server/prisma";
 import { authenticate, errorResponse, isAdmin, readJson } from "@/lib/server/api";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
+import { createNotificationIfAllowed } from "@/lib/server/notifications";
 
 export const runtime = "nodejs";
 
@@ -165,6 +166,8 @@ export async function PATCH(request: Request) {
           status: "REJECTED",
           version: quote.version,
           validUntil: null,
+          userId: quote.userId,
+          quoteNumber: quote.quoteNumber,
         };
       }
       if (quote.company.status !== "ACTIVE") throw new Error("COMPANY_NOT_ACTIVE");
@@ -275,7 +278,21 @@ export async function PATCH(request: Request) {
         },
       });
 
-      return { quoteId: quote.id, status: "SENT", version, validUntil };
+      return { quoteId: quote.id, status: "SENT", version, validUntil, userId: quote.userId, quoteNumber: quote.quoteNumber };
+    });
+
+    await createNotificationIfAllowed({
+      userId: result.userId,
+      channel: "orderUpdates",
+      type: result.status === "REJECTED" ? "QUOTE_REJECTED" : "QUOTE_PROPOSAL_READY",
+      title: result.status === "REJECTED" ? "Pedido de cotação atualizado" : "Proposta comercial disponível",
+      message: result.status === "REJECTED"
+        ? `O pedido de cotação ${result.quoteNumber} foi analisado. Consulte a sua área empresarial para mais informações.`
+        : `A proposta para a cotação ${result.quoteNumber} está disponível para consulta.`,
+      link: "/b2b/cotacoes",
+      dedupeKey: `quote:${result.quoteId}:status:${result.status}:version:${result.version}`,
+    }).catch((notificationError) => {
+      console.error("Unable to notify customer about B2B quote update:", notificationError);
     });
 
     return Response.json({

@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowDownToLine, BarChart3, Bell, Box, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, EllipsisVertical, FileDown, Filter, LoaderCircle, Package, PackageCheck, Pencil, Plus, RefreshCw, Search, Settings, ShoppingCart, SlidersHorizontal, Trash2, Truck, Users, X } from "lucide-react";
+import Image from "next/image";
+import { AlertTriangle, ArrowDown, ArrowDownToLine, ArrowUp, BarChart3, Bell, Box, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, EllipsisVertical, FileDown, Filter, ImagePlus, LoaderCircle, Package, PackageCheck, Pencil, Plus, RefreshCw, Search, Settings, ShoppingCart, SlidersHorizontal, Trash2, Truck, Users, X } from "lucide-react";
 import { fetchWithAuth } from "@/lib/api";
 import { MetricCard } from "@/components/features/admin/MetricCard";
 
@@ -16,6 +17,7 @@ type Product = {
   description: string | null;
   basePrice: string | number;
   imageUrl: string | null;
+  images: { id: number; url: string; position: number }[];
   stock: number;
   categoryId: number;
   brandId: number;
@@ -33,7 +35,7 @@ type ProductForm = {
   slug: string;
   description: string;
   basePrice: string;
-  imageUrl: string;
+  images: string[];
   stock: string;
   categoryId: string;
   brandId: string;
@@ -46,7 +48,7 @@ const initialForm: ProductForm = {
   slug: "",
   description: "",
   basePrice: "",
-  imageUrl: "",
+  images: [""],
   stock: "0",
   categoryId: "",
   brandId: "",
@@ -137,7 +139,7 @@ export default function AdminProductsPage() {
       slug: product.slug,
       description: product.description || "",
       basePrice: String(product.basePrice),
-      imageUrl: product.imageUrl || "",
+      images: product.images?.length ? product.images.map(({ url }) => url) : product.imageUrl ? [product.imageUrl] : [""],
       stock: String(product.stock),
       categoryId: String(product.category.id),
       brandId: String(product.brand.id),
@@ -159,6 +161,16 @@ export default function AdminProductsPage() {
     setForm(initialForm);
   }
 
+  function moveImage(index: number, direction: -1 | 1) {
+    setForm((current) => {
+      const targetIndex = index + direction;
+      if (targetIndex < 0 || targetIndex >= current.images.length) return current;
+      const images = [...current.images];
+      [images[index], images[targetIndex]] = [images[targetIndex], images[index]];
+      return { ...current, images };
+    });
+  }
+
   async function saveProduct(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
@@ -168,12 +180,14 @@ export default function AdminProductsPage() {
       form.prices.aoa !== "" ? { market: "AO", currency: "AOA", amount: Number(form.prices.aoa) } : null,
       form.prices.eur !== "" ? { market: "PT", currency: "EUR", amount: Number(form.prices.eur) } : null,
     ].filter((price): price is NonNullable<typeof price> => price !== null);
+    const images = [...new Set(form.images.map((image) => image.trim()).filter(Boolean))];
     const payload = {
       name: form.name.trim(),
       slug: form.slug.trim(),
       description: form.description.trim() || null,
       basePrice: Number(form.basePrice),
-      imageUrl: form.imageUrl.trim() || null,
+      imageUrl: images[0] || null,
+      images,
       stock: Number(form.stock),
       categoryId: Number(form.categoryId),
       brandId: Number(form.brandId),
@@ -270,7 +284,35 @@ export default function AdminProductsPage() {
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <Field label="Nome" required value={form.name} onChange={(name) => setForm((current) => ({ ...current, name, slug: slugManuallyEdited ? current.slug : slugify(name) }))} />
               <Field label="Slug" required value={form.slug} onChange={(slug) => { setSlugManuallyEdited(true); setForm((current) => ({ ...current, slug })); }} />
-              <Field label="Imagem (URL ou caminho)" value={form.imageUrl} onChange={(imageUrl) => setForm((current) => ({ ...current, imageUrl }))} />
+              <div className="sm:col-span-2 lg:col-span-3">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-sm font-bold">Imagens do produto</h3>
+                    <p className="mt-1 text-xs font-normal text-slate-500">Adicione até 12 URLs ou caminhos. A primeira imagem será a principal.</p>
+                  </div>
+                  <button type="button" disabled={form.images.length >= 12} onClick={() => setForm((current) => ({ ...current, images: [...current.images, ""] }))} className="inline-flex items-center gap-1.5 rounded-md border border-blue-200 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50">
+                    <ImagePlus size={15} /> Adicionar imagem
+                  </button>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {form.images.map((image, index) => (
+                    <div key={index} className="flex min-w-0 items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+                      <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-white">
+                        {image.trim() ? <Image src={image.trim()} alt="" width={56} height={56} unoptimized className="h-full w-full object-contain" /> : <Package size={20} className="text-slate-300" />}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <label className="mb-1 block text-[11px] font-semibold text-slate-600">{index === 0 ? "Imagem principal" : `Imagem ${index + 1}`}</label>
+                        <input aria-label={`URL ou caminho da imagem ${index + 1}`} value={image} onChange={(event) => setForm((current) => ({ ...current, images: current.images.map((item, itemIndex) => itemIndex === index ? event.target.value : item) }))} placeholder="/imagens/produto.jpg ou https://..." maxLength={500} className="h-9 w-full min-w-0 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-normal outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100" />
+                      </div>
+                      <div className="flex shrink-0 flex-col">
+                        <button type="button" disabled={index === 0} onClick={() => moveImage(index, -1)} aria-label={`Mover imagem ${index + 1} para cima`} title="Mover para cima" className="inline-flex h-7 w-7 items-center justify-center rounded text-slate-500 hover:bg-blue-50 hover:text-blue-700 disabled:opacity-30"><ArrowUp size={14} /></button>
+                        <button type="button" disabled={index === form.images.length - 1} onClick={() => moveImage(index, 1)} aria-label={`Mover imagem ${index + 1} para baixo`} title="Mover para baixo" className="inline-flex h-7 w-7 items-center justify-center rounded text-slate-500 hover:bg-blue-50 hover:text-blue-700 disabled:opacity-30"><ArrowDown size={14} /></button>
+                      </div>
+                      <button type="button" onClick={() => setForm((current) => ({ ...current, images: current.images.length === 1 ? [""] : current.images.filter((_, itemIndex) => itemIndex !== index) }))} aria-label={`Remover imagem ${index + 1}`} title="Remover imagem" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-slate-500 hover:bg-rose-50 hover:text-rose-700"><X size={16} /></button>
+                    </div>
+                  ))}
+                </div>
+              </div>
               <NumberField label="Preço base" required min="0" step="0.01" value={form.basePrice} onChange={(basePrice) => setForm((current) => ({ ...current, basePrice }))} />
               <NumberField label="Stock disponível" required min="0" step="1" value={form.stock} onChange={(stock) => setForm((current) => ({ ...current, stock }))} />
               <label className="text-sm font-medium text-slate-700">Categoria *
