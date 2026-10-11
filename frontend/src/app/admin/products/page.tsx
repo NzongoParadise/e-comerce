@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { AlertTriangle, ArrowDown, ArrowDownToLine, ArrowUp, BarChart3, Bell, Box, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, EllipsisVertical, FileDown, Filter, ImagePlus, LoaderCircle, Package, PackageCheck, Pencil, Plus, RefreshCw, Search, Settings, ShoppingCart, SlidersHorizontal, Trash2, Truck, Users, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowDownToLine, ArrowUp, BarChart3, Bell, Box, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, EllipsisVertical, FileDown, Filter, LoaderCircle, Package, PackageCheck, Pencil, Plus, RefreshCw, Search, Settings, ShoppingCart, SlidersHorizontal, Trash2, Truck, Upload, Users, X } from "lucide-react";
 import { fetchWithAuth } from "@/lib/api";
 import { MetricCard } from "@/components/features/admin/MetricCard";
 
@@ -81,10 +81,12 @@ export default function AdminProductsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingImages, setUploadingImages] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let active = true;
@@ -169,6 +171,47 @@ export default function AdminProductsPage() {
       [images[index], images[targetIndex]] = [images[targetIndex], images[index]];
       return { ...current, images };
     });
+  }
+
+  async function uploadImages(files: FileList | null) {
+    if (!files?.length) return;
+    const selectedFiles = Array.from(files);
+    const availableSlots = 12 - form.images.filter((image) => image.trim()).length;
+    if (selectedFiles.length > availableSlots) {
+      setError(`Pode adicionar mais ${availableSlots} imagem(ns). O limite por produto é 12.`);
+      if (imageInputRef.current) imageInputRef.current.value = "";
+      return;
+    }
+
+    setUploadingImages(true);
+    setError("");
+    setSuccess("");
+    const uploadedUrls: string[] = [];
+    const failedFiles: string[] = [];
+    try {
+      for (const file of selectedFiles) {
+        const body = new FormData();
+        body.append("file", file);
+        try {
+          const response = await fetchWithAuth("/api/admin/product-images", { method: "POST", body });
+          if (typeof response.data?.url !== "string") throw new Error("A resposta do upload não contém o endereço da imagem.");
+          uploadedUrls.push(response.data.url);
+        } catch (uploadError) {
+          failedFiles.push(`${file.name}: ${uploadError instanceof Error ? uploadError.message : "falha no envio"}`);
+        }
+      }
+      if (uploadedUrls.length) {
+        setForm((current) => ({ ...current, images: [...current.images.filter((image) => image.trim()), ...uploadedUrls] }));
+      }
+      if (failedFiles.length) {
+        setError(`Não foi possível enviar ${failedFiles.length} imagem(ns). ${failedFiles.join(" · ")}`);
+      } else {
+        setSuccess(`${uploadedUrls.length} imagem(ns) enviada(s) com sucesso.`);
+      }
+    } finally {
+      setUploadingImages(false);
+      if (imageInputRef.current) imageInputRef.current.value = "";
+    }
   }
 
   async function saveProduct(event: React.FormEvent<HTMLFormElement>) {
@@ -288,21 +331,23 @@ export default function AdminProductsPage() {
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <h3 className="text-sm font-bold">Imagens do produto</h3>
-                    <p className="mt-1 text-xs font-normal text-slate-500">Adicione até 12 URLs ou caminhos. A primeira imagem será a principal.</p>
+                    <p className="mt-1 text-xs font-normal text-slate-500">Envie JPEG, PNG, WebP ou AVIF até 4 MB cada. A primeira imagem será a principal.</p>
                   </div>
-                  <button type="button" disabled={form.images.length >= 12} onClick={() => setForm((current) => ({ ...current, images: [...current.images, ""] }))} className="inline-flex items-center gap-1.5 rounded-md border border-blue-200 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50">
-                    <ImagePlus size={15} /> Adicionar imagem
-                  </button>
+                  <label className={`inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-blue-200 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-50 ${form.images.filter((image) => image.trim()).length >= 12 || uploadingImages ? "pointer-events-none opacity-50" : ""}`}>
+                    {uploadingImages ? <LoaderCircle size={15} className="animate-spin" /> : <Upload size={15} />}
+                    {uploadingImages ? "A enviar..." : "Enviar imagens"}
+                    <input ref={imageInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/avif" multiple disabled={form.images.filter((image) => image.trim()).length >= 12 || uploadingImages} onChange={(event) => { void uploadImages(event.currentTarget.files); }} className="sr-only" aria-label="Selecionar imagens de produto para enviar" />
+                  </label>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  {form.images.map((image, index) => (
+                  {form.images.map((image, index) => image.trim() ? (
                     <div key={index} className="flex min-w-0 items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 p-2.5">
                       <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-white">
-                        {image.trim() ? <Image src={image.trim()} alt="" width={56} height={56} unoptimized className="h-full w-full object-contain" /> : <Package size={20} className="text-slate-300" />}
+                        <Image src={image} alt="" width={56} height={56} unoptimized className="h-full w-full object-contain" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <label className="mb-1 block text-[11px] font-semibold text-slate-600">{index === 0 ? "Imagem principal" : `Imagem ${index + 1}`}</label>
-                        <input aria-label={`URL ou caminho da imagem ${index + 1}`} value={image} onChange={(event) => setForm((current) => ({ ...current, images: current.images.map((item, itemIndex) => itemIndex === index ? event.target.value : item) }))} placeholder="/imagens/produto.jpg ou https://..." maxLength={500} className="h-9 w-full min-w-0 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-normal outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100" />
+                        <p className="text-xs font-bold text-slate-700">{index === 0 ? "Imagem principal" : `Imagem ${index + 1}`}</p>
+                        <p className="mt-1 truncate text-[10px] text-slate-500" title={image}>{image.split("/").pop()}</p>
                       </div>
                       <div className="flex shrink-0 flex-col">
                         <button type="button" disabled={index === 0} onClick={() => moveImage(index, -1)} aria-label={`Mover imagem ${index + 1} para cima`} title="Mover para cima" className="inline-flex h-7 w-7 items-center justify-center rounded text-slate-500 hover:bg-blue-50 hover:text-blue-700 disabled:opacity-30"><ArrowUp size={14} /></button>
@@ -310,7 +355,7 @@ export default function AdminProductsPage() {
                       </div>
                       <button type="button" onClick={() => setForm((current) => ({ ...current, images: current.images.length === 1 ? [""] : current.images.filter((_, itemIndex) => itemIndex !== index) }))} aria-label={`Remover imagem ${index + 1}`} title="Remover imagem" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-slate-500 hover:bg-rose-50 hover:text-rose-700"><X size={16} /></button>
                     </div>
-                  ))}
+                  ) : null)}
                 </div>
               </div>
               <NumberField label="Preço base" required min="0" step="0.01" value={form.basePrice} onChange={(basePrice) => setForm((current) => ({ ...current, basePrice }))} />
