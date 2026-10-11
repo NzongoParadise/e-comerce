@@ -178,6 +178,26 @@ export async function POST(request: Request) {
       body.set(`line_items[${index}][quantity]`, String(item.quantity));
     });
 
+    // The payment amount includes the approved proposal's delivery and tax
+    // charges. Send them as explicit Checkout line items so Stripe's total
+    // matches the order total recorded by the application.
+    let extraLineIndex = po.order.items.length;
+    const shippingAmount = Number(po.order.shippingTotalEUR || 0);
+    if (shippingAmount > 0) {
+      body.set(`line_items[${extraLineIndex}][price_data][currency]`, "eur");
+      body.set(`line_items[${extraLineIndex}][price_data][product_data][name]`, "Transporte da encomenda");
+      body.set(`line_items[${extraLineIndex}][price_data][unit_amount]`, String(toStripeMinorUnits(shippingAmount)));
+      body.set(`line_items[${extraLineIndex}][quantity]`, "1");
+      extraLineIndex += 1;
+    }
+    const taxAmount = Number(po.order.taxTotalEUR || 0);
+    if (taxAmount > 0) {
+      body.set(`line_items[${extraLineIndex}][price_data][currency]`, "eur");
+      body.set(`line_items[${extraLineIndex}][price_data][product_data][name]`, "IVA / impostos adicionais");
+      body.set(`line_items[${extraLineIndex}][price_data][unit_amount]`, String(toStripeMinorUnits(taxAmount)));
+      body.set(`line_items[${extraLineIndex}][quantity]`, "1");
+    }
+
     const session = await stripeRequest("checkout/sessions", body, `b2b-${parsed.data.idempotencyKey}`);
     const sessionId = typeof session.id === "string" ? session.id : "";
     const sessionUrl = typeof session.url === "string" ? session.url : "";
