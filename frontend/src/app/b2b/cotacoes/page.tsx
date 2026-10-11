@@ -549,7 +549,7 @@ export default function B2BQuotesPage() {
           <article
             key={label}
             className={`min-w-0 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:rounded-2xl sm:p-5 ${
-              label === "Aprovadas" ? "col-span-2 sm:col-span-1" : ""
+              label === "Propostas aceites" ? "col-span-2 sm:col-span-1" : ""
             }`}
           >
             <div className="flex items-start justify-between gap-2">
@@ -889,7 +889,7 @@ export default function B2BQuotesPage() {
                 (sum, item) => sum + Number(item.subtotal),
                 0,
               );
-              const proposalIssued = quote.version > 0 && ["SENT", "ACCEPTED", "CONVERTED_TO_ORDER", "EXPIRED"].includes(quote.status);
+              const proposalIssued = quote.version > 0 && ["SENT", "ACCEPTED", "CONVERTED_TO_ORDER", "EXPIRED", "REJECTED"].includes(quote.status);
               const purchaseOrder = quote.purchaseOrders.find(
                 (po) => po.status !== "CANCELLED",
               );
