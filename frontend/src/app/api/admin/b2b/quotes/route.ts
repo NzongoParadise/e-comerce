@@ -17,8 +17,8 @@ const updateSchema = z.object({
   note: z.string().trim().max(1000).optional(),
   validForDays: z.number().int().min(1).max(90).default(15),
   items: z.array(proposalLineSchema).min(1).max(50).optional(),
-  shippingAmount: z.number().finite().nonnegative().max(99999999.99).optional(),
-  taxAmount: z.number().finite().nonnegative().max(99999999.99).optional(),
+  shippingAmount: z.number().finite().nonnegative().max(9999999999.99).optional(),
+  taxAmount: z.number().finite().nonnegative().max(9999999999.99).optional(),
   deliveryDays: z.number().int().min(1).max(365).optional(),
   paymentTerms: z.string().trim().max(500).optional(),
 }).superRefine((value, context) => {
