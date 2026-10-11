@@ -367,7 +367,6 @@ export async function POST(request: Request) {
           notes: parsed.data.notes || null,
           items: {
             create: applicableItems.map(({ requestedItem, product, unitPrice }) => {
-              if (unitPrice === null) throw new Error(`Missing ${parsed.data.currency} price for ${product.name}`);
               return {
                 productId: product.id,
                 name: product.name,

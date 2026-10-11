@@ -35,8 +35,9 @@ type Order = {
   payment: Payment | null;
   items: OrderItem[];
 };
-type QuoteItem = { id: number; quantity: number; name: string; unitPrice: number | string; subtotal: number | string };
+type QuoteItem = { id?: number; productId: number; quantity: number; name: string; unitPrice: number | string; subtotal: number | string };
 type ProposalSnapshot = {
+  items?: QuoteItem[];
   itemsTotal?: number | string;
   shippingAmount?: number | string;
   taxAmount?: number | string;
@@ -296,6 +297,9 @@ export default function B2BOrdersPage() {
           <div className="divide-y divide-slate-100">
             {purchaseOrders.map((po) => {
               const order = po.order;
+              const proposalItems = po.quote?.proposal?.items?.length
+                ? po.quote.proposal.items
+                : po.quote?.items ?? [];
               const paymentStatus = order?.payment?.status;
               const paymentIsPaid = paymentStatus === "PAID";
               const canPay = Boolean(order && po.status === "CONVERTED" && ["PENDING", "AWAITING_PAYMENT"].includes(order.status) && !paymentIsPaid && order.currency === "EUR" && canApprove);
@@ -338,13 +342,13 @@ export default function B2BOrdersPage() {
                   </div>
 
                   {po.notes && <p className="mt-4 rounded-xl border border-blue-100 bg-blue-50/70 px-3 py-2.5 text-xs leading-5 text-blue-900"><strong>Nota comercial:</strong> {po.notes}</p>}
-                  {po.quote?.items?.length ? (
+                  {proposalItems.length ? (
                     <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
                       <div className="hidden grid-cols-[minmax(0,1fr)_5rem_8rem] gap-3 bg-slate-50 px-4 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-500 sm:grid">
                         <span>Artigo</span><span className="text-right">Qtd.</span><span className="text-right">Subtotal</span>
                       </div>
-                      {po.quote.items.map((item) => (
-                        <div key={item.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 border-t border-slate-100 px-3 py-3 text-xs first:border-0 sm:grid-cols-[minmax(0,1fr)_5rem_8rem] sm:items-center sm:px-4">
+                      {proposalItems.map((item) => (
+                        <div key={item.productId} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 border-t border-slate-100 px-3 py-3 text-xs first:border-0 sm:grid-cols-[minmax(0,1fr)_5rem_8rem] sm:items-center sm:px-4">
                           <span className="min-w-0 truncate font-semibold text-slate-800">{item.name}</span>
                           <span className="text-right text-slate-500 sm:font-medium">{item.quantity} un.</span>
                           <span className="col-span-2 flex justify-between text-right font-black text-slate-900 sm:col-span-1 sm:block"><span className="font-medium text-slate-500 sm:hidden">Subtotal</span>{formatMoney(item.subtotal, po.currency)}</span>
@@ -381,7 +385,7 @@ export default function B2BOrdersPage() {
                             ? formatMoney(orderTotal(order), order.currency)
                             : formatMoney(
                                 po.quote?.proposal?.total ??
-                                  (po.quote?.items.reduce((sum, item) => sum + Number(item.subtotal), 0) ?? 0) +
+                                  proposalItems.reduce((sum, item) => sum + Number(item.subtotal), 0) +
                                     Number(po.quote?.proposal?.shippingAmount || 0) +
                                     Number(po.quote?.proposal?.taxAmount || 0),
                                 po.currency,
