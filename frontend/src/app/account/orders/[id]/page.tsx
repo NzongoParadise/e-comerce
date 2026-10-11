@@ -24,6 +24,11 @@ type Order = {
   totalKZ: string;
   discountTotalEUR: string;
   discountTotalKZ: string;
+  companyId?: number | null;
+  shippingTotalEUR?: string | number;
+  shippingTotalKZ?: string | number;
+  taxTotalEUR?: string | number;
+  taxTotalKZ?: string | number;
   taxSettings?: { vatEnabled: boolean; vatRate: string | null; vatIncluded: boolean };
   billingName?: string | null;
   billingEmail?: string | null;
@@ -102,12 +107,19 @@ export default function OrderDetailPage() {
   const totalAmount = Number(total) || 0;
   const itemSubtotal = order.items.reduce((sum, item) => sum + (Number(item.subtotal) || 0), 0);
   const discount = Number(currency === "EUR" ? order.discountTotalEUR : order.discountTotalKZ) || 0;
-  const shipping = Math.max(0, totalAmount + discount - itemSubtotal);
-  const vatRate = order.taxSettings?.vatEnabled ? Number(order.taxSettings.vatRate) : null;
-  const vatAmount = vatRate === null ? null : order.taxSettings?.vatIncluded
-    ? totalAmount * vatRate / (100 + vatRate)
-    : totalAmount * vatRate / 100;
-  const invoiceTotal = totalAmount + (vatAmount !== null && order.taxSettings?.vatIncluded === false ? vatAmount : 0);
+  const isB2BOrder = order.companyId !== null && order.companyId !== undefined;
+  const explicitShipping = Number(currency === "EUR" ? order.shippingTotalEUR : order.shippingTotalKZ) || 0;
+  const explicitTax = Number(currency === "EUR" ? order.taxTotalEUR : order.taxTotalKZ) || 0;
+  const shipping = isB2BOrder ? Math.max(0, explicitShipping) : Math.max(0, totalAmount + discount - itemSubtotal);
+  const vatRate = !isB2BOrder && order.taxSettings?.vatEnabled ? Number(order.taxSettings.vatRate) : null;
+  const vatAmount = isB2BOrder
+    ? Math.max(0, explicitTax)
+    : vatRate === null ? null : order.taxSettings?.vatIncluded
+      ? totalAmount * vatRate / (100 + vatRate)
+      : totalAmount * vatRate / 100;
+  const invoiceTotal = isB2BOrder
+    ? totalAmount
+    : totalAmount + (vatAmount !== null && order.taxSettings?.vatIncluded === false ? vatAmount : 0);
   const isPaid = order.payment?.status === "PAID";
   const paidAmount = isPaid ? Number(currency === "EUR" ? order.payment?.amountEUR : order.payment?.amountKZ) || totalAmount : 0;
   const outstandingAmount = Math.max(0, invoiceTotal - paidAmount);
@@ -171,9 +183,9 @@ export default function OrderDetailPage() {
             <div><span>Subtotal dos artigos</span><strong>{money(itemSubtotal, currency)}</strong></div>
             {discount > 0 && <div className="order-print-discount"><span>Desconto aplicado</span><strong>− {money(discount, currency)}</strong></div>}
             {shipping > 0 && <div><span>Portes de envio</span><strong>{money(shipping, currency)}</strong></div>}
-            <div className="order-print-tax-note"><span>IVA{vatRate !== null ? ` (${vatRate}%)` : ""}</span><strong>{vatRate === null ? "Não configurado no sistema" : `${money(vatAmount || 0, currency)} ${order.taxSettings?.vatIncluded ? "incluído no total" : "acrescido à fatura"}`}</strong></div>
+            <div className="order-print-tax-note"><span>{isB2BOrder ? "IVA / impostos da proposta" : `IVA${vatRate !== null ? ` (${vatRate}%)` : ""}`}</span><strong>{vatAmount === null ? "Não configurado no sistema" : isB2BOrder ? money(vatAmount, currency) : `${money(vatAmount || 0, currency)} ${order.taxSettings?.vatIncluded ? "incluído no total" : "acrescido à fatura"}`}</strong></div>
           </div>
-          <div className="order-print-total"><span>{vatAmount !== null && order.taxSettings?.vatIncluded === false ? "TOTAL DA FATURA" : "TOTAL DA ENCOMENDA"}</span><strong>{money(invoiceTotal, currency)}</strong></div>
+          <div className="order-print-total"><span>{!isB2BOrder && vatAmount !== null && order.taxSettings?.vatIncluded === false ? "TOTAL DA FATURA" : "TOTAL DA ENCOMENDA"}</span><strong>{money(invoiceTotal, currency)}</strong></div>
           <div className="order-print-paid"><span>Montante pago</span><strong>{money(paidAmount, currency)}</strong></div>
           {outstandingAmount > 0 && <div className="order-print-outstanding"><span>Por pagar</span><strong>{money(outstandingAmount, currency)}</strong></div>}
           {isPaid && order.payment?.paidAt && <p className="order-print-paid-date">Pagamento confirmado em {date(order.payment.paidAt, true)}</p>}
