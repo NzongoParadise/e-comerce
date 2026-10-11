@@ -112,16 +112,6 @@ export async function POST(request: Request) {
         throw new Error("QUOTE_NOT_CONVERTIBLE");
       }
 
-      const orderNumber = `B2B-${new Date().getFullYear()}-${String(po.id).padStart(7, "0")}`;
-      const itemsTotal = quote.items.reduce(
-        (sum, item) => sum.plus(item.subtotal),
-        new Prisma.Decimal(0),
-      );
-      const total = itemsTotal.plus(shippingAmount).plus(taxAmount);
-      const maximumOrderTotal = quote.currency === "EUR"
-        ? new Prisma.Decimal("99999999.99")
-        : new Prisma.Decimal("9999999999.99");
-      if (!total.gt(0) || total.gt(maximumOrderTotal)) throw new Error("INVALID_TOTAL");
       const revision = quote.revisions.find((item) => item.version === quote.version);
       const rawSnapshot = revision?.snapshot;
       const proposalSnapshot = rawSnapshot && typeof rawSnapshot === "object" && !Array.isArray(rawSnapshot)
@@ -139,6 +129,16 @@ export async function POST(request: Request) {
         ? proposalSnapshot.paymentTerms.trim()
         : "";
 
+      const orderNumber = `B2B-${new Date().getFullYear()}-${String(po.id).padStart(7, "0")}`;
+      const itemsTotal = quote.items.reduce(
+        (sum, item) => sum.plus(item.subtotal),
+        new Prisma.Decimal(0),
+      );
+      const total = itemsTotal.plus(shippingAmount).plus(taxAmount);
+      const maximumOrderTotal = quote.currency === "EUR"
+        ? new Prisma.Decimal("99999999.99")
+        : new Prisma.Decimal("9999999999.99");
+      if (!total.gt(0) || total.gt(maximumOrderTotal)) throw new Error("INVALID_TOTAL");
       const productIds = quote.items.map((item) => item.productId);
       const products = await tx.product.findMany({
         where: { id: { in: productIds } },
