@@ -899,7 +899,7 @@ export default function B2BQuotesPage() {
                 (sum, item) => sum + Number(item.subtotal),
                 0,
               );
-              const proposalIssued = quote.version > 0 && ["SENT", "ACCEPTED", "CONVERTED_TO_ORDER", "EXPIRED", "REJECTED"].includes(quote.status);
+              const proposalIssued = quote.version > 0 && ["SENT", "ACCEPTED", "CONVERTED_TO_ORDER", "REVISION_REQUESTED", "EXPIRED", "REJECTED", "APPROVED"].includes(quote.status);
               const shippingAmount = proposalIssued ? Number(quote.proposal?.shippingAmount ?? 0) : 0;
               const taxAmount = proposalIssued ? Number(quote.proposal?.taxAmount ?? 0) : 0;
               const total = proposalIssued && quote.proposal?.total !== undefined
