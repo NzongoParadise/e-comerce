@@ -55,6 +55,7 @@ export default function AdminB2BPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<number | null>(null);
   const [proposalEdits, setProposalEdits] = useState<Record<number, Record<number, { quantity: string; unitPrice: string }>>>({});
+  const [proposalTerms, setProposalTerms] = useState<Record<number, { shippingAmount: string; taxAmount: string; deliveryDays: string; paymentTerms: string }>>({});
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [form, setForm] = useState({ companyId: "", productId: "", minQuantity: "1", unitPrice: "", currency: "AOA" });
@@ -107,8 +108,10 @@ export default function AdminB2BPage() {
     }
 
     let items: Array<{ productId: number; quantity: number; unitPrice: number }> | undefined;
+    let termsPayload: { shippingAmount: number; taxAmount: number; deliveryDays?: number; paymentTerms: string } | undefined;
     if (action === "ISSUE_PROPOSAL") {
       const edits = proposalEdits[quoteId] ?? {};
+      const terms = proposalTerms[quoteId] ?? { shippingAmount: "0", taxAmount: "0", deliveryDays: "", paymentTerms: "" };
       items = quote.items.map((item) => {
         const edit = edits[item.productId];
         return {
@@ -130,6 +133,27 @@ export default function AdminB2BPage() {
         setError("Antes de emitir a proposta, indique para cada artigo uma quantidade inteira válida e um preço unitário positivo com até duas casas decimais.");
         return;
       }
+      const shippingAmount = Number(terms.shippingAmount || "0");
+      const taxAmount = Number(terms.taxAmount || "0");
+      const deliveryDays = terms.deliveryDays.trim() ? Number(terms.deliveryDays) : undefined;
+      if (
+        !Number.isFinite(shippingAmount) || shippingAmount < 0 || shippingAmount > 99999999.99 ||
+        Math.abs(shippingAmount * 100 - Math.round(shippingAmount * 100)) > 0.000001 ||
+        !Number.isFinite(taxAmount) || taxAmount < 0 || taxAmount > 99999999.99 ||
+        Math.abs(taxAmount * 100 - Math.round(taxAmount * 100)) > 0.000001
+      ) {
+        setError("Transporte e impostos devem ser valores não negativos com até duas casas decimais.");
+        return;
+      }
+      if (deliveryDays !== undefined && (!Number.isInteger(deliveryDays) || deliveryDays < 1 || deliveryDays > 365)) {
+        setError("O prazo de entrega deve ser um número inteiro entre 1 e 365 dias.");
+        return;
+      }
+      if (terms.paymentTerms.trim().length < 3 || terms.paymentTerms.trim().length > 500) {
+        setError("Indique as condições de pagamento (entre 3 e 500 caracteres).");
+        return;
+      }
+      termsPayload = { shippingAmount, taxAmount, ...(deliveryDays ? { deliveryDays } : {}), paymentTerms: terms.paymentTerms.trim() };
     }
 
     setBusy(quoteId); setError(""); setMessage("");
@@ -137,10 +161,15 @@ export default function AdminB2BPage() {
       const result = await fetchWithAuth("/api/admin/b2b/quotes", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ quoteId, action, ...(items ? { items } : {}) }),
+        body: JSON.stringify({ quoteId, action, ...(items ? { items, ...termsPayload } : {}) }),
       });
       if (action === "ISSUE_PROPOSAL") {
         setProposalEdits((current) => {
+          const next = { ...current };
+          delete next[quoteId];
+          return next;
+        });
+        setProposalTerms((current) => {
           const next = { ...current };
           delete next[quoteId];
           return next;
@@ -232,10 +261,23 @@ export default function AdminB2BPage() {
               Number.isFinite(item.unitPrice) && item.unitPrice > 0 && item.unitPrice <= 99999999.99 &&
               Math.abs(item.unitPrice * 100 - Math.round(item.unitPrice * 100)) <= 0.000001
             );
+            const currentTerms = proposalTerms[quote.id] ?? { shippingAmount: "0", taxAmount: "0", deliveryDays: "", paymentTerms: "" };
+            const shippingAmount = Number(currentTerms.shippingAmount || "0");
+            const taxAmount = Number(currentTerms.taxAmount || "0");
+            const termsComplete = currentTerms.paymentTerms.trim().length >= 3 &&
+              Number.isFinite(shippingAmount) && shippingAmount >= 0 &&
+              Number.isFinite(taxAmount) && taxAmount >= 0 &&
+              Math.abs(shippingAmount * 100 - Math.round(shippingAmount * 100)) <= 0.000001 &&
+              Math.abs(taxAmount * 100 - Math.round(taxAmount * 100)) <= 0.000001;
+            const proposalComplete = proposedLines.every((item) =>
+              Number.isInteger(item.quantity) && item.quantity >= 1 && item.quantity <= 100000 &&
+              Number.isFinite(item.unitPrice) && item.unitPrice > 0 && item.unitPrice <= 99999999.99 &&
+              Math.abs(item.unitPrice * 100 - Math.round(item.unitPrice * 100)) <= 0.000001
+            ) && termsComplete;
             const proposedTotal = proposedLines.reduce((sum, item) =>
               sum + (Number.isFinite(item.unitPrice) && item.unitPrice > 0 && Number.isInteger(item.quantity) && item.quantity > 0
                 ? item.unitPrice * item.quantity
-                : 0), 0);
+                : 0), 0) + (Number.isFinite(shippingAmount) && shippingAmount > 0 ? shippingAmount : 0) + (Number.isFinite(taxAmount) && taxAmount > 0 ? taxAmount : 0);
             return (
             <article key={quote.id} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex flex-wrap items-start justify-between gap-4">
@@ -296,6 +338,24 @@ export default function AdminB2BPage() {
                     </div>
                   );
                 })}
+                <div className="grid gap-3 border-t border-slate-100 py-4 sm:grid-cols-2">
+                  <label className="text-xs font-semibold text-slate-600">
+                    Transporte ({quote.currency || "AOA"})
+                    <input type="number" min="0" max="99999999.99" step="0.01" value={currentTerms.shippingAmount} onChange={(event) => setProposalTerms((current) => ({ ...current, [quote.id]: { ...currentTerms, shippingAmount: event.target.value } }))} className="mt-1 w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm font-normal" />
+                  </label>
+                  <label className="text-xs font-semibold text-slate-600">
+                    IVA/impostos a acrescentar ({quote.currency || "AOA"})
+                    <input type="number" min="0" max="99999999.99" step="0.01" value={currentTerms.taxAmount} onChange={(event) => setProposalTerms((current) => ({ ...current, [quote.id]: { ...currentTerms, taxAmount: event.target.value } }))} className="mt-1 w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm font-normal" />
+                  </label>
+                  <label className="text-xs font-semibold text-slate-600">
+                    Prazo de entrega (dias, opcional)
+                    <input type="number" min="1" max="365" step="1" value={currentTerms.deliveryDays} onChange={(event) => setProposalTerms((current) => ({ ...current, [quote.id]: { ...currentTerms, deliveryDays: event.target.value } }))} className="mt-1 w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm font-normal" placeholder="A confirmar" />
+                  </label>
+                  <label className="text-xs font-semibold text-slate-600">
+                    Condições de pagamento (obrigatório)
+                    <textarea maxLength={500} rows={2} value={currentTerms.paymentTerms} onChange={(event) => setProposalTerms((current) => ({ ...current, [quote.id]: { ...currentTerms, paymentTerms: event.target.value } }))} className="mt-1 w-full resize-y rounded-lg border border-slate-200 px-2.5 py-2 text-sm font-normal" placeholder="Ex.: pagamento integral antes do envio" />
+                  </label>
+                </div>
                 <div className="flex justify-between gap-4 py-3 text-sm">
                   <span className="font-bold text-slate-600">Total da proposta · {quote.currency || "AOA"}</span>
                   <strong className="text-right font-black">
