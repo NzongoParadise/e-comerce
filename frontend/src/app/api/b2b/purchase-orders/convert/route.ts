@@ -6,6 +6,16 @@ import { B2B_STOCK_RESERVATION_DURATION_MS } from "@/lib/server/orders/inventory
 import { z } from "zod";
 export const runtime = "nodejs";
 
+function decimalFromSnapshot(value: unknown): Prisma.Decimal {
+  if (value === undefined || value === null) return new Prisma.Decimal(0);
+  if (typeof value !== "string" && typeof value !== "number") throw new Error("INVALID_PROPOSAL_CHARGES");
+  const amount = new Prisma.Decimal(value);
+  if (!amount.isFinite() || amount.isNegative() || amount.decimalPlaces() > 2) {
+    throw new Error("INVALID_PROPOSAL_CHARGES");
+  }
+  return amount;
+}
+
 function marketForCountry(country: string | null | undefined): "AO" | "PT" {
   const normalized = (country ?? "").trim().toUpperCase();
   return normalized === "PT" || normalized === "PORTUGAL" ? "PT" : "AO";
@@ -63,6 +73,7 @@ export async function POST(request: Request) {
             quote: {
               include: {
                 items: true,
+                revisions: { orderBy: { version: "desc" }, take: 1, select: { version: true, snapshot: true } },
                 company: {
                   select: {
                     country: true,
@@ -101,14 +112,32 @@ export async function POST(request: Request) {
       }
 
       const orderNumber = `B2B-${new Date().getFullYear()}-${String(po.id).padStart(7, "0")}`;
-      const total = quote.items.reduce(
+      const itemsTotal = quote.items.reduce(
         (sum, item) => sum.plus(item.subtotal),
         new Prisma.Decimal(0),
       );
+      const total = itemsTotal.plus(shippingAmount).plus(taxAmount);
       const maximumOrderTotal = quote.currency === "EUR"
         ? new Prisma.Decimal("99999999.99")
         : new Prisma.Decimal("9999999999.99");
       if (!total.gt(0) || total.gt(maximumOrderTotal)) throw new Error("INVALID_TOTAL");
+      const revision = quote.revisions.find((item) => item.version === quote.version);
+      const rawSnapshot = revision?.snapshot;
+      const proposalSnapshot = rawSnapshot && typeof rawSnapshot === "object" && !Array.isArray(rawSnapshot)
+        ? rawSnapshot as Prisma.JsonObject
+        : {};
+      const shippingAmount = decimalFromSnapshot(proposalSnapshot.shippingAmount);
+      const taxAmount = decimalFromSnapshot(proposalSnapshot.taxAmount);
+      const deliveryDays = typeof proposalSnapshot.deliveryDays === "number" &&
+        Number.isInteger(proposalSnapshot.deliveryDays) &&
+        proposalSnapshot.deliveryDays >= 1 &&
+        proposalSnapshot.deliveryDays <= 365
+        ? proposalSnapshot.deliveryDays
+        : null;
+      const paymentTerms = typeof proposalSnapshot.paymentTerms === "string"
+        ? proposalSnapshot.paymentTerms.trim()
+        : "";
+
       const productIds = quote.items.map((item) => item.productId);
       const products = await tx.product.findMany({
         where: { id: { in: productIds } },
@@ -144,6 +173,14 @@ export async function POST(request: Request) {
           phone: quote.phone,
           totalEUR: quote.currency === "EUR" ? total : 0,
           totalKZ: quote.currency === "AOA" ? total : 0,
+          shippingTotalEUR: quote.currency === "EUR" ? shippingAmount : 0,
+          shippingTotalKZ: quote.currency === "AOA" ? shippingAmount : 0,
+          taxTotalEUR: quote.currency === "EUR" ? taxAmount : 0,
+          taxTotalKZ: quote.currency === "AOA" ? taxAmount : 0,
+          deliveryNotes: [
+            paymentTerms || null,
+            deliveryDays ? `Prazo de entrega previsto: ${deliveryDays} dias.` : null,
+          ].filter(Boolean).join(" · ") || null,
           items: { create: quote.items.map((item) => ({
             productId: item.productId,
             name: item.name,
@@ -205,6 +242,7 @@ export async function POST(request: Request) {
     if (code === "PRODUCT_UNAVAILABLE") return errorResponse("Um dos produtos da cotação já não está disponível.", 409);
     if (code.startsWith("STOCK_UNAVAILABLE:")) return errorResponse(`Stock insuficiente para ${code.slice("STOCK_UNAVAILABLE:".length)}.`, 409);
     if (code === "INVALID_TOTAL") return errorResponse("O total da cotação não é válido.", 422);
+    if (code === "INVALID_PROPOSAL_CHARGES") return errorResponse("Os valores de transporte e impostos da proposta não são válidos.", 422);
     console.error("B2B purchase order conversion failed:", error);
     return errorResponse("Não foi possível converter a compra empresarial.", 503);
   }
