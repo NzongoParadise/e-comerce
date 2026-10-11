@@ -5,6 +5,24 @@ import Link from "next/link";
 import { CheckCircle2, RefreshCw, XCircle, Building2 } from "lucide-react";
 import { fetchWithAuth } from "@/lib/api";
 
+type QuoteLine = {
+  productId: number;
+  name: string;
+  description?: string | null;
+  imageUrl?: string | null;
+  quantity: number;
+  unitPrice: string | number;
+  subtotal: string | number;
+};
+
+type ProposalSnapshot = {
+  items?: QuoteLine[];
+  shippingAmount?: string | number;
+  taxAmount?: string | number;
+  deliveryDays?: number | null;
+  paymentTerms?: string | null;
+};
+
 type Quote = {
   id: number;
   quoteNumber: string;
@@ -16,7 +34,8 @@ type Quote = {
   phone: string;
   createdAt: string;
   version: number;
-  items: Array<{ productId: number; name: string; quantity: number; unitPrice: string | number; subtotal: string | number }>;
+  items: QuoteLine[];
+  revisions?: Array<{ version: number; snapshot: ProposalSnapshot; validUntil?: string; createdAt?: string }>;
   company?: { id: number; legalName: string; tradeName?: string | null; nif: string; status: string } | null;
   user?: { name?: string | null; email?: string | null } | null;
   purchaseOrders: Array<{ id: number; poNumber: string; status: string; orderId?: number | null }>;
@@ -29,6 +48,33 @@ function formatQuoteAmount(value: number | string, currency: string) {
     currency: supportedCurrency,
     maximumFractionDigits: 2,
   }).format(Number(value) || 0);
+}
+
+function getCurrentProposalSnapshot(quote: Quote): ProposalSnapshot | null {
+  return quote.revisions?.find((revision) => revision.version === quote.version)?.snapshot ?? null;
+}
+
+function getProposalBaseItems(quote: Quote): QuoteLine[] {
+  if (quote.status === "REVISION_REQUESTED") {
+    const snapshotItems = getCurrentProposalSnapshot(quote)?.items;
+    if (snapshotItems?.length && snapshotItems.length === quote.items.length) {
+      const requestedIds = new Set(quote.items.map((item) => item.productId));
+      if (snapshotItems.every((item) => requestedIds.has(item.productId))) {
+        return snapshotItems;
+      }
+    }
+  }
+  return quote.items;
+}
+
+function getProposalTermDefaults(quote: Quote) {
+  const snapshot = quote.status === "REVISION_REQUESTED" ? getCurrentProposalSnapshot(quote) : null;
+  return {
+    shippingAmount: String(snapshot?.shippingAmount ?? "0"),
+    taxAmount: String(snapshot?.taxAmount ?? "0"),
+    deliveryDays: snapshot?.deliveryDays ? String(snapshot.deliveryDays) : "",
+    paymentTerms: snapshot?.paymentTerms ?? "",
+  };
 }
 
 type Rule = {
@@ -110,9 +156,10 @@ export default function AdminB2BPage() {
     let items: Array<{ productId: number; quantity: number; unitPrice: number }> | undefined;
     let termsPayload: { shippingAmount: number; taxAmount: number; deliveryDays?: number; paymentTerms: string } | undefined;
     if (action === "ISSUE_PROPOSAL") {
+      const baseItems = getProposalBaseItems(quote);
       const edits = proposalEdits[quoteId] ?? {};
-      const terms = proposalTerms[quoteId] ?? { shippingAmount: "0", taxAmount: "0", deliveryDays: "", paymentTerms: "" };
-      items = quote.items.map((item) => {
+      const terms = proposalTerms[quoteId] ?? getProposalTermDefaults(quote);
+      items = baseItems.map((item) => {
         const edit = edits[item.productId];
         return {
           productId: item.productId,
@@ -250,14 +297,15 @@ export default function AdminB2BPage() {
         <section className="space-y-3">
           {quotes.filter(q => ["SUBMITTED","UNDER_REVIEW","REVISION_REQUESTED"].includes(q.status)).length === 0 ? <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500">Não existem cotações pendentes.</div> :
           quotes.filter(q => ["SUBMITTED","UNDER_REVIEW","REVISION_REQUESTED"].includes(q.status)).map((quote) => {
+            const baseItems = getProposalBaseItems(quote);
             const edits = proposalEdits[quote.id] ?? {};
-            const proposedLines = quote.items.map((item) => {
+            const proposedLines = baseItems.map((item) => {
               const edit = edits[item.productId];
               const quantity = Number(edit?.quantity ?? item.quantity);
               const unitPrice = Number(edit?.unitPrice ?? (Number(item.unitPrice) > 0 ? String(item.unitPrice) : ""));
               return { quantity, unitPrice };
             });
-            const currentTerms = proposalTerms[quote.id] ?? { shippingAmount: "0", taxAmount: "0", deliveryDays: "", paymentTerms: "" };
+            const currentTerms = proposalTerms[quote.id] ?? getProposalTermDefaults(quote);
             const shippingAmount = Number(currentTerms.shippingAmount || "0");
             const taxAmount = Number(currentTerms.taxAmount || "0");
             const deliveryDays = currentTerms.deliveryDays.trim() ? Number(currentTerms.deliveryDays) : undefined;
@@ -284,7 +332,7 @@ export default function AdminB2BPage() {
                 <span className="rounded-full bg-amber-50 px-3 py-1 text-[10px] font-black text-amber-700">{quote.status}</span>
               </div>
               <div className="mt-4 divide-y divide-slate-100 border-y border-slate-100">
-                {quote.items.map((item) => {
+                {baseItems.map((item) => {
                   const edit = proposalEdits[quote.id]?.[item.productId];
                   const quantity = edit?.quantity ?? String(item.quantity);
                   const unitPrice = edit?.unitPrice ?? (Number(item.unitPrice) > 0 ? String(item.unitPrice) : "");
@@ -292,7 +340,11 @@ export default function AdminB2BPage() {
                     <div key={item.productId} className="grid gap-2 py-3 sm:grid-cols-[minmax(0,1fr)_7rem_9rem] sm:items-center">
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-slate-900">{item.name}</p>
-                        <p className="mt-1 text-xs text-slate-500">Pedido: {item.quantity} un. · {Number(item.unitPrice) > 0 ? formatQuoteAmount(item.subtotal, quote.currency || "AOA") : "Preço por definir"}</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {quote.status === "REVISION_REQUESTED"
+                            ? `Proposta anterior: ${item.quantity} un. · ${formatQuoteAmount(item.subtotal, quote.currency)}`
+                            : `Pedido: ${item.quantity} un. · ${(Number(item.unitPrice) > 0 ? formatQuoteAmount(item.subtotal, quote.currency) : "Preço por definir")}`}
+                        </p>
                       </div>
                       <label className="text-xs font-semibold text-slate-600">
                         Quantidade proposta
