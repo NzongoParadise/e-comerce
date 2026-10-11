@@ -99,26 +99,80 @@ export async function POST(request: Request) {
       if (!["AOA", "EUR"].includes(quote.currency) || po.currency !== quote.currency) {
         throw new Error("CURRENCY_MISMATCH");
       }
-      if (quote.status === "ACCEPTED" && quote.acceptedVersion !== quote.version) {
-        throw new Error("QUOTE_VERSION_MISMATCH");
-      }
-      if (
-        quote.status !== "ACCEPTED" &&
-        quote.status !== "APPROVED"
-      ) {
-        throw new Error("QUOTE_NOT_ACCEPTED");
-      }
+      if (quote.status !== "ACCEPTED") throw new Error("QUOTE_NOT_ACCEPTED");
+      if (quote.acceptedVersion !== quote.version) throw new Error("QUOTE_VERSION_MISMATCH");
       if (!canTransitionQuote(quote.status, "CONVERTED_TO_ORDER")) {
         throw new Error("QUOTE_NOT_CONVERTIBLE");
       }
 
-      const revision = quote.revisions.find((item) => item.version === quote.version);
-      const rawSnapshot = revision?.snapshot;
-      const proposalSnapshot = rawSnapshot && typeof rawSnapshot === "object" && !Array.isArray(rawSnapshot)
-        ? rawSnapshot as Prisma.JsonObject
-        : {};
+      const revision = quote.revisions.find((item) => item.version === quote.acceptedVersion);
+      if (!revision) throw new Error("PROPOSAL_REVISION_NOT_FOUND");
+      const rawSnapshot = revision.snapshot;
+      if (!rawSnapshot || typeof rawSnapshot !== "object" || Array.isArray(rawSnapshot)) {
+        throw new Error("INVALID_PROPOSAL_SNAPSHOT");
+      }
+      const proposalSnapshot = rawSnapshot as Prisma.JsonObject;
+      if (!Array.isArray(proposalSnapshot.items) || proposalSnapshot.items.length === 0) {
+        throw new Error("INVALID_PROPOSAL_SNAPSHOT");
+      }
+
+      const requestedItemsByProductId = new Map(quote.items.map((item) => [item.productId, item]));
+      const seenProductIds = new Set<number>();
+      const proposalItems = proposalSnapshot.items.map((rawLine) => {
+        if (!rawLine || typeof rawLine !== "object" || Array.isArray(rawLine)) {
+          throw new Error("INVALID_PROPOSAL_SNAPSHOT");
+        }
+        const line = rawLine as Prisma.JsonObject;
+        const productId = line.productId;
+        const quantity = line.quantity;
+        if (
+          typeof productId !== "number" || !Number.isInteger(productId) || productId < 1 ||
+          typeof quantity !== "number" || !Number.isInteger(quantity) || quantity < 1 || quantity > 100000 ||
+          seenProductIds.has(productId)
+        ) {
+          throw new Error("INVALID_PROPOSAL_SNAPSHOT");
+        }
+        const requestedItem = requestedItemsByProductId.get(productId);
+        if (!requestedItem) throw new Error("INVALID_PROPOSAL_SNAPSHOT");
+        seenProductIds.add(productId);
+
+        const unitPrice = decimalFromSnapshot(line.unitPrice);
+        const declaredSubtotal = decimalFromSnapshot(line.subtotal);
+        const subtotal = unitPrice.mul(quantity);
+        if (
+          !unitPrice.gt(0) ||
+          unitPrice.gt(new Prisma.Decimal("99999999.99")) ||
+          subtotal.toFixed(2) !== declaredSubtotal.toFixed(2)
+        ) {
+          throw new Error("INVALID_PROPOSAL_SNAPSHOT");
+        }
+        return {
+          productId,
+          name: typeof line.name === "string" && line.name.trim() ? line.name.trim() : requestedItem.name,
+          imageUrl: typeof line.imageUrl === "string" ? line.imageUrl : requestedItem.imageUrl,
+          quantity,
+          unitPrice,
+          subtotal,
+        };
+      });
+      if (proposalItems.length !== quote.items.length || seenProductIds.size !== requestedItemsByProductId.size) {
+        throw new Error("INVALID_PROPOSAL_SNAPSHOT");
+      }
+
+      const itemsTotal = proposalItems.reduce(
+        (sum, item) => sum.plus(item.subtotal),
+        new Prisma.Decimal(0),
+      );
+      const declaredItemsTotal = decimalFromSnapshot(proposalSnapshot.itemsTotal);
+      if (itemsTotal.toFixed(2) !== declaredItemsTotal.toFixed(2)) {
+        throw new Error("INVALID_PROPOSAL_SNAPSHOT");
+      }
       const shippingAmount = decimalFromSnapshot(proposalSnapshot.shippingAmount);
       const taxAmount = decimalFromSnapshot(proposalSnapshot.taxAmount);
+      const total = itemsTotal.plus(shippingAmount).plus(taxAmount);
+      const declaredTotal = decimalFromSnapshot(proposalSnapshot.total);
+      if (total.toFixed(2) !== declaredTotal.toFixed(2)) throw new Error("INVALID_PROPOSAL_SNAPSHOT");
+
       const deliveryDays = typeof proposalSnapshot.deliveryDays === "number" &&
         Number.isInteger(proposalSnapshot.deliveryDays) &&
         proposalSnapshot.deliveryDays >= 1 &&
@@ -130,23 +184,18 @@ export async function POST(request: Request) {
         : "";
 
       const orderNumber = `B2B-${new Date().getFullYear()}-${String(po.id).padStart(7, "0")}`;
-      const itemsTotal = quote.items.reduce(
-        (sum, item) => sum.plus(item.subtotal),
-        new Prisma.Decimal(0),
-      );
-      const total = itemsTotal.plus(shippingAmount).plus(taxAmount);
       const maximumOrderTotal = quote.currency === "EUR"
         ? new Prisma.Decimal("99999999.99")
         : new Prisma.Decimal("9999999999.99");
       if (!total.gt(0) || total.gt(maximumOrderTotal)) throw new Error("INVALID_TOTAL");
-      const productIds = quote.items.map((item) => item.productId);
+      const productIds = proposalItems.map((item) => item.productId);
       const products = await tx.product.findMany({
         where: { id: { in: productIds } },
         select: { id: true, slug: true },
       });
       const productById = new Map(products.map((product) => [product.id, product]));
       if (productById.size !== new Set(productIds).size) throw new Error("PRODUCT_UNAVAILABLE");
-      for (const item of quote.items) {
+      for (const item of proposalItems) {
         const reserved = await tx.product.updateMany({
           where: { id: item.productId, stock: { gte: item.quantity } },
           data: { stock: { decrement: item.quantity } },
@@ -182,7 +231,7 @@ export async function POST(request: Request) {
             paymentTerms || null,
             deliveryDays ? `Prazo de entrega previsto: ${deliveryDays} dias.` : null,
           ].filter(Boolean).join(" · ") || null,
-          items: { create: quote.items.map((item) => ({
+          items: { create: proposalItems.map((item) => ({
             productId: item.productId,
             name: item.name,
             slug: productById.get(item.productId)!.slug,
@@ -244,6 +293,7 @@ export async function POST(request: Request) {
     if (code.startsWith("STOCK_UNAVAILABLE:")) return errorResponse(`Stock insuficiente para ${code.slice("STOCK_UNAVAILABLE:".length)}.`, 409);
     if (code === "INVALID_TOTAL") return errorResponse("O total da cotação não é válido.", 422);
     if (code === "INVALID_PROPOSAL_CHARGES") return errorResponse("Os valores de transporte e impostos da proposta não são válidos.", 422);
+    if (code === "PROPOSAL_REVISION_NOT_FOUND" || code === "INVALID_PROPOSAL_SNAPSHOT") return errorResponse("A versão aceite não contém uma proposta comercial íntegra. Solicite apoio à equipa comercial.", 409);
     console.error("B2B purchase order conversion failed:", error);
     return errorResponse("Não foi possível converter a compra empresarial.", 503);
   }
