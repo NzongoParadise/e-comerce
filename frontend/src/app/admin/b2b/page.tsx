@@ -259,11 +259,13 @@ export default function AdminB2BPage() {
             const currentTerms = proposalTerms[quote.id] ?? { shippingAmount: "0", taxAmount: "0", deliveryDays: "", paymentTerms: "" };
             const shippingAmount = Number(currentTerms.shippingAmount || "0");
             const taxAmount = Number(currentTerms.taxAmount || "0");
+            const deliveryDays = currentTerms.deliveryDays.trim() ? Number(currentTerms.deliveryDays) : undefined;
             const termsComplete = currentTerms.paymentTerms.trim().length >= 3 &&
-              Number.isFinite(shippingAmount) && shippingAmount >= 0 &&
-              Number.isFinite(taxAmount) && taxAmount >= 0 &&
+              Number.isFinite(shippingAmount) && shippingAmount >= 0 && shippingAmount <= 99999999.99 &&
+              Number.isFinite(taxAmount) && taxAmount >= 0 && taxAmount <= 99999999.99 &&
               Math.abs(shippingAmount * 100 - Math.round(shippingAmount * 100)) <= 0.000001 &&
-              Math.abs(taxAmount * 100 - Math.round(taxAmount * 100)) <= 0.000001;
+              Math.abs(taxAmount * 100 - Math.round(taxAmount * 100)) <= 0.000001 &&
+              (deliveryDays === undefined || (Number.isInteger(deliveryDays) && deliveryDays >= 1 && deliveryDays <= 365));
             const proposalComplete = proposedLines.every((item) =>
               Number.isInteger(item.quantity) && item.quantity >= 1 && item.quantity <= 100000 &&
               Number.isFinite(item.unitPrice) && item.unitPrice > 0 && item.unitPrice <= 99999999.99 &&
