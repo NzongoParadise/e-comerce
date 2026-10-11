@@ -64,6 +64,15 @@ type PurchaseOrderLink = {
   orderId: number | null;
 };
 
+type QuoteProposalSnapshot = {
+  itemsTotal?: number | string;
+  shippingAmount?: number | string;
+  taxAmount?: number | string;
+  total?: number | string;
+  deliveryDays?: number | null;
+  paymentTerms?: string | null;
+};
+
 type Quote = {
   id: number;
   quoteNumber: string;
@@ -73,6 +82,7 @@ type Quote = {
   createdAt: string;
   version: number;
   validUntil: string | null;
+  proposal: QuoteProposalSnapshot | null;
   items: QuoteItem[];
   events: Array<{ version: number; action: string; note: string | null; createdAt: string }>;
   purchaseOrders: PurchaseOrderLink[];
@@ -885,11 +895,16 @@ export default function B2BQuotesPage() {
         {quotes.length ? (
           <div className="divide-y divide-slate-100">
             {quotes.map((quote) => {
-              const total = quote.items.reduce(
+              const itemsTotal = quote.items.reduce(
                 (sum, item) => sum + Number(item.subtotal),
                 0,
               );
               const proposalIssued = quote.version > 0 && ["SENT", "ACCEPTED", "CONVERTED_TO_ORDER", "EXPIRED", "REJECTED"].includes(quote.status);
+              const shippingAmount = proposalIssued ? Number(quote.proposal?.shippingAmount ?? 0) : 0;
+              const taxAmount = proposalIssued ? Number(quote.proposal?.taxAmount ?? 0) : 0;
+              const total = proposalIssued && quote.proposal?.total !== undefined
+                ? Number(quote.proposal.total)
+                : itemsTotal + shippingAmount + taxAmount;
               const purchaseOrder = quote.purchaseOrders.find(
                 (po) => po.status !== "CANCELLED",
               );
@@ -973,6 +988,34 @@ export default function B2BQuotesPage() {
                           </p>
                         )}
                       </div>
+                      {proposalIssued && quote.proposal && (
+                        <div className="mt-3 rounded-xl border border-blue-100 bg-white p-3 text-xs">
+                          <div className="flex justify-between gap-3 py-1 text-slate-600">
+                            <span>Artigos</span>
+                            <span>{formatMoney(quote.proposal.itemsTotal ?? itemsTotal, quote.currency)}</span>
+                          </div>
+                          <div className="flex justify-between gap-3 py-1 text-slate-600">
+                            <span>Transporte</span>
+                            <span>{formatMoney(shippingAmount, quote.currency)}</span>
+                          </div>
+                          <div className="flex justify-between gap-3 py-1 text-slate-600">
+                            <span>IVA / impostos adicionais</span>
+                            <span>{formatMoney(taxAmount, quote.currency)}</span>
+                          </div>
+                          {quote.proposal.deliveryDays && (
+                            <p className="py-1 text-slate-600">Prazo previsto: {quote.proposal.deliveryDays} dias</p>
+                          )}
+                          {quote.proposal.paymentTerms && (
+                            <p className="mt-2 border-t border-slate-100 pt-2 leading-5 text-slate-700">
+                              <strong>Condições de pagamento:</strong> {quote.proposal.paymentTerms}
+                            </p>
+                          )}
+                          <div className="mt-2 flex justify-between gap-3 border-t border-slate-100 pt-2 font-black text-slate-950">
+                            <span>Total da proposta</span>
+                            <span>{formatMoney(total, quote.currency)}</span>
+                          </div>
+                        </div>
+                      )}
                       {quote.events.find(
                         (event) =>
                           event.version === quote.version &&
