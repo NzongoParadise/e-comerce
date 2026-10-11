@@ -17,6 +17,10 @@ const updateSchema = z.object({
   note: z.string().trim().max(1000).optional(),
   validForDays: z.number().int().min(1).max(90).default(15),
   items: z.array(proposalLineSchema).min(1).max(50).optional(),
+  shippingAmount: z.number().finite().nonnegative().max(99999999.99).optional(),
+  taxAmount: z.number().finite().nonnegative().max(99999999.99).optional(),
+  deliveryDays: z.number().int().min(1).max(365).optional(),
+  paymentTerms: z.string().trim().max(500).optional(),
 }).superRefine((value, context) => {
   if (value.action === "ISSUE_PROPOSAL" && !value.items) {
     context.addIssue({
@@ -24,6 +28,22 @@ const updateSchema = z.object({
       path: ["items"],
       message: "Informe o preço e a quantidade de cada artigo antes de emitir a proposta.",
     });
+  }
+  if (value.action === "ISSUE_PROPOSAL" && (!value.paymentTerms || value.paymentTerms.length < 3)) {
+    context.addIssue({
+      code: "custom",
+      path: ["paymentTerms"],
+      message: "Indique as condições de pagamento da proposta.",
+    });
+  }
+  for (const [field, amount] of [["shippingAmount", value.shippingAmount], ["taxAmount", value.taxAmount]] as const) {
+    if (amount !== undefined && Math.abs(amount * 100 - Math.round(amount * 100)) > 0.000001) {
+      context.addIssue({
+        code: "custom",
+        path: [field],
+        message: "O valor deve ter no máximo duas casas decimais.",
+      });
+    }
   }
   if (value.items) {
     const productIds = value.items.map((item) => item.productId);
@@ -176,10 +196,13 @@ export async function PATCH(request: Request) {
           subtotal: unitPrice.mul(submitted.quantity),
         };
       });
-      const total = proposalItems.reduce(
+      const shippingAmount = new Prisma.Decimal((parsed.data.shippingAmount ?? 0).toFixed(2));
+      const taxAmount = new Prisma.Decimal((parsed.data.taxAmount ?? 0).toFixed(2));
+      const itemsTotal = proposalItems.reduce(
         (sum, item) => sum.plus(item.subtotal),
         new Prisma.Decimal(0),
       );
+      const total = itemsTotal.plus(shippingAmount).plus(taxAmount);
       const maximumTotal = quote.currency === "EUR"
         ? new Prisma.Decimal("99999999.99")
         : new Prisma.Decimal("9999999999.99");
@@ -213,7 +236,12 @@ export async function PATCH(request: Request) {
               phone: quote.company.phone,
             },
             currency: quote.currency,
+            itemsTotal: itemsTotal.toFixed(2),
+            shippingAmount: shippingAmount.toFixed(2),
+            taxAmount: taxAmount.toFixed(2),
             total: total.toFixed(2),
+            deliveryDays: parsed.data.deliveryDays ?? null,
+            paymentTerms: parsed.data.paymentTerms!.trim(),
             items: proposalItems.map((item) => ({
               productId: item.productId,
               name: item.name,
