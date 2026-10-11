@@ -21,6 +21,11 @@ function marketForCountry(country: string | null | undefined): "AO" | "PT" {
   return normalized === "PT" || normalized === "PORTUGAL" ? "PT" : "AO";
 }
 
+function stringFromSnapshot(value: unknown, fallback: string | null | undefined): string | null {
+  if (typeof value === "string" && value.trim()) return value.trim();
+  return fallback?.trim() || null;
+}
+
 const idSchema = z.coerce.number().int().positive();
 
 export async function POST(request: Request) {
@@ -112,13 +117,24 @@ export async function POST(request: Request) {
         throw new Error("INVALID_PROPOSAL_SNAPSHOT");
       }
       const proposalSnapshot = rawSnapshot as Prisma.JsonObject;
-      if (!Array.isArray(proposalSnapshot.items) || proposalSnapshot.items.length === 0) {
+      if (
+        proposalSnapshot.quoteNumber !== quote.quoteNumber ||
+        proposalSnapshot.currency !== quote.currency
+      ) {
         throw new Error("INVALID_PROPOSAL_SNAPSHOT");
       }
+      const rawProposalItems = proposalSnapshot.items;
+      if (!Array.isArray(rawProposalItems) || rawProposalItems.length === 0) {
+        throw new Error("INVALID_PROPOSAL_SNAPSHOT");
+      }
+      const rawProposalCompany = proposalSnapshot.company;
+      const proposalCompany = rawProposalCompany && typeof rawProposalCompany === "object" && !Array.isArray(rawProposalCompany)
+        ? rawProposalCompany as Prisma.JsonObject
+        : {};
 
       const requestedItemsByProductId = new Map(quote.items.map((item) => [item.productId, item]));
       const seenProductIds = new Set<number>();
-      const proposalItems = proposalSnapshot.items.map((rawLine) => {
+      const proposalItems = rawProposalItems.map((rawLine) => {
         if (!rawLine || typeof rawLine !== "object" || Array.isArray(rawLine)) {
           throw new Error("INVALID_PROPOSAL_SNAPSHOT");
         }
@@ -211,16 +227,19 @@ export async function POST(request: Request) {
           deliveryMode: "DELIVERY",
           shippingMethod: "STANDARD",
           paymentMethod: quote.currency === "AOA" ? "MANUAL_INVOICE" : "STRIPE_CHECKOUT",
-          country: marketForCountry(quote.company.country),
+          country: marketForCountry(stringFromSnapshot(proposalCompany.country, quote.company.country)),
           currency: quote.currency,
-          billingName: quote.companyName,
-          billingEmail: quote.email,
-          billingTaxId: quote.companyNif,
-          deliveryRecipient: quote.company.tradeName || quote.company.legalName,
-          deliveryCity: quote.company.city,
-          deliveryRegion: quote.company.province,
-          address: quote.address || quote.company.address,
-          phone: quote.phone,
+          billingName: stringFromSnapshot(proposalCompany.legalName, quote.companyName) ?? quote.companyName,
+          billingEmail: stringFromSnapshot(proposalCompany.email, quote.email) ?? quote.email,
+          billingTaxId: stringFromSnapshot(proposalCompany.nif, quote.companyNif) ?? quote.companyNif,
+          deliveryRecipient:
+            stringFromSnapshot(proposalCompany.tradeName, quote.company.tradeName) ??
+            stringFromSnapshot(proposalCompany.legalName, quote.company.legalName) ??
+            quote.company.legalName,
+          deliveryCity: stringFromSnapshot(proposalCompany.city, quote.company.city),
+          deliveryRegion: stringFromSnapshot(proposalCompany.province, quote.company.province),
+          address: quote.address?.trim() || stringFromSnapshot(proposalCompany.address, quote.company.address),
+          phone: quote.phone || stringFromSnapshot(proposalCompany.phone, quote.company.phone) || "",
           totalEUR: quote.currency === "EUR" ? total : 0,
           totalKZ: quote.currency === "AOA" ? total : 0,
           shippingTotalEUR: quote.currency === "EUR" ? shippingAmount : 0,
