@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 import { prisma } from "@/lib/server/prisma";
 
-const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://e-comerce-sepia.vercel.app").replace(/\/$/, "");
+const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://rubricadeligente.pt").replace(/\/$/, "");
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
