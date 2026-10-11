@@ -6,6 +6,11 @@ import { B2B_STOCK_RESERVATION_DURATION_MS } from "@/lib/server/orders/inventory
 import { z } from "zod";
 export const runtime = "nodejs";
 
+function marketForCountry(country: string | null | undefined): "AO" | "PT" {
+  const normalized = (country ?? "").trim().toUpperCase();
+  return normalized === "PT" || normalized === "PORTUGAL" ? "PT" : "AO";
+}
+
 const idSchema = z.coerce.number().int().positive();
 
 export async function POST(request: Request) {
@@ -24,7 +29,24 @@ export async function POST(request: Request) {
     const result = await prisma.$transaction(async (tx) => {
       let po = await tx.purchaseOrder.findFirst({
         where: { id: parsedId.data, companyId: membership.companyId },
-        include: { quote: { include: { items: true } }, order: { include: { items: true } } },
+        include: {
+          quote: {
+            include: {
+              items: true,
+              company: {
+                select: {
+                  country: true,
+                  city: true,
+                  province: true,
+                  address: true,
+                  legalName: true,
+                  tradeName: true,
+                },
+              },
+            },
+          },
+          order: { include: { items: true } },
+        },
       });
       if (!po) throw new Error("PO_NOT_FOUND");
       if (po.order) return { order: po.order, po };
@@ -44,7 +66,7 @@ export async function POST(request: Request) {
       }
 
       const quote = po.quote;
-      if (!quote || quote.companyId !== membership.companyId) throw new Error("QUOTE_REQUIRED");
+      if (!quote || quote.companyId !== membership.companyId || !quote.company) throw new Error("QUOTE_REQUIRED");
       if (!["AOA", "EUR"].includes(quote.currency) || po.currency !== quote.currency) {
         throw new Error("CURRENCY_MISMATCH");
       }
@@ -93,12 +115,15 @@ export async function POST(request: Request) {
           deliveryMode: "DELIVERY",
           shippingMethod: "STANDARD",
           paymentMethod: quote.currency === "AOA" ? "MANUAL_INVOICE" : "STRIPE_CHECKOUT",
-          country: "AO",
+          country: marketForCountry(quote.company.country),
           currency: quote.currency,
           billingName: quote.companyName,
           billingEmail: quote.email,
           billingTaxId: quote.companyNif,
-          address: quote.address,
+          deliveryRecipient: quote.company.tradeName || quote.company.legalName,
+          deliveryCity: quote.company.city,
+          deliveryRegion: quote.company.province,
+          address: quote.address || quote.company.address,
           phone: quote.phone,
           totalEUR: quote.currency === "EUR" ? total : 0,
           totalKZ: quote.currency === "AOA" ? total : 0,
