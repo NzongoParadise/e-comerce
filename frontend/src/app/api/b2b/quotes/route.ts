@@ -82,7 +82,10 @@ export async function GET(request: Request) {
     });
 
     return Response.json({
-      data: quotes,
+      data: quotes.map((quote) => ({
+        ...quote,
+        proposal: quote.revisions.find((revision) => revision.version === quote.version)?.snapshot ?? null,
+      })),
       role: context.membership.role,
       company: {
         id: context.membership.company.id,
