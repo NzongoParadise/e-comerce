@@ -10,7 +10,7 @@ import { FavoritesProvider } from "@/context/FavoritesContext";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://e-comerce-sepia.vercel.app";
+const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://rubricadeligente.pt").replace(/\/$/, "");
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
