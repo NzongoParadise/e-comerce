@@ -368,10 +368,10 @@ export default function B2BOrdersPage() {
                       {!order && po.quote?.proposal && Number(po.quote.proposal.taxAmount || 0) > 0 && (
                         <div className="flex justify-between gap-3 border-t border-slate-100 px-4 py-2.5 text-xs text-slate-600"><span>IVA / impostos adicionais</span><span>{formatMoney(po.quote.proposal.taxAmount!, po.currency)}</span></div>
                       )}
-                      {!order && po.quote?.proposal?.deliveryDays && (
+                      {po.quote?.proposal?.deliveryDays && (
                         <div className="border-t border-slate-100 px-4 py-2.5 text-xs text-slate-600">Prazo previsto: {po.quote.proposal.deliveryDays} dias</div>
                       )}
-                      {!order && po.quote?.proposal?.paymentTerms && (
+                      {po.quote?.proposal?.paymentTerms && (
                         <div className="border-t border-slate-100 px-4 py-2.5 text-xs text-slate-600"><strong>Condições de pagamento:</strong> {po.quote.proposal.paymentTerms}</div>
                       )}
                       <div className="flex justify-between gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3 text-xs">
