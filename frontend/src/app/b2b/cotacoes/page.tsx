@@ -64,7 +64,18 @@ type PurchaseOrderLink = {
   orderId: number | null;
 };
 
+type QuoteProposalItem = {
+  productId: number;
+  name: string;
+  description?: string | null;
+  imageUrl?: string | null;
+  quantity: number;
+  unitPrice: number | string;
+  subtotal: number | string;
+};
+
 type QuoteProposalSnapshot = {
+  items?: QuoteProposalItem[];
   itemsTotal?: number | string;
   shippingAmount?: number | string;
   taxAmount?: number | string;
@@ -895,11 +906,13 @@ export default function B2BQuotesPage() {
         {quotes.length ? (
           <div className="divide-y divide-slate-100">
             {quotes.map((quote) => {
-              const itemsTotal = quote.items.reduce(
-                (sum, item) => sum + Number(item.subtotal),
-                0,
-              );
               const proposalIssued = quote.version > 0 && ["SENT", "ACCEPTED", "CONVERTED_TO_ORDER", "REVISION_REQUESTED", "EXPIRED", "REJECTED", "APPROVED"].includes(quote.status);
+              const proposalItems = proposalIssued && quote.proposal?.items?.length
+                ? quote.proposal.items
+                : quote.items;
+              const itemsTotal = proposalIssued && quote.proposal?.itemsTotal !== undefined
+                ? Number(quote.proposal.itemsTotal)
+                : proposalItems.reduce((sum, item) => sum + Number(item.subtotal), 0);
               const shippingAmount = proposalIssued ? Number(quote.proposal?.shippingAmount ?? 0) : 0;
               const taxAmount = proposalIssued ? Number(quote.proposal?.taxAmount ?? 0) : 0;
               const total = proposalIssued && quote.proposal?.total !== undefined
@@ -944,9 +957,9 @@ export default function B2BQuotesPage() {
                       <span className="text-right">Preço unitário</span>
                       <span className="text-right">Subtotal</span>
                     </div>
-                    {quote.items.map((item) => (
+                    {proposalItems.map((item, index) => (
                       <div
-                        key={item.id}
+                        key={`${item.productId}-${index}`}
                         className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 border-t border-slate-100 px-3 py-3 text-xs first:border-0 sm:grid-cols-[minmax(0,1fr)_5rem_8rem_8rem] sm:items-center sm:px-4"
                       >
                         <span className="min-w-0 truncate font-semibold text-slate-800">
