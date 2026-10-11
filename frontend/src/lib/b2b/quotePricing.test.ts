@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { resolveQuoteUnitPrice } from "./quotePricing";
 
-test("uses the highest applicable price tier in the selected currency", () => {
+test("uses the highest applicable B2B tier in the selected currency", () => {
   const product = {
     basePrice: 100,
     prices: [],
@@ -18,21 +18,43 @@ test("uses the highest applicable price tier in the selected currency", () => {
   assert.equal(resolveQuoteUnitPrice(product, 12, "AOA"), 9000);
 });
 
-test("uses a catalog price and only falls back to base price for EUR", () => {
+test("uses the catalog price for the selected market and currency", () => {
   const product = {
     basePrice: "12.50",
-    prices: [{ amount: "14000", currency: "AOA" }],
+    prices: [
+      { amount: "14000", currency: "AOA", market: "AO" },
+      { amount: "15.00", currency: "EUR", market: "PT" },
+      { amount: "16000", currency: "AOA", market: "PT" },
+    ],
     b2bPriceRules: [],
   };
 
-  assert.equal(resolveQuoteUnitPrice(product, 1, "EUR"), 12.5);
-  assert.equal(resolveQuoteUnitPrice(product, 1, "AOA"), 14000);
-  assert.equal(
-    resolveQuoteUnitPrice(
-      { ...product, prices: [] },
-      1,
-      "AOA",
-    ),
-    null,
-  );
+  assert.equal(resolveQuoteUnitPrice(product, 1, "AOA", "AO"), 14000);
+  assert.equal(resolveQuoteUnitPrice(product, 1, "AOA", "PT"), 16000);
+  assert.equal(resolveQuoteUnitPrice(product, 1, "EUR", "PT"), 15);
+  assert.equal(resolveQuoteUnitPrice(product, 1, "EUR", "AO"), null);
+});
+
+test("uses the legacy base price only for Portugal EUR and permits unpriced RFQs", () => {
+  const product = {
+    basePrice: "12.50",
+    prices: [],
+    b2bPriceRules: [],
+  };
+
+  assert.equal(resolveQuoteUnitPrice(product, 1, "EUR", "PT"), 12.5);
+  assert.equal(resolveQuoteUnitPrice(product, 1, "EUR", "AO"), null);
+  assert.equal(resolveQuoteUnitPrice(product, 1, "AOA", "AO"), null);
+  assert.equal(resolveQuoteUnitPrice(product, 0, "EUR", "PT"), null);
+  assert.equal(resolveQuoteUnitPrice(product, 1.5, "EUR", "PT"), null);
+});
+
+test("does not treat a malformed catalog price as a valid price", () => {
+  const product = {
+    basePrice: "not-a-price",
+    prices: [{ amount: "invalid", currency: "AOA", market: "AO" }],
+    b2bPriceRules: [],
+  };
+  assert.equal(resolveQuoteUnitPrice(product, 1, "AOA", "AO"), null);
+  assert.equal(resolveQuoteUnitPrice(product, 1, "EUR", "PT"), null);
 });
