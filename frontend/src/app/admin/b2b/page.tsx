@@ -135,11 +135,12 @@ export default function AdminB2BPage() {
       }
       const shippingAmount = Number(terms.shippingAmount || "0");
       const taxAmount = Number(terms.taxAmount || "0");
+      const feeLimit = quote.currency === "EUR" ? 99999999.99 : 9999999999.99;
       const deliveryDays = terms.deliveryDays.trim() ? Number(terms.deliveryDays) : undefined;
       if (
-        !Number.isFinite(shippingAmount) || shippingAmount < 0 || shippingAmount > 99999999.99 ||
+        !Number.isFinite(shippingAmount) || shippingAmount < 0 || shippingAmount > feeLimit ||
         Math.abs(shippingAmount * 100 - Math.round(shippingAmount * 100)) > 0.000001 ||
-        !Number.isFinite(taxAmount) || taxAmount < 0 || taxAmount > 99999999.99 ||
+        !Number.isFinite(taxAmount) || taxAmount < 0 || taxAmount > feeLimit ||
         Math.abs(taxAmount * 100 - Math.round(taxAmount * 100)) > 0.000001
       ) {
         setError("Transporte e impostos devem ser valores não negativos com até duas casas decimais.");
@@ -260,9 +261,10 @@ export default function AdminB2BPage() {
             const shippingAmount = Number(currentTerms.shippingAmount || "0");
             const taxAmount = Number(currentTerms.taxAmount || "0");
             const deliveryDays = currentTerms.deliveryDays.trim() ? Number(currentTerms.deliveryDays) : undefined;
+            const feeLimit = quote.currency === "EUR" ? 99999999.99 : 9999999999.99;
             const termsComplete = currentTerms.paymentTerms.trim().length >= 3 &&
-              Number.isFinite(shippingAmount) && shippingAmount >= 0 && shippingAmount <= 99999999.99 &&
-              Number.isFinite(taxAmount) && taxAmount >= 0 && taxAmount <= 99999999.99 &&
+              Number.isFinite(shippingAmount) && shippingAmount >= 0 && shippingAmount <= feeLimit &&
+              Number.isFinite(taxAmount) && taxAmount >= 0 && taxAmount <= feeLimit &&
               Math.abs(shippingAmount * 100 - Math.round(shippingAmount * 100)) <= 0.000001 &&
               Math.abs(taxAmount * 100 - Math.round(taxAmount * 100)) <= 0.000001 &&
               (deliveryDays === undefined || (Number.isInteger(deliveryDays) && deliveryDays >= 1 && deliveryDays <= 365));
@@ -338,11 +340,11 @@ export default function AdminB2BPage() {
                 <div className="grid gap-3 border-t border-slate-100 py-4 sm:grid-cols-2">
                   <label className="text-xs font-semibold text-slate-600">
                     Transporte ({quote.currency || "AOA"})
-                    <input type="number" min="0" max="99999999.99" step="0.01" value={currentTerms.shippingAmount} onChange={(event) => setProposalTerms((current) => ({ ...current, [quote.id]: { ...currentTerms, shippingAmount: event.target.value } }))} className="mt-1 w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm font-normal" />
+                    <input type="number" min="0" max={quote.currency === "EUR" ? 99999999.99 : 9999999999.99} step="0.01" value={currentTerms.shippingAmount} onChange={(event) => setProposalTerms((current) => ({ ...current, [quote.id]: { ...currentTerms, shippingAmount: event.target.value } }))} className="mt-1 w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm font-normal" />
                   </label>
                   <label className="text-xs font-semibold text-slate-600">
                     IVA/impostos a acrescentar ({quote.currency || "AOA"})
-                    <input type="number" min="0" max="99999999.99" step="0.01" value={currentTerms.taxAmount} onChange={(event) => setProposalTerms((current) => ({ ...current, [quote.id]: { ...currentTerms, taxAmount: event.target.value } }))} className="mt-1 w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm font-normal" />
+                    <input type="number" min="0" max={quote.currency === "EUR" ? 99999999.99 : 9999999999.99} step="0.01" value={currentTerms.taxAmount} onChange={(event) => setProposalTerms((current) => ({ ...current, [quote.id]: { ...currentTerms, taxAmount: event.target.value } }))} className="mt-1 w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm font-normal" />
                   </label>
                   <label className="text-xs font-semibold text-slate-600">
                     Prazo de entrega (dias, opcional)
