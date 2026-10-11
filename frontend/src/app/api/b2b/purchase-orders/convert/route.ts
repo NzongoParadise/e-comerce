@@ -59,7 +59,24 @@ export async function POST(request: Request) {
       if (!claimed.count) {
         po = await tx.purchaseOrder.findFirst({
           where: { id: parsedId.data, companyId: membership.companyId },
-          include: { quote: { include: { items: true } }, order: { include: { items: true } } },
+          include: {
+            quote: {
+              include: {
+                items: true,
+                company: {
+                  select: {
+                    country: true,
+                    city: true,
+                    province: true,
+                    address: true,
+                    legalName: true,
+                    tradeName: true,
+                  },
+                },
+              },
+            },
+            order: { include: { items: true } },
+          },
         });
         if (po?.order) return { order: po.order, po };
         throw new Error("PO_NOT_APPROVED");
