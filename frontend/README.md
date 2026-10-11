@@ -48,6 +48,6 @@ Em produção, configure no ambiente da Vercel:
 
 - `RESEND_API_KEY`: chave privada do Resend.
 - `EMAIL_FROM`: remetente verificado no Resend, por exemplo `RUBRICA DILIGENTE <no-reply@seudominio.ao>`.
-- `FRONTEND_URL` ou `APP_URL`: URL pública da loja, por exemplo `https://e-comerce-sepia.vercel.app`.
+- `FRONTEND_URL` e `APP_URL`: `https://rubricadeligente.pt` em produção.\n- `NEXT_PUBLIC_SITE_URL`: `https://rubricadeligente.pt`, usada em URLs canónicas, Open Graph, sitemap e robots.
 
 O domínio/remetente usado no Resend deve estar verificado antes do envio para clientes reais.
